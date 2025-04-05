@@ -4,14 +4,53 @@ const ctx = canvas.getContext('2d');
 
 // Create a new image object for the map
 const mapImage = new Image();
+mapImage.onload = () => {
+    console.log('Map image loaded successfully');
+    console.log('Map dimensions:', mapImage.width, 'x', mapImage.height);
+    console.log('Natural dimensions:', mapImage.naturalWidth, 'x', mapImage.naturalHeight);
+    
+    // Set canvas size to match map size
+    canvas.width = mapImage.naturalWidth;
+    canvas.height = mapImage.naturalHeight;
+    backgroundCanvas.width = mapImage.naturalWidth;
+    backgroundCanvas.height = mapImage.naturalHeight;
+    
+    console.log('Canvas size set to:', canvas.width, 'x', canvas.height);
+    
+    // Initialize the game after the map is loaded
+    initializeGame();
+    
+    // Draw static elements once after initialization
+    drawStaticElements();
+};
+mapImage.onerror = (error) => {
+    console.error('Error loading map image:', error);
+    console.error('Make sure map.webp exists in the same directory as game.js');
+};
 mapImage.src = 'map.webp';
 
 // Create sprite image
 const spiderSprite = new Image();
+spiderSprite.onload = () => {
+    console.log('Spider sprite loaded successfully');
+    console.log('Spider sprite dimensions:', spiderSprite.width, 'x', spiderSprite.height);
+};
+spiderSprite.onerror = (error) => {
+    console.error('Error loading spider sprite:', error);
+    console.error('Make sure spider.png exists in the same directory as game.js');
+};
 spiderSprite.src = 'spider.png';
 
 // Create tower sprite image
 const towerSprite = new Image();
+towerSprite.onload = () => {
+    console.log('Tower sprite loaded successfully');
+    console.log('Tower sprite dimensions:', towerSprite.width, 'x', towerSprite.height);
+};
+towerSprite.onerror = (error) => {
+    console.error('Error loading tower sprite:', error);
+    console.error('Make sure tower.png exists in the same directory as game.js');
+};
 towerSprite.src = 'tower.png';
 
 // Create explosion sound
@@ -28,31 +67,45 @@ towerHitSound.oncanplaythrough = () => {
 
 // Create spider hit sound
 const spiderHitSound = new Audio('spiderhit.mp3');
-spiderHitSound.onerror = (error) => {
-    console.error('Error loading spider hit sound:', error);
-};
-spiderHitSound.oncanplaythrough = () => {
-    console.log('Spider hit sound loaded successfully');
-};
+spiderHitSound.volume = 0.05; // Set volume to 5%
 
-// Add image load handlers
-spiderSprite.onload = () => {
-    console.log('Spider sprite loaded successfully');
-    console.log('Spider sprite dimensions:', spiderSprite.width, 'x', spiderSprite.height);
-};
+// Create audio context for pitch variation
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+let spiderHitBuffer = null;
 
-spiderSprite.onerror = (error) => {
-    console.error('Error loading spider sprite:', error);
-};
+// Load the spider hit sound into a buffer for pitch variation
+fetch('spiderhit.mp3')
+    .then(response => response.arrayBuffer())
+    .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+    .then(audioBuffer => {
+        spiderHitBuffer = audioBuffer;
+    })
+    .catch(error => {
+        console.error('Error loading spider hit sound:', error);
+    });
 
-towerSprite.onload = () => {
-    console.log('Tower sprite loaded successfully');
-    console.log('Tower sprite dimensions:', towerSprite.width, 'x', towerSprite.height);
-};
+// Function to play spider hit sound with pitch variation
+function playSpiderHitSound() {
+    if (!spiderHitBuffer) return;
 
-towerSprite.onerror = (error) => {
-    console.error('Error loading tower sprite:', error);
-};
+    const source = audioContext.createBufferSource();
+    source.buffer = spiderHitBuffer;
+    
+    // Random pitch variation between 0.8 and 1.2 (20% lower to 20% higher)
+    const pitch = 0.8 + Math.random() * 0.4;
+    source.playbackRate.value = pitch;
+    
+    // Create gain node for volume control
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0.05; // Set volume to 5%
+    
+    // Connect nodes
+    source.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Play the sound
+    source.start(0);
+}
 
 // Particle class for death effects
 class Particle {
@@ -127,6 +180,7 @@ class Spider {
         this.isAttacking = false;
         this.targetTower = null;
         this.attackRange = 50; // Same as tower's attack radius
+        this.bounty = 5; // $5 bounty for killing this spider
     }
 
     hit(damage) {
@@ -136,12 +190,8 @@ class Spider {
         this.isFlashing = true;
         this.lastFlashTime = performance.now();
 
-        // Play hit sound
-        console.log('Attempting to play spider hit sound');
-        spiderHitSound.currentTime = 0; // Reset sound to start
-        spiderHitSound.play().catch(error => {
-            console.error('Error playing spider hit sound:', error);
-        });
+        // Play hit sound with pitch variation
+        playSpiderHitSound();
 
         if (this.hp <= 0) {
             this.die();
@@ -150,6 +200,10 @@ class Spider {
 
     die() {
         this.isDead = true;
+        // Award bounty
+        gameState.money += this.bounty;
+        updateMoneyDisplay();
+        
         // Create death particles
         const currentPoint = this.getCurrentPosition();
         if (currentPoint) {
@@ -177,14 +231,12 @@ class Spider {
             this.isFlashing = false;
         }
 
-        // Check if spider is near any tower
-        if (!this.isAttacking) {
-            for (const tower of activeTowers) {
-                if (tower.isInRange(this.getCurrentPosition().x, this.getCurrentPosition().y)) {
-                    this.isAttacking = true;
-                    this.targetTower = tower;
-                    break;
-                }
+        // Check if spider is near the main tower
+        if (!this.isAttacking && mainTower) {
+            const spiderPos = this.getCurrentPosition();
+            if (mainTower.isInRange(spiderPos.x, spiderPos.y)) {
+                this.isAttacking = true;
+                this.targetTower = mainTower;
             }
         }
 
@@ -317,11 +369,6 @@ const FRAME_DURATION = 400; // milliseconds per frame
 let lastMoveTime = 0;
 const MOVE_INTERVAL = 16; // approximately 60 FPS
 
-// Debug function to test spider damage
-let lastDamageTime = 0;
-const DAMAGE_INTERVAL = 7500; // Damage every 7.5 seconds
-const DAMAGE_AMOUNT = 10; // Amount of damage per hit
-
 // Wave system properties
 let currentWave = 0;
 let spidersSpawnedInWave = 0;
@@ -351,6 +398,40 @@ const WAVE_CONFIG = {
     // Add more waves as needed
 };
 
+// Create background canvas for static elements
+const backgroundCanvas = document.createElement('canvas');
+const backgroundCtx = backgroundCanvas.getContext('2d');
+let staticElementsDrawn = false;
+let lastTowerStage = -1; // Track the last damage stage of the tower
+
+// Function to draw static elements (map and main tower)
+function drawStaticElements() {
+    console.log('Drawing static elements...');
+    
+    // Clear the background canvas
+    backgroundCtx.clearRect(0, 0, backgroundCanvas.width, backgroundCanvas.height);
+    
+    // Draw the map
+    if (mapImage.complete && mapImage.naturalWidth > 0) {
+        backgroundCtx.drawImage(mapImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+    }
+    
+    // Draw the main tower
+    if (mainTower) {
+        console.log('Drawing main tower on background canvas');
+        mainTower.draw(backgroundCtx);
+        lastTowerStage = mainTower.getDamageStage();
+    }
+    
+    staticElementsDrawn = true;
+}
+
+// Function to force redraw of static elements (e.g., when tower is damaged)
+function redrawStaticElements() {
+    staticElementsDrawn = false;
+    drawStaticElements();
+}
+
 // Tower class definition
 class Tower {
     constructor(waypoint, properties = {}) {
@@ -374,6 +455,14 @@ class Tower {
         this.attackRate = 1000; // Time between attacks in milliseconds
         this.lastAttackTime = 0;
         this.attackDamage = 10;
+    }
+
+    getDamageStage() {
+        const hpPercentage = this.hp / this.maxHp;
+        if (hpPercentage <= 0.25) return 3;
+        if (hpPercentage <= 0.5) return 2;
+        if (hpPercentage <= 0.75) return 1;
+        return 0;
     }
 
     // Add method to check if a point is within attack range
@@ -412,6 +501,9 @@ class Tower {
         if (this.hp <= 0) {
             this.die();
         }
+        
+        // Force redraw of static elements when tower is damaged
+        redrawStaticElements();
     }
 
     die() {
@@ -429,26 +521,21 @@ class Tower {
         }
     }
 
-    draw() {
+    draw(context = ctx) {
         if (this.isDead) return;
 
         // Calculate which stage of damage to show
-        const hpPercentage = this.hp / this.maxHp;
-        let stage = 0;
-        if (hpPercentage <= 0.25) stage = 3;
-        else if (hpPercentage <= 0.5) stage = 2;
-        else if (hpPercentage <= 0.75) stage = 1;
-        // else stage = 0 (pristine)
+        const stage = this.getDamageStage();
 
         // Save the current context state
-        ctx.save();
+        context.save();
         
         // Calculate the offset based on the anchor point
         const scaledHeight = this.spriteHeight * this.scale;
         const offsetY = scaledHeight * this.anchorY;
         
         // Draw the tower sprite
-        ctx.drawImage(
+        context.drawImage(
             towerSprite,
             stage * this.spriteWidth, 0, this.spriteWidth, this.spriteHeight,
             this.x - (this.spriteWidth * this.scale) / 2,
@@ -460,23 +547,23 @@ class Tower {
         // Draw debug indicator if enabled
         if (this.showDebug) {
             // Draw the anchor point
-            ctx.fillStyle = 'red';
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
-            ctx.fill();
+            context.fillStyle = 'red';
+            context.beginPath();
+            context.arc(this.x, this.y, 4, 0, Math.PI * 2);
+            context.fill();
             
             // Draw a line to show the anchor point's position relative to the sprite
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x, this.y - scaledHeight);
-            ctx.stroke();
+            context.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(this.x, this.y);
+            context.lineTo(this.x, this.y - scaledHeight);
+            context.stroke();
             
             // Draw text showing the anchor point percentage
-            ctx.fillStyle = 'red';
-            ctx.font = '12px Arial';
-            ctx.fillText(`${Math.round(this.anchorY * 100)}%`, this.x + 5, this.y - 5);
+            context.fillStyle = 'red';
+            context.font = '12px Arial';
+            context.fillText(`${Math.round(this.anchorY * 100)}%`, this.x + 5, this.y - 5);
         }
         
         // Draw health bar
@@ -485,8 +572,8 @@ class Tower {
         const healthPercentage = this.hp / this.maxHp;
         
         // Background of health bar
-        ctx.fillStyle = 'red';
-        ctx.fillRect(
+        context.fillStyle = 'red';
+        context.fillRect(
             this.x - healthBarWidth/2,
             this.y - offsetY - 10,
             healthBarWidth,
@@ -494,21 +581,283 @@ class Tower {
         );
         
         // Current health
-        ctx.fillStyle = 'green';
-        ctx.fillRect(
+        context.fillStyle = 'green';
+        context.fillRect(
             this.x - healthBarWidth/2,
             this.y - offsetY - 10,
             healthBarWidth * healthPercentage,
             healthBarHeight
         );
         
-        // Restore the context state
+        context.restore();
+    }
+}
+
+// Base DefenseEntity class
+class DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        this.x = waypoint.x;
+        this.y = waypoint.y;
+        this.cost = properties.cost || 100;
+        this.attackRadius = properties.attackRadius || 150;
+        this.attackRate = properties.attackRate || 1000;
+        this.attackDamage = properties.attackDamage || 10;
+        this.lastAttackTime = 0;
+        this.target = null;
+    }
+
+    canAttack(timestamp) {
+        return timestamp - this.lastAttackTime >= this.attackRate;
+    }
+
+    findTarget() {
+        let closestSpider = null;
+        let minDistance = this.attackRadius;
+
+        for (const spider of activeSpiders) {
+            if (spider.isDead) continue;
+            
+            const spiderPos = spider.getCurrentPosition();
+            const distance = Math.sqrt(
+                Math.pow(spiderPos.x - this.x, 2) + 
+                Math.pow(spiderPos.y - this.y, 2)
+            );
+
+            if (distance <= this.attackRadius && distance < minDistance) {
+                minDistance = distance;
+                closestSpider = spider;
+            }
+        }
+
+        this.target = closestSpider;
+        return closestSpider;
+    }
+
+    attack(timestamp) {
+        if (!this.canAttack(timestamp)) return false;
+        
+        const target = this.findTarget();
+        if (!target) return false;
+
+        this.lastAttackTime = timestamp;
+        target.hit(this.attackDamage);
+        return true;
+    }
+
+    update(timestamp) {
+        this.attack(timestamp);
+    }
+
+    draw() {
+        // Draw a red square for the defense entity
+        ctx.save();
+        ctx.fillStyle = 'red';
+        ctx.fillRect(this.x - 20, this.y - 20, 40, 40);
         ctx.restore();
     }
 }
 
-// Array to store active towers
-let activeTowers = [];
+// Laser Tower - High damage, slow rate, high cost
+class LaserTower extends DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        super(waypoint, {
+            ...properties,
+            cost: 300,
+            attackRadius: 200,
+            attackRate: 3000, // 3 seconds between attacks
+            attackDamage: 50,
+            hp: 150
+        });
+    }
+
+    draw() {
+        super.draw();
+        // Add laser beam effect when attacking
+        if (this.target && !this.target.isDead) {
+            const targetPos = this.target.getCurrentPosition();
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(targetPos.x, targetPos.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+// Axolotl Gunner - Fast rate, low damage, low cost
+class AxolotlGunner extends DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        super(waypoint, {
+            ...properties,
+            cost: 100,
+            attackRadius: 150,
+            attackRate: 200, // 0.2 seconds between attacks
+            attackDamage: 5,
+            hp: 80
+        });
+    }
+
+    draw() {
+        super.draw();
+        // Add rapid fire effect
+        if (this.target && !this.target.isDead) {
+            const targetPos = this.target.getCurrentPosition();
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(targetPos.x, targetPos.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+// Tank - Medium rate, high damage, medium cost
+class Tank extends DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        super(waypoint, {
+            ...properties,
+            cost: 200,
+            attackRadius: 180,
+            attackRate: 2000, // 2 seconds between attacks
+            attackDamage: 30,
+            hp: 200
+        });
+    }
+
+    draw() {
+        super.draw();
+        // Add rocket trail effect
+        if (this.target && !this.target.isDead) {
+            const targetPos = this.target.getCurrentPosition();
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 165, 0, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(targetPos.x, targetPos.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+// Turret Tower - Fast rate, low damage, medium cost
+class TurretTower extends DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        super(waypoint, {
+            ...properties,
+            cost: 150,
+            attackRadius: 160,
+            attackRate: 300, // 0.3 seconds between attacks
+            attackDamage: 8,
+            hp: 120
+        });
+    }
+
+    draw() {
+        super.draw();
+        // Add machine gun effect
+        if (this.target && !this.target.isDead) {
+            const targetPos = this.target.getCurrentPosition();
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(targetPos.x, targetPos.y);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+}
+
+// Glue Turret - Slow rate, no damage, medium cost, slows enemies
+class GlueTurret extends DefenseEntity {
+    constructor(waypoint, properties = {}) {
+        super(waypoint, {
+            ...properties,
+            cost: 175,
+            attackRadius: 170,
+            attackRate: 2500, // 2.5 seconds between attacks
+            attackDamage: 0,
+            hp: 100
+        });
+        this.gluePuddles = [];
+    }
+
+    attack(timestamp) {
+        if (!this.canAttack(timestamp)) return false;
+        
+        const target = this.findTarget();
+        if (!target) return false;
+
+        this.lastAttackTime = timestamp;
+        
+        // Create a new glue puddle at the target's position
+        const targetPos = target.getCurrentPosition();
+        this.gluePuddles.push({
+            x: targetPos.x,
+            y: targetPos.y,
+            createdAt: timestamp,
+            duration: 10000 // 10 seconds
+        });
+
+        return true;
+    }
+
+    update(timestamp) {
+        if (this.isDead) return;
+        
+        // Update glue puddles
+        this.gluePuddles = this.gluePuddles.filter(puddle => {
+            return timestamp - puddle.createdAt < puddle.duration;
+        });
+
+        // Check for spiders in glue puddles
+        for (const spider of activeSpiders) {
+            if (spider.isDead) continue;
+            
+            const spiderPos = spider.getCurrentPosition();
+            for (const puddle of this.gluePuddles) {
+                const distance = Math.sqrt(
+                    Math.pow(spiderPos.x - puddle.x, 2) + 
+                    Math.pow(spiderPos.y - puddle.y, 2)
+                );
+                
+                if (distance < 20) { // Glue puddle radius
+                    spider.speed = spider.speed * 0.2; // Slow down by 5x
+                    break;
+                }
+            }
+        }
+
+        this.attack(timestamp);
+    }
+
+    draw() {
+        super.draw();
+        
+        // Draw glue puddles
+        for (const puddle of this.gluePuddles) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.arc(puddle.x, puddle.y, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+}
+
+// Array to store active towers and defense entities
+let mainTower = null;
+let activeDefenses = [];
 
 // Function to calculate distance between two points
 function distance(p1, p2) {
@@ -630,16 +979,6 @@ function spawnSpider(properties = {}) {
     return spider;
 }
 
-// Debug function to apply damage to spiders
-function debugDamageSpiders(timestamp) {
-    if (timestamp - lastDamageTime >= DAMAGE_INTERVAL) {
-        activeSpiders.forEach(spider => {
-            spider.hit(DAMAGE_AMOUNT);
-        });
-        lastDamageTime = timestamp;
-    }
-}
-
 // Function to start a new wave
 function startWave() {
     currentWave++;
@@ -671,73 +1010,311 @@ function spawnWaveSpiders(timestamp) {
 // Function to create a new tower
 function createTower(waypoint, properties = {}) {
     const tower = new Tower(waypoint, properties);
-    activeTowers.push(tower);
     return tower;
+}
+
+// Defense entity types and their properties
+const DEFENSE_TYPES = {
+    LASER_TOWER: {
+        name: 'Laser Tower',
+        cost: 300,
+        class: LaserTower
+    },
+    AXOLOTL_GUNNER: {
+        name: 'Axolotl Gunner',
+        cost: 100,
+        class: AxolotlGunner
+    },
+    TANK: {
+        name: 'Tank',
+        cost: 200,
+        class: Tank
+    },
+    TURRET_TOWER: {
+        name: 'Turret Tower',
+        cost: 150,
+        class: TurretTower
+    },
+    GLUE_TURRET: {
+        name: 'Glue Turret',
+        cost: 175,
+        class: GlueTurret
+    }
+};
+
+// Game state
+let gameState = {
+    money: 1000,
+    selectedDefenseType: null,
+    previewEntity: null
+};
+
+// Function to create preview entity
+function createPreviewEntity(defenseType) {
+    return {
+        x: 0,
+        y: 0,
+        draw: function() {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            ctx.fillRect(this.x - 20, this.y - 20, 40, 40);
+            ctx.restore();
+        }
+    };
+}
+
+// Function to handle mouse movement
+function handleMouseMove(event) {
+    if (gameState.selectedDefenseType && gameState.previewEntity) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        gameState.previewEntity.x = (event.clientX - rect.left) * scaleX;
+        gameState.previewEntity.y = (event.clientY - rect.top) * scaleY;
+    }
+}
+
+// Function to handle mouse click
+function handleMouseClick(event) {
+    if (gameState.selectedDefenseType && gameState.previewEntity) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
+        
+        // Create the actual defense entity
+        const defenseClass = gameState.selectedDefenseType.class;
+        const newEntity = new defenseClass({ x, y }, {
+            hp: 100,
+            anchorY: 0.8
+        });
+        
+        // Add to active defenses
+        activeDefenses.push(newEntity);
+        
+        // Deduct cost
+        gameState.money -= gameState.selectedDefenseType.cost;
+        updateMoneyDisplay();
+        
+        // Clear selection and preview
+        gameState.selectedDefenseType = null;
+        gameState.previewEntity = null;
+        
+        // Reset menu item borders
+        document.querySelectorAll('.menuItem').forEach(item => {
+            item.style.borderColor = '#fff';
+        });
+    }
+}
+
+// Function to create menu items
+function createMenuItems() {
+    const menuBar = document.getElementById('menuBar');
+    menuBar.innerHTML = ''; // Clear existing items
+
+    Object.values(DEFENSE_TYPES).forEach(defenseType => {
+        const menuItem = document.createElement('div');
+        menuItem.className = 'menuItem';
+        menuItem.innerHTML = `
+            <div>${defenseType.name}</div>
+            <div class="cost">$${defenseType.cost}</div>
+        `;
+        
+        // Check if player can afford this defense
+        const canAfford = gameState.money >= defenseType.cost;
+        if (!canAfford) {
+            menuItem.style.opacity = '0.5';
+            menuItem.style.cursor = 'not-allowed';
+        }
+        
+        // Add click handler
+        menuItem.addEventListener('click', () => {
+            if (canAfford) {
+                gameState.selectedDefenseType = defenseType;
+                gameState.previewEntity = createPreviewEntity(defenseType);
+                
+                // Visual feedback for selection
+                document.querySelectorAll('.menuItem').forEach(item => {
+                    item.style.borderColor = '#fff';
+                });
+                menuItem.style.borderColor = '#ff0';
+            } else {
+                // Visual feedback for insufficient funds
+                menuItem.style.animation = 'shake 0.5s';
+                setTimeout(() => {
+                    menuItem.style.animation = '';
+                }, 500);
+            }
+        });
+
+        menuBar.appendChild(menuItem);
+    });
+}
+
+// Add CSS for shake animation
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        75% { transform: translateX(5px); }
+    }
+`;
+document.head.appendChild(style);
+
+// Function to update money display and menu items
+function updateMoneyDisplay() {
+    const moneyDisplay = document.getElementById('moneyDisplay') || document.createElement('div');
+    moneyDisplay.id = 'moneyDisplay';
+    moneyDisplay.style.position = 'absolute';
+    moneyDisplay.style.top = '10px';
+    moneyDisplay.style.right = '10px';
+    moneyDisplay.style.color = 'white';
+    moneyDisplay.style.fontFamily = 'Arial, sans-serif';
+    moneyDisplay.style.fontSize = '20px';
+    moneyDisplay.textContent = `$${gameState.money}`;
+    
+    if (!document.getElementById('moneyDisplay')) {
+        document.getElementById('gameContainer').appendChild(moneyDisplay);
+    }
+
+    // Update menu items based on new money amount
+    const menuItems = document.querySelectorAll('.menuItem');
+    Object.values(DEFENSE_TYPES).forEach((defenseType, index) => {
+        const menuItem = menuItems[index];
+        const canAfford = gameState.money >= defenseType.cost;
+        menuItem.style.opacity = canAfford ? '1' : '0.5';
+        menuItem.style.cursor = canAfford ? 'pointer' : 'not-allowed';
+    });
+}
+
+// Initialize menu and money display
+function initializeUI() {
+    createMenuItems();
+    updateMoneyDisplay();
+}
+
+// Function to handle window resize
+function handleResize() {
+    const container = document.getElementById('gameContainer');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight - 80; // Subtract menu bar height
+    
+    // Calculate scale to fit the container while maintaining aspect ratio
+    const scale = Math.min(
+        containerWidth / mapImage.width,
+        containerHeight / mapImage.height
+    );
+    
+    // Set canvas sizes
+    canvas.width = mapImage.width;
+    canvas.height = mapImage.height;
+    backgroundCanvas.width = mapImage.width;
+    backgroundCanvas.height = mapImage.height;
+    
+    // Apply scaling to canvas display size
+    canvas.style.width = `${mapImage.width * scale}px`;
+    canvas.style.height = `${mapImage.height * scale}px`;
+    
+    // Force redraw of static elements after resize
+    drawStaticElements();
+}
+
+// Function to initialize the game
+async function initializeGame() {
+    try {
+        // Handle initial resize
+        handleResize();
+        
+        // Add resize event listener
+        window.addEventListener('resize', handleResize);
+        
+        // Add mouse event listeners
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('click', handleMouseClick);
+        
+        // Load waypoints
+        await loadWaypoints();
+        console.log('Waypoints loaded:', waypoints.length);
+        
+        // Generate interpolated waypoints
+        generateInterpolatedWaypoints(20);
+        console.log('Interpolated waypoints generated:', interpolatedWaypoints.length);
+        
+        // Calculate the tower position at 15% along the path
+        const towerIndex = Math.floor(interpolatedWaypoints.length * 0.15);
+        const towerWaypoint = interpolatedWaypoints[towerIndex];
+        
+        // Create the main tower at the calculated position with base anchor point
+        mainTower = createTower(towerWaypoint, { 
+            hp: 100,
+            anchorY: 0.8 // 80% down the sprite
+        });
+        console.log('Main tower created at position:', towerWaypoint);
+        
+        // Initialize UI
+        initializeUI();
+        
+        // Draw static elements (map and main tower)
+        drawStaticElements();
+        
+        // Start the first wave
+        startWave();
+        console.log('First wave started');
+        
+        // Start the game loop
+        requestAnimationFrame(gameLoop);
+        console.log('Game loop started');
+    } catch (error) {
+        console.error('Error initializing game:', error);
+    }
 }
 
 // Game loop
 function gameLoop(timestamp) {
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw the map
-    ctx.drawImage(mapImage, 0, 0);
-    
-    // Debug: Apply damage to spiders
-    debugDamageSpiders(timestamp);
-    
-    // Spawn spiders for current wave
-    spawnWaveSpiders(timestamp);
-    
-    // Update and draw all spiders
-    activeSpiders.forEach(spider => {
-        spider.update(timestamp);
-        spider.draw();
-    });
+    try {
+        // Clear the main canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the static elements from the background canvas
+        ctx.drawImage(backgroundCanvas, 0, 0);
+        
+        // Draw the preview entity if it exists
+        if (gameState.previewEntity) {
+            gameState.previewEntity.draw();
+        }
+        
+        // Spawn spiders for current wave
+        spawnWaveSpiders(timestamp);
+        
+        // Update and draw all spiders
+        activeSpiders.forEach(spider => {
+            spider.update(timestamp);
+            spider.draw();
+        });
 
-    // Draw all towers
-    activeTowers.forEach(tower => {
-        tower.draw();
-    });
+        // Update and draw all defense entities
+        activeDefenses.forEach(defense => {
+            defense.update(timestamp);
+            defense.draw();
+        });
 
-    // Update and draw particles
-    particles = particles.filter(particle => {
-        particle.update();
-        particle.draw();
-        return particle.life > 0;
-    });
-    
-    // Request the next frame
-    requestAnimationFrame(gameLoop);
+        // Update and draw particles
+        particles = particles.filter(particle => {
+            particle.update();
+            particle.draw();
+            return particle.life > 0;
+        });
+        
+        // Request the next frame
+        requestAnimationFrame(gameLoop);
+    } catch (error) {
+        console.error('Error in game loop:', error);
+    }
 }
-
-// Set up the canvas size to match the map image
-mapImage.onload = async () => {
-    canvas.width = mapImage.width;
-    canvas.height = mapImage.height;
-    
-    // Load waypoints
-    await loadWaypoints();
-    
-    // Generate interpolated waypoints
-    generateInterpolatedWaypoints(20);
-    
-    // Calculate the tower position at 15% along the path
-    const towerIndex = Math.floor(interpolatedWaypoints.length * 0.15);
-    const towerWaypoint = interpolatedWaypoints[towerIndex];
-    
-    // Create a tower at the calculated position with base anchor point
-    createTower(towerWaypoint, { 
-        hp: 100,
-        anchorY: 0.8 // 80% down the sprite
-    });
-    
-    // Start the first wave
-    startWave();
-    
-    // Start the game loop
-    requestAnimationFrame(gameLoop);
-};
 
 // Function to draw sprites (to be used later)
 function drawSprite(sprite, x, y) {
