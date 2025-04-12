@@ -1,0 +1,10 @@
+{
+    "liveServer.settings.ignoreFiles": [
+        "**/*.json",
+        "**/game_parameters.json",
+        ".git/**"
+    ],
+    "liveServer.settings.useWebExt": true,
+    "liveServer.settings.wait": 100,
+    "liveServer.settings.fullReload": false
+} 

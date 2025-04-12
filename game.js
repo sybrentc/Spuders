@@ -357,25 +357,25 @@ let interpolatedWaypoints = [];
 let activeSpiders = [];
 
 // Sprite properties (updated for actual sprite sheet)
-const SPRITE_WIDTH = 192;  // 768/4
-const SPRITE_HEIGHT = 192; // 768/4
-const SPRITE_SCALE = 0.5;  // Scale down the sprite to make it more manageable
-const FRAMES_PER_ROW = 4;
-const TOTAL_FRAMES = 16;
+let SPRITE_WIDTH = 192;  // 768/4
+let SPRITE_HEIGHT = 192; // 768/4
+let SPRITE_SCALE = 0.5;  // Scale down the sprite to make it more manageable
+let FRAMES_PER_ROW = 4;
+let TOTAL_FRAMES = 16;
 let lastFrameTime = 0;
-const FRAME_DURATION = 400; // milliseconds per frame
+let FRAME_DURATION = 400; // milliseconds per frame
 
 // Enemy movement properties
 let lastMoveTime = 0;
-const MOVE_INTERVAL = 16; // approximately 60 FPS
+let MOVE_INTERVAL = 16; // approximately 60 FPS
 
 // Wave system properties
 let currentWave = 0;
 let spidersSpawnedInWave = 0;
 let lastSpawnTime = 0;
-const SPIDER_SPAWN_DELAY = 2500; // 2.5 seconds between each spider spawn
-const WAVE_DELAY = 30000; // 30 seconds between waves
-const SPIDERS_PER_WAVE = 15;
+let SPIDER_SPAWN_DELAY = 2500; // 2.5 seconds between each spider spawn
+let WAVE_DELAY = 30000; // 30 seconds between waves
+let SPIDERS_PER_WAVE = 15;
 
 // Wave configuration
 const WAVE_CONFIG = {
@@ -979,9 +979,13 @@ function spawnSpider(properties = {}) {
     return spider;
 }
 
-// Function to start a new wave
+// Game flags and tracking variables
+let waveStartTime = 0;
+
+// Function to start a wave
 function startWave() {
     currentWave++;
+    waveStartTime = Date.now();
     spidersSpawnedInWave = 0;
     lastSpawnTime = performance.now();
     console.log(`Starting wave ${currentWave}`);
@@ -1016,28 +1020,18 @@ function createTower(waypoint, properties = {}) {
 // Defense entity types and their properties
 const DEFENSE_TYPES = {
     LASER_TOWER: {
-        name: 'Laser Tower',
-        cost: 300,
         class: LaserTower
     },
     AXOLOTL_GUNNER: {
-        name: 'Axolotl Gunner',
-        cost: 100,
         class: AxolotlGunner
     },
     TANK: {
-        name: 'Tank',
-        cost: 200,
         class: Tank
     },
     TURRET_TOWER: {
-        name: 'Turret Tower',
-        cost: 150,
         class: TurretTower
     },
     GLUE_TURRET: {
-        name: 'Glue Turret',
-        cost: 175,
         class: GlueTurret
     }
 };
@@ -1138,7 +1132,7 @@ function createMenuItems() {
                 
                 // Visual feedback for selection
                 document.querySelectorAll('.menuItem').forEach(item => {
-                    item.style.borderColor = '#fff';
+                    item.style.borderColor = '#ff0';
                 });
                 menuItem.style.borderColor = '#ff0';
             } else {
@@ -1170,12 +1164,16 @@ function updateMoneyDisplay() {
     const moneyDisplay = document.getElementById('moneyDisplay') || document.createElement('div');
     moneyDisplay.id = 'moneyDisplay';
     moneyDisplay.style.position = 'absolute';
-    moneyDisplay.style.top = '10px';
-    moneyDisplay.style.right = '10px';
     moneyDisplay.style.color = 'white';
     moneyDisplay.style.fontFamily = 'Arial, sans-serif';
     moneyDisplay.style.fontSize = '20px';
+    moneyDisplay.style.zIndex = '1000'; // Ensure it's above the game canvas
     moneyDisplay.textContent = `$${gameState.money}`;
+    
+    // Position relative to the game canvas
+    const canvasRect = canvas.getBoundingClientRect();
+    moneyDisplay.style.left = `${canvasRect.left + canvasRect.width - 100}px`; // 100px from right edge of canvas
+    moneyDisplay.style.top = `${canvasRect.top + 10}px`; // 10px from top of canvas
     
     if (!document.getElementById('moneyDisplay')) {
         document.getElementById('gameContainer').appendChild(moneyDisplay);
@@ -1183,12 +1181,16 @@ function updateMoneyDisplay() {
 
     // Update menu items based on new money amount
     const menuItems = document.querySelectorAll('.menuItem');
-    Object.values(DEFENSE_TYPES).forEach((defenseType, index) => {
-        const menuItem = menuItems[index];
-        const canAfford = gameState.money >= defenseType.cost;
-        menuItem.style.opacity = canAfford ? '1' : '0.5';
-        menuItem.style.cursor = canAfford ? 'pointer' : 'not-allowed';
-    });
+    if (menuItems.length > 0) {
+        Object.values(DEFENSE_TYPES).forEach((defenseType, index) => {
+            if (index < menuItems.length) {
+                const menuItem = menuItems[index];
+                const canAfford = gameState.money >= defenseType.cost;
+                menuItem.style.opacity = canAfford ? '1' : '0.5';
+                menuItem.style.cursor = canAfford ? 'pointer' : 'not-allowed';
+            }
+        });
+    }
 }
 
 // Initialize menu and money display
@@ -1199,44 +1201,224 @@ function initializeUI() {
 
 // Function to handle window resize
 function handleResize() {
+    // Get window dimensions instead of relying on container
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    
+    // Ensure the map image is loaded and has valid dimensions
+    if (!mapImage.complete || mapImage.naturalWidth === 0 || mapImage.naturalHeight === 0) {
+        console.log('Map image not fully loaded yet, will resize later');
+        // Schedule another resize once the image is loaded
+        setTimeout(handleResize, 100);
+        return;
+    }
+    
+    // Log dimensions to help debug
+    console.log('Window size:', windowWidth, 'x', windowHeight);
+    
+    // Ensure container is properly styled to take up full window
     const container = document.getElementById('gameContainer');
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight - 80; // Subtract menu bar height
+    if (container) {
+        container.style.width = '100%';
+        container.style.height = '100vh';
+        container.style.overflow = 'hidden';
+        container.style.position = 'relative';
+        console.log('Applied full size to container');
+    }
     
-    // Calculate scale to fit the container while maintaining aspect ratio
-    const scale = Math.min(
-        containerWidth / mapImage.width,
-        containerHeight / mapImage.height
-    );
+    // Position the button bar first
+    const buttonBarHeight = 80; // Height of the button bar
+    const menuBar = document.getElementById('menuBar');
+    if (menuBar) {
+        menuBar.style.position = 'absolute';
+        menuBar.style.left = '0';
+        menuBar.style.right = '0';
+        menuBar.style.bottom = '0';
+        menuBar.style.height = `${buttonBarHeight}px`;
+        menuBar.style.display = 'flex';
+        menuBar.style.justifyContent = 'center';
+        menuBar.style.alignItems = 'center';
+        menuBar.style.backgroundColor = '#333';
+        menuBar.style.zIndex = '1000';
+    }
     
-    // Set canvas sizes
-    canvas.width = mapImage.width;
-    canvas.height = mapImage.height;
-    backgroundCanvas.width = mapImage.width;
-    backgroundCanvas.height = mapImage.height;
+    // Calculate available space for the game canvas
+    const availableWidth = windowWidth;
+    const availableHeight = windowHeight - buttonBarHeight;
+    
+    // Calculate scaling factors for width and height
+    const scaleX = availableWidth / mapImage.naturalWidth;
+    const scaleY = availableHeight / mapImage.naturalHeight;
+    
+    // Use the smaller scaling factor to ensure everything fits while maintaining aspect ratio
+    const scale = Math.min(scaleX, scaleY);
+    console.log('Scaling factors - X:', scaleX, 'Y:', scaleY, 'Using:', scale);
+    
+    // Calculate new dimensions with a minimum size
+    const newWidth = Math.max(Math.round(mapImage.naturalWidth * scale), 100);
+    const newHeight = Math.max(Math.round(mapImage.naturalHeight * scale), 100);
+    console.log('New canvas display size:', newWidth, 'x', newHeight);
+    
+    // Set canvas internal resolution to match map image
+    canvas.width = mapImage.naturalWidth;
+    canvas.height = mapImage.naturalHeight;
+    backgroundCanvas.width = mapImage.naturalWidth;
+    backgroundCanvas.height = mapImage.naturalHeight;
     
     // Apply scaling to canvas display size
-    canvas.style.width = `${mapImage.width * scale}px`;
-    canvas.style.height = `${mapImage.height * scale}px`;
+    canvas.style.width = `${newWidth}px`;
+    canvas.style.height = `${newHeight}px`;
+    
+    // Position the canvas at the top of the screen, centered horizontally
+    const leftPosition = Math.max(Math.floor((availableWidth - newWidth) / 2), 0);
+    const topPosition = 0; // Start at the very top of the screen
+    
+    canvas.style.position = 'absolute';
+    canvas.style.left = `${leftPosition}px`;
+    canvas.style.top = `${topPosition}px`;
+    canvas.style.marginLeft = '0';
+    canvas.style.marginTop = '0';
+    
+    console.log('Canvas positioned at:', leftPosition, 'x', topPosition);
+    
+    // Update money display position relative to the game canvas
+    updateMoneyDisplay();
     
     // Force redraw of static elements after resize
     drawStaticElements();
 }
 
+// Add style for game container on DOM load
+document.addEventListener('DOMContentLoaded', function() {
+    // Setup the game container styling
+    const container = document.getElementById('gameContainer');
+    if (container) {
+        container.style.width = '100%';
+        container.style.height = '100vh';
+        container.style.overflow = 'hidden';
+        container.style.position = 'relative';
+        console.log('Initial container styling applied');
+    } else {
+        console.error('Game container not found!');
+    }
+    
+    // Set initial size
+    setTimeout(handleResize, 100);
+});
+
+// Game parameters
+let gameParameters = null;
+let lastParameterUpdate = 0;
+const PARAMETER_UPDATE_INTERVAL = 200; // ms
+
+// Function to fetch and update game parameters
+async function updateGameParameters() {
+    try {
+        const response = await fetch('game_parameters.json');
+        if (!response.ok) throw new Error('Failed to fetch parameters');
+        gameParameters = await response.json();
+        
+        // Apply updated parameters
+        SPRITE_SCALE = gameParameters.display.sprite_scale;
+        FRAME_DURATION = gameParameters.animation.frame_duration_ms;
+        MOVE_INTERVAL = gameParameters.animation.move_interval_ms;
+        
+        // Apply tower position
+        const newTowerIndex = Math.floor(interpolatedWaypoints.length * gameParameters.map.tower_position_percentage);
+        const newTowerWaypoint = interpolatedWaypoints[newTowerIndex];
+        
+        if (mainTower) {
+            mainTower.x = newTowerWaypoint.x;
+            mainTower.y = newTowerWaypoint.y;
+            mainTower.attackRadius = gameParameters.main_tower.attack_radius;
+            mainTower.attackRate = gameParameters.main_tower.attack_rate_ms;
+            mainTower.attackDamage = gameParameters.main_tower.attack_damage;
+            drawStaticElements(); // Redraw static elements with new tower position
+        }
+        
+        // Update wave parameters
+        SPIDERS_PER_WAVE = gameParameters.waves.spiders_per_wave;
+        SPIDER_SPAWN_DELAY = gameParameters.waves.spawn_delay_ms;
+        WAVE_DELAY = gameParameters.waves.wave_delay_ms;
+        
+        // Update defense entity costs and properties from parameters
+        if (gameParameters.defense_entities) {
+            let costsChanged = false;
+            let namesChanged = false;
+            
+            Object.keys(DEFENSE_TYPES).forEach(type => {
+                const paramName = type.toLowerCase();
+                if (gameParameters.defense_entities[paramName]) {
+                    const entityParams = gameParameters.defense_entities[paramName];
+                    
+                    // Check if cost has changed
+                    if (DEFENSE_TYPES[type].cost !== entityParams.cost) {
+                        costsChanged = true;
+                        DEFENSE_TYPES[type].cost = entityParams.cost;
+                    }
+                    
+                    // Check if name has changed
+                    if (DEFENSE_TYPES[type].name !== entityParams.name) {
+                        namesChanged = true;
+                        DEFENSE_TYPES[type].name = entityParams.name;
+                    }
+                    
+                    // Update existing defense entities
+                    activeDefenses.forEach(defense => {
+                        if (defense.constructor === DEFENSE_TYPES[type].class) {
+                            defense.attackRadius = entityParams.attack_radius;
+                            defense.attackRate = entityParams.attack_rate_ms;
+                            defense.attackDamage = entityParams.attack_damage;
+                            defense.hp = entityParams.hp;
+                            defense.maxHp = entityParams.max_hp;
+                        }
+                    });
+                }
+            });
+            
+            // If costs or names changed, update the menu
+            if (costsChanged || namesChanged) {
+                const menuBar = document.getElementById('menuBar');
+                if (menuBar) {
+                    // Remove all existing menu items
+                    menuBar.innerHTML = '';
+                    // Recreate menu items with new costs and names
+                    createMenuItems();
+                }
+                updateMoneyDisplay(); // Update UI to reflect new costs
+            }
+        }
+    } catch (error) {
+        console.error('Error updating game parameters:', error);
+    }
+}
+
+// Function to initialize game parameters
+async function initializeGameParameters() {
+    await updateGameParameters();
+    if (!gameParameters) {
+        console.error('Failed to load game parameters');
+        return;
+    }
+    
+    // Apply initial parameters
+    SPRITE_SCALE = gameParameters.display.sprite_scale;
+    FRAME_DURATION = gameParameters.animation.frame_duration_ms;
+    MOVE_INTERVAL = gameParameters.animation.move_interval_ms;
+    
+    // Initialize wave parameters
+    SPIDERS_PER_WAVE = gameParameters.waves.spiders_per_wave;
+    SPIDER_SPAWN_DELAY = gameParameters.waves.spawn_delay_ms;
+    WAVE_DELAY = gameParameters.waves.wave_delay_ms;
+    
+    // Update UI to reflect new money value
+    updateMoneyDisplay();
+}
+
 // Function to initialize the game
 async function initializeGame() {
     try {
-        // Handle initial resize
-        handleResize();
-        
-        // Add resize event listener
-        window.addEventListener('resize', handleResize);
-        
-        // Add mouse event listeners
-        canvas.addEventListener('mousemove', handleMouseMove);
-        canvas.addEventListener('click', handleMouseClick);
-        
-        // Load waypoints
+        // Load waypoints first
         await loadWaypoints();
         console.log('Waypoints loaded:', waypoints.length);
         
@@ -1244,38 +1426,63 @@ async function initializeGame() {
         generateInterpolatedWaypoints(20);
         console.log('Interpolated waypoints generated:', interpolatedWaypoints.length);
         
-        // Calculate the tower position at 15% along the path
-        const towerIndex = Math.floor(interpolatedWaypoints.length * 0.15);
+        // Initialize game parameters - do this after waypoints are ready
+        await initializeGameParameters();
+        
+        // Calculate the tower position based on parameter percentage
+        const towerIndex = Math.floor(interpolatedWaypoints.length * gameParameters.map.tower_position_percentage);
         const towerWaypoint = interpolatedWaypoints[towerIndex];
         
-        // Create the main tower at the calculated position with base anchor point
+        // Create the main tower at the calculated position with properties from parameters
         mainTower = createTower(towerWaypoint, { 
-            hp: 100,
-            anchorY: 0.8 // 80% down the sprite
+            hp: gameParameters.main_tower.hp,
+            anchorY: gameParameters.main_tower.anchor_y
         });
         console.log('Main tower created at position:', towerWaypoint);
         
-        // Initialize UI
-        initializeUI();
+        // Handle initial resize after everything is loaded
+        handleResize();
         
-        // Draw static elements (map and main tower)
-        drawStaticElements();
+        // Initialize UI after resize
+        setTimeout(() => {
+            initializeUI();
+            
+            // Add mouse event listeners
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('click', handleMouseClick);
+            
+            // Draw static elements (map and main tower)
+            drawStaticElements();
+            
+            // Start the first wave
+            startWave();
+            console.log('First wave started');
+            
+            // Start the game loop
+            requestAnimationFrame(gameLoop);
+            console.log('Game loop started');
+        }, 200);
         
-        // Start the first wave
-        startWave();
-        console.log('First wave started');
-        
-        // Start the game loop
-        requestAnimationFrame(gameLoop);
-        console.log('Game loop started');
+        // Add resize event listener with debounce
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(handleResize, 100);
+        });
     } catch (error) {
         console.error('Error initializing game:', error);
     }
 }
 
-// Game loop
+// Modify game loop to update parameters
 function gameLoop(timestamp) {
     try {
+        // Update game parameters periodically
+        if (timestamp - lastParameterUpdate >= PARAMETER_UPDATE_INTERVAL) {
+            updateGameParameters();
+            lastParameterUpdate = timestamp;
+        }
+
         // Clear the main canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
