@@ -2,6 +2,7 @@ import WaveManager from '../waveManager.js'; // Import the WaveManager
 import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
 import Base from './base.js'; // Import the Base class
+import DefenceManager from '../defenceManager.js'; // <-- ADD Import
 
 export default class Game {
     constructor() {
@@ -12,16 +13,29 @@ export default class Game {
         this.pathData = null;
         this.waveDataPath = null;
         this.baseDataPath = null; // ADD path for base config
+        this.defencesPath = null; // <-- ADD this line
         this.waveManager = null;
         this.canvas = null;
         this.initialized = false;
         this.tuningManager = new TuningManager(500);
         this.enemyManager = null;
         this.base = null; // ADD base instance property
+        this.defenceManager = null; // <-- ADD defenceManager property
         this.lastTimestamp = 0;
         this._initPromise = this.initialize();
+        this.placementPreview = null; // {x, y} position or null
     }
     
+    // --- ADD methods for placement preview --- 
+    setPlacementPreview(position) {
+        this.placementPreview = position;
+    }
+
+    getPlacementPreview() {
+        return this.placementPreview;
+    }
+    // --- END ADD methods --- 
+
     async initialize() {
         try {
             // Load level data (paths for enemies, waves, base)
@@ -72,6 +86,17 @@ export default class Game {
                  throw baseError; // Re-throw to stop game initialization
             }
             
+            // Initialize DefenceManager // <-- ADD this block
+            if (this.defencesPath) {
+                // Pass enemyManager instance to DefenceManager constructor
+                this.defenceManager = new DefenceManager(this.defencesPath, this.enemyManager); 
+                await this.defenceManager.load(); // Wait for defence data to load
+            } else {
+                console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
+                // Optionally throw an error or prevent game start if defences are critical
+            }
+            // <-- END ADDED block
+            
             // Draw background and waypoints
             this.drawBackground();
             
@@ -81,19 +106,25 @@ export default class Game {
             // Mark as initialized
             this.initialized = true;
 
-            // Register EnemyManager with TuningManager and start it
-            if (this.enemyManager) {
-                this.tuningManager.register(this.enemyManager, this.enemyManager.getDataPath());
-            }
-            // REGISTER BASE with Tuning Manager
-            if (this.base && this.baseDataPath) {
-                this.tuningManager.register(this.base, this.baseDataPath);
+            // --- Register Managers with TuningManager --- 
+            if (this.tuningManager) { // Ensure TuningManager exists
+                if (this.enemyManager && this.levelData?.enemyData) {
+                    this.tuningManager.register(this.enemyManager, this.levelData.enemyData);
+                }
+                if (this.base && this.baseDataPath) {
+                    this.tuningManager.register(this.base, this.baseDataPath);
+                }
+                // ADD registration for DefenceManager // <-- ADD THIS
+                if (this.defenceManager && this.defencesPath) {
+                    this.tuningManager.register(this.defenceManager, this.defencesPath);
+                }
             } else {
-                 console.warn('Game Initialize: Base not registered with TuningManager. Base:', this.base, 'Path:', this.baseDataPath);
+                console.warn("Game Initialize: TuningManager not available for registrations.");
             }
-            
+            // --- End Registrations --- 
+
             // Start TuningManager (only if something was registered)
-            if (this.tuningManager.registeredManagers.length > 0) {
+            if (this.tuningManager && this.tuningManager.registeredManagers.length > 0) {
                  this.tuningManager.start();
             } else {
                  console.warn("Game Initialize: No managers registered with TuningManager.")
@@ -180,6 +211,16 @@ export default class Game {
                 console.warn(`No baseData path found in level ${levelId} configuration.`);
                 this.baseDataPath = null;
             }
+
+            // Store defences data PATH // <-- ADD this block
+            if (this.levelData.defencesPath) {
+                this.defencesPath = this.levelData.defencesPath;
+                console.log(`Game: Found defences data path: ${this.defencesPath}`);
+            } else {
+                console.warn(`No defencesPath found in level ${levelId} configuration.`);
+                this.defencesPath = null;
+            }
+            // <-- END ADDED block
             
             return this.levelData;
         } catch (error) {
@@ -223,10 +264,15 @@ export default class Game {
 
         // 2. Update EnemyManager
         if (this.enemyManager) {
-            this.enemyManager.update(timestamp, deltaTime);
+            this.enemyManager.update(timestamp, deltaTime, this.base);
+        }
+        
+        // 3. Update DefenceManager (No longer need to pass enemies)
+        if (this.defenceManager) {
+            this.defenceManager.update(timestamp, deltaTime);
         }
 
-        // 3. Update Base
+        // 4. Update Base
         if (this.base) {
             try {
                  this.base.update(timestamp, deltaTime);
@@ -258,9 +304,41 @@ export default class Game {
             this.base.render(this.fgCtx);
         }
 
+        // Render Defence Effects (e.g., puddles) - UNDER enemies
+        if (this.defenceManager) {
+            this.defenceManager.renderEffects(this.fgCtx);
+        }
+
         // Render Enemies
         if (this.enemyManager) {
             this.enemyManager.render(this.fgCtx);
         }
+
+        // Render Defences
+        if (this.defenceManager) {
+            this.defenceManager.render(this.fgCtx);
+        }
+
+        // Render Defence Preview (if active)
+        if (this.placementPreview) {
+            this.renderPlacementPreview(this.fgCtx);
+        }
     }
+
+    // --- ADD method to render preview --- 
+    renderPlacementPreview(ctx) {
+        if (!this.placementPreview) return;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Semi-transparent red
+        // Simple square for now, size could be based on defence type later
+        const previewSize = 40;
+        ctx.fillRect(
+            this.placementPreview.x - previewSize / 2, 
+            this.placementPreview.y - previewSize / 2, 
+            previewSize, 
+            previewSize
+        );
+        ctx.restore();
+    }
+    // --- END ADD method --- 
 }

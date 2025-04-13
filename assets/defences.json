@@ -1,0 +1,73 @@
+[
+  {
+    "id": "laser_tower",
+    "name": "Laser Tower",
+    "stats": {
+      "hp": 150,
+      "cost": 500,
+      "attackRate": 3000,
+      "attackStrength": 50,
+      "attackRange": 200
+    }
+  },
+  {
+    "id": "super_laser_tower",
+    "name": "Super Laser Tower",
+    "stats": {
+      "hp": 150,
+      "cost": 5000,
+      "attackRate": 3000,
+      "attackStrength": 50,
+      "attackRange": 200
+    }
+  },
+  {
+    "id": "axolotl_gunner",
+    "name": "Axolotl Gunner",
+    "stats": {
+      "hp": 80,
+      "cost": 100,
+      "attackRate": 300,
+      "attackStrength": 5,
+      "attackRange": 150
+    }
+  },
+  {
+    "id": "tank",
+    "name": "Tank",
+    "stats": {
+      "hp": 200,
+      "cost": 200,
+      "attackRate": 2000,
+      "attackStrength": 30,
+      "attackRange": 180
+    }
+  },
+  {
+    "id": "turret_tower",
+    "name": "Turret Tower",
+    "stats": {
+      "hp": 120,
+      "cost": 150,
+      "attackRate": 300,
+      "attackStrength": 8,
+      "attackRange": 160
+    }
+  },
+  {
+    "id": "glue_turret",
+    "name": "Glue Turret",
+    "stats": {
+      "hp": 100,
+      "cost": 175,
+      "attackRate": 10000,
+      "attackStrength": 0,
+      "attackRange": 170
+    },
+    "effects": {
+      "speedFactor": 0.2,
+      "duration": 5000,
+      "radius": 20
+    }
+  }
+]

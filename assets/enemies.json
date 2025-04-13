@@ -42,7 +42,7 @@
       "speed": 60,
       "attackRate": 1200,
       "attackStrength": 8,
-      "attackRange": 45,
+      "attackRange": 100,
       "bounty": 7
     },
     "effects": {
@@ -67,7 +67,7 @@
       "speed": 15,
       "attackRate": 1500,
       "attackStrength": 15,
-      "attackRange": 55,
+      "attackRange": 100,
       "bounty": 10
     },
     "effects": {

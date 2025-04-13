@@ -114,12 +114,12 @@ export default class EnemyManager {
     }
 
     // Update loop for all enemies (logic moved from Game.update)
-    update(timestamp, deltaTime) {
+    update(timestamp, deltaTime, base) {
         if (!this.isLoaded) return;
 
         for (let i = this.activeEnemies.length - 1; i >= 0; i--) {
             const enemy = this.activeEnemies[i];
-            enemy.update(timestamp, deltaTime);
+            enemy.update(timestamp, deltaTime, base);
 
             // Remove dead enemies
             if (enemy.isDead) {
@@ -176,5 +176,9 @@ export default class EnemyManager {
      // Helper to expose the data path for TuningManager registration
     getDataPath() {
         return this.enemyDataPath;
+    }
+
+    getActiveEnemies() {
+        return this.activeEnemies; // Simply return the array of active instances
     }
 }

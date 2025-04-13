@@ -55,6 +55,7 @@ export default class Enemy {
         this.isAttacking = false;
         this.targetTower = null;
         this.lastAttackTime = 0;
+        this.speedModifier = 1.0; // Add speed modifier, 1.0 = normal speed
     }
     
     // Helper function to calculate the extended waypoint path
@@ -116,12 +117,41 @@ export default class Enemy {
         return [spawnPoint, ...originalWaypoints, despawnPoint];
     }
     
-    update(timestamp, deltaTime) {
+    update(timestamp, deltaTime, base) {
         if (this.isDead) return;
         
         // Update flash effect
         if (this.isFlashing && timestamp - this.lastFlashTime >= this.flashDuration) {
             this.isFlashing = false;
+        }
+
+        // --- Debugging Base Attack Logic ---
+        const baseExists = !!base;
+        const baseDestroyed = baseExists ? base.isDestroyed() : 'N/A';
+        let distanceToBase = Infinity;
+        let baseCoords = { x: 'N/A', y: 'N/A' };
+        if (baseExists && !baseDestroyed) {
+            const dxBase = base.x - this.x;
+            const dyBase = base.y - this.y;
+            distanceToBase = Math.sqrt(dxBase * dxBase + dyBase * dyBase);
+            baseCoords = { x: base.x, y: base.y };
+        }
+        const isInRange = distanceToBase <= this.attackRange;
+        // --- End Debugging ---
+
+        // Check distance to base and determine if attacking
+        if (distanceToBase <= this.attackRange && base && !base.isDestroyed()) {
+            this.isAttacking = true; // Stop moving
+            // Check if enough time has passed to attack again
+            if (timestamp - this.lastAttackTime >= this.attackRate) {
+                console.log(`Enemy ${this.id} attacking base!`); // Debug log
+                base.takeDamage(this.attackStrength);
+                this.lastAttackTime = timestamp;
+            }
+        } else {
+            this.isAttacking = false; // Resume moving if base is destroyed or out of range
+            // If we were just attacking, reset attack timer so we don't attack immediately upon re-entering range
+            // Although, maybe we want that? Let's keep it simple for now.
         }
         
         // Move along path if not attacking and not past the final waypoint
@@ -139,8 +169,9 @@ export default class Enemy {
             // Calculate distance to target
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Calculate distance to move this frame
-            const moveDistance = this.speed * (deltaTime / 1000); // Convert ms to seconds
+            // Calculate distance to move this frame (use speedModifier)
+            const currentSpeed = this.speed * this.speedModifier;
+            const moveDistance = currentSpeed * (deltaTime / 1000); // Convert ms to seconds
             
             // Check if we have reached or passed the target waypoint
             if (distance <= moveDistance || distance < 0.1) { // Check if close enough or will pass it
@@ -172,6 +203,7 @@ export default class Enemy {
         }
         
         // Handle tower attacks (to be implemented with tower system)
+        // TODO: Handle attacking specific towers if implemented later
     }
     
     // New method to apply updates from fetched definitions
@@ -218,7 +250,13 @@ export default class Enemy {
     
     die() {
         this.isDead = true;
-        // Additional death logic like particles would go here
+        // TODO: Trigger death particle effects here or in EnemyManager
+        // TODO: Award bounty in EnemyManager or Game state
+    }
+    
+    getCurrentPosition() {
+        // Simply return the current x, y coordinates
+        return { x: this.x, y: this.y };
     }
     
     draw(ctx) {
@@ -239,20 +277,46 @@ export default class Enemy {
         
         // Apply flash effect if needed
         if (this.isFlashing) {
-            // Draw the normal enemy sprite
-            ctx.drawImage(
+            // --- Use Temporary Canvas for Flash Effect --- 
+            const scaledWidth = this.frameWidth * this.scale;
+            const scaledHeight = this.frameHeight * this.scale;
+
+            // 1. Create offscreen canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = scaledWidth;
+            tempCanvas.height = scaledHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // 2. Draw current sprite frame onto temp canvas
+            tempCtx.drawImage(
                 this.sprite,
                 frameX, frameY, this.frameWidth, this.frameHeight,
-                -this.frameWidth * this.scale / 2, -this.frameHeight * this.scale / 2, // Center the sprite
-                this.frameWidth * this.scale, this.frameHeight * this.scale
+                0, 0, // Draw at top-left corner of temp canvas
+                scaledWidth, scaledHeight
             );
+
+            // 3. Apply flash effect ONLY on temp canvas using 'source-in'
+            tempCtx.globalCompositeOperation = 'source-in'; 
+            tempCtx.fillStyle = 'white'; // Pure white
+            tempCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+            // No need to reset composite op on tempCtx
+
+            // 4. Draw the result (whitened sprite) onto the main canvas
+            ctx.drawImage(
+                tempCanvas, 
+                -scaledWidth / 2, -scaledHeight / 2 // Center the temp canvas content
+            );
+            // --- End Temporary Canvas Logic --- 
+
+            /* // Remove original direct drawing and overlay logic
+            // Draw the normal enemy sprite
+            ctx.drawImage(...);
              // Apply a white tint overlay
              ctx.globalCompositeOperation = 'source-atop';
              ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; // White with 70% opacity
-             ctx.fillRect(
-                 -this.frameWidth * this.scale / 2, -this.frameHeight * this.scale / 2,
-                 this.frameWidth * this.scale, this.frameHeight * this.scale
-             );
+             ctx.fillRect(...);
+             ctx.globalCompositeOperation = 'source-over';
+            */
 
         } else {
             // Draw the normal enemy sprite centered at (0,0) relative to the translated origin

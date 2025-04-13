@@ -57,10 +57,9 @@ export default class Base {
         // --- Display Properties ---
         this.x = baseConfig.position.x;
         this.y = baseConfig.position.y;
-        // Use provided values or non-default base values (like 0 or 1)
-        this.anchorX = baseConfig.display?.anchorX ?? 0.5; // Use nullish coalescing for 0 as valid anchor
-        this.anchorY = baseConfig.display?.anchorY ?? 0.5;
-        this.scale = baseConfig.display?.scale ?? 1.0;
+        this.anchorX = baseConfig.display?.anchorX;
+        this.anchorY = baseConfig.display?.anchorY;
+        this.scale = baseConfig.display?.scale;
 
         // --- Sprite Information (requires loading) ---
         this.spriteSheet = null; // Will hold the Image object
@@ -68,6 +67,7 @@ export default class Base {
         this.frameWidth = baseConfig.sprite.frameWidth;
         this.frameHeight = baseConfig.sprite.frameHeight;
         this.currentFrame = 0;
+        this.totalFrames = baseConfig.sprite.totalFrames; // Store total frames
         this.isLoaded = false;
     }
 
@@ -112,21 +112,21 @@ export default class Base {
         if (!this.isLoaded || this._isDestroyed) {
             return; // Don't update if not loaded or already destroyed
         }
-        // Placeholder for future logic (e.g., animation frame updates)
-        // Example: Determine currentFrame based on HP percentage
+        // Determine currentFrame based on HP percentage and total frames
         const hpPercentage = this.currentHp / this.maxHp;
-        if (hpPercentage <= 0) this.currentFrame = 3; // Destroyed frame (assuming 4 frames: 0-healthy, 1-dmg, 2-crit, 3-destroyed)
-        else if (hpPercentage <= 0.3) this.currentFrame = 2; // Critical frame
-        else if (hpPercentage <= 0.7) this.currentFrame = 1; // Damaged frame
-        else this.currentFrame = 0; // Healthy frame
+        if (hpPercentage > 0) {
+            this.currentFrame = this.totalFrames - Math.ceil(hpPercentage * this.totalFrames);
+        } 
     }
 
     /**
      * Renders the base on the canvas.
      */
     render(ctx) {
-        // REMOVE DEBUG LOGGING FOR RENDER
-        // console.log(`Base Render: isLoaded=${this.isLoaded}, spriteSheet=${!!this.spriteSheet}, frameW=${this.frameWidth}, frameH=${this.frameHeight}, x=${this.x}, y=${this.y}, scale=${this.scale}`);
+        // Don't render if destroyed
+        if (this._isDestroyed) {
+            return;
+        }
 
         // Check if assets are loaded and sprite dimensions are valid
         if (!this.isLoaded || !this.spriteSheet || this.frameWidth <= 0 || this.frameHeight <= 0) {
@@ -183,8 +183,16 @@ export default class Base {
             this.currentHp = 0;
             this._isDestroyed = true;
             console.log("Base has been destroyed!");
-            // Potential: Trigger explosion animation/sound here
+            this.die(); // Call the die method
         }
+    }
+
+    /**
+     * Placeholder method for when the base is destroyed.
+     */
+    die() {
+        // TODO: Implement base destruction logic (e.g., remove from game, trigger game over)
+        console.log("Base die() method called.");
     }
 
     /**

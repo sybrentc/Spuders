@@ -1,3 +1,7 @@
+:root {
+    --defence-menu-width: 12vw; /* Define menu width as percentage of viewport width */
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -8,10 +12,98 @@ body {
     background-color: black;
 }
 
+/* Added styles for the defence menu */
+#defenceMenu {
+    width: var(--defence-menu-width); /* Use the variable */
+    background-color: #282c34; /* Darker, slightly bluish-grey background */
+    height: 100vh; /* Full viewport height */
+    padding: 15px 5px; /* More vertical padding, less horizontal */
+    box-sizing: border-box; /* Include padding in width/height */
+    flex-shrink: 0; /* Prevent menu from shrinking */
+    display: flex; /* Use flexbox for buttons */
+    flex-direction: column; /* Stack buttons vertically */
+    align-items: center; /* Center buttons horizontally */
+    gap: 10px; /* Add space between buttons */
+    overflow-y: auto; /* Add scrollbar if buttons overflow */
+}
+
+/* Styling for individual buttons */
+.defence-button {
+    display: flex;
+    flex-direction: column; /* Stack name and price vertically */
+    align-items: center; /* Center text horizontally */
+    justify-content: center; /* Center text vertically */
+    width: 90%; /* Make buttons fill most of menu width */
+    min-height: 60px; /* Set a fixed height for buttons */
+    padding: 5px;
+    border: 1px solid #61dafb; /* Light blue border */
+    border-radius: 5px;
+    /* Replace flat color with a subtle gradient for shine */
+    background-image: linear-gradient(to bottom, #555b65, #3c4049);
+    /* background-color: #3c4049; */ /* Keep fallback or remove */
+    color: #ffffff; /* White text */
+    font-family: sans-serif;
+    font-size: 0.9em;
+    cursor: pointer;
+    text-align: center;
+    transition: background-color 0.2s ease, transform 0.1s ease; /* Smooth transitions */
+    box-sizing: border-box;
+    /* Add subtle shadow for depth */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.defence-button .name {
+    font-weight: bold;
+    font-size: 1.1em; /* Slightly larger name */
+    margin-bottom: 3px; /* Space between name and price */
+}
+
+.defence-button .price {
+    color: #61dafb; /* Light blue price text */
+}
+
+/* Hover effect */
+.defence-button:hover {
+    /* Enhance gradient on hover */
+    background-image: linear-gradient(to bottom, #6a707a, #4a4e57);
+    /* background-color: #4a4e57; */ /* Keep fallback or remove */
+    border-color: #ffffff; /* White border on hover */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Active (click) effect */
+.defence-button:active {
+    /* Use gradient for active state too */
+    background-image: linear-gradient(to bottom, #50b4d4, #61dafb);
+    /* background-color: #61dafb; */ /* Keep fallback or remove */
+    color: #1c1e22; /* Darker text on click */
+    transform: scale(0.98); /* Slightly shrink button on click */
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3); /* Inner shadow on click */
+}
+
+.defence-button:active .price {
+    color: #1c1e22; /* Dark price on click */
+}
+
+/* Styling for the selected button */
+.defence-button.selected {
+    border-color: #ffcc00; /* Gold border */
+    box-shadow: 0 0 10px rgba(255, 204, 0, 0.7); /* Gold glow */
+    background-image: linear-gradient(to bottom, #7a808a, #5a5e67); /* Slightly different gradient */
+}
+
 #gameContainer {
-  position: relative;
-  width: min(100vw, 100vh);
-  height: min(100vw, 100vh);
+    position: relative;
+    /* Use min() for square aspect ratio, considering menu width */
+    width: min(calc(100vw - var(--defence-menu-width)), 100vh); /* Use variable in calc */
+    height: min(calc(100vw - var(--defence-menu-width)), 100vh); /* Use variable in calc */
+
+    /* Ensure canvas within aligns correctly */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* Optional: Add a margin if needed for spacing */
+    /* margin: auto; Add this if centering within the flex space is desired */
 }
 
 .game-layer {

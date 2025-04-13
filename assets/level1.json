@@ -4,6 +4,7 @@
     "enemyData": "/assets/enemies.json",
     "baseData": "/assets/base.json",
     "waveDataPath": "/assets/waves/waves.json",
+    "defencesPath": "/assets/defences.json",
     "canvas": {
       "width": 1024,
       "height": 1024
