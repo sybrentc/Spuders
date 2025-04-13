@@ -14,7 +14,7 @@
     },
     "stats": {
       "hp": 100,
-      "speed": 0.02,
+      "speed": 30,
       "attackRate": 1000,
       "attackStrength": 10,
       "attackRange": 50,
@@ -34,12 +34,12 @@
       "frameHeight": 192,
       "framesPerRow": 4,
       "totalFrames": 16,
-      "frameDuration": 120,
-      "scale": 0.45
+      "frameDuration": 60,
+      "scale": 0.3
     },
     "stats": {
       "hp": 75,
-      "speed": 0.035,
+      "speed": 60,
       "attackRate": 1200,
       "attackStrength": 8,
       "attackRange": 45,
@@ -59,12 +59,12 @@
       "frameHeight": 192,
       "framesPerRow": 4,
       "totalFrames": 16,
-      "frameDuration": 180,
-      "scale": 0.6
+      "frameDuration": 400,
+      "scale": 1
     },
     "stats": {
       "hp": 200,
-      "speed": 0.015,
+      "speed": 15,
       "attackRate": 1500,
       "attackStrength": 15,
       "attackRange": 55,

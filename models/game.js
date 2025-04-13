@@ -1,4 +1,5 @@
 import WaveManager from '../waveManager.js'; // Import the WaveManager
+import Enemy from './enemy.js'; // Import the Enemy class
 
 export default class Game {
     constructor() {
@@ -46,7 +47,6 @@ export default class Game {
             
             // Draw background and waypoints
             this.drawBackground();
-            this.drawWaypoints();
             
             // Start game loop
             this.startGameLoop();
@@ -232,19 +232,6 @@ export default class Game {
         }
     }
     
-    drawWaypoints() {
-        if (!this.pathData || !this.pathData.length) return;
-        
-        this.bgCtx.fillStyle = 'red';
-        
-        // Draw each waypoint as a circle
-        this.pathData.forEach(point => {
-            this.bgCtx.beginPath();
-            this.bgCtx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-            this.bgCtx.fill();
-        });
-    }
-    
     startGameLoop() {
         const gameLoop = (timestamp) => {
             // Calculate deltaTime
@@ -343,25 +330,8 @@ export default class Game {
                 // Find the updated definition for this specific enemy instance
                 const updatedDef = newDefinitionsMap.get(enemy.id);
                 if (updatedDef) {
-                    // Directly apply updated stats and properties to the active enemy instance.
-                    enemy.name = updatedDef.name;
-                    // Update animation properties
-                    enemy.frameWidth = updatedDef.sprite.frameWidth;
-                    enemy.frameHeight = updatedDef.sprite.frameHeight;
-                    enemy.framesPerRow = updatedDef.sprite.framesPerRow;
-                    enemy.totalFrames = updatedDef.sprite.totalFrames;
-                    enemy.frameDuration = updatedDef.sprite.frameDuration;
-                    enemy.scale = updatedDef.sprite.scale;
-                    // Update stats
-                    enemy.hp = updatedDef.stats.hp; // Directly set current HP
-                    enemy.maxHp = updatedDef.stats.hp; // Update max HP too
-                    enemy.speed = updatedDef.stats.speed;
-                    enemy.attackRate = updatedDef.stats.attackRate;
-                    enemy.attackStrength = updatedDef.stats.attackStrength;
-                    enemy.attackRange = updatedDef.stats.attackRange;
-                    enemy.bounty = updatedDef.stats.bounty;
-                    // Update effects
-                    enemy.flashDuration = updatedDef.effects.flashDuration;
+                    // Call the enemy's own update method
+                    enemy.applyUpdate(updatedDef);
                 }
             });
 
@@ -369,195 +339,5 @@ export default class Game {
             // Log errors during the update process (e.g., invalid JSON)
             console.error('Error during periodic enemy update:', error);
         }
-    }
-}
-
-// Enemy class - dynamically created based on enemy definitions
-class Enemy {
-    constructor({
-        id, name, waypoints, sprite, startIndex = 0,
-        frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration, scale,
-        hp, speed, attackRate, attackStrength, attackRange, bounty,
-        flashDuration
-    }) {
-        // Identification
-        this.id = id;
-        this.name = name;
-        
-        // Path following
-        this.waypoints = waypoints;
-        this.currentPathIndex = startIndex;
-        
-        // Sprite and animation
-        this.sprite = sprite;
-        this.frameWidth = frameWidth;
-        this.frameHeight = frameHeight;
-        this.framesPerRow = framesPerRow;
-        this.totalFrames = totalFrames;
-        this.frameDuration = frameDuration;
-        this.scale = scale;
-        this.currentFrame = 0;
-        this.lastFrameTime = 0;
-        
-        // Stats
-        this.hp = hp;
-        this.maxHp = hp;
-        this.speed = speed;
-        this.attackRate = attackRate; 
-        this.attackStrength = attackStrength;
-        this.attackRange = attackRange;
-        this.bounty = bounty;
-        
-        // State
-        this.isDead = false;
-        this.isFlashing = false;
-        this.flashDuration = flashDuration;
-        this.lastFlashTime = 0;
-        this.isAttacking = false;
-        this.targetTower = null;
-        this.lastAttackTime = 0;
-    }
-    
-    update(timestamp, deltaTime) {
-        if (this.isDead) return;
-        
-        // Update flash effect
-        if (this.isFlashing && timestamp - this.lastFlashTime >= this.flashDuration) {
-            this.isFlashing = false;
-        }
-        
-        // Move along path if not attacking
-        if (!this.isAttacking) {
-            if (this.currentPathIndex < this.waypoints.length - 1) {
-                this.currentPathIndex += this.speed;
-                if (this.currentPathIndex >= this.waypoints.length) {
-                    this.currentPathIndex = this.waypoints.length - 1;
-                }
-            }
-        }
-        
-        // Update animation
-        if (timestamp - this.lastFrameTime >= this.frameDuration) {
-            this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
-            this.lastFrameTime = timestamp;
-        }
-        
-        // Handle tower attacks (to be implemented with tower system)
-    }
-    
-    hit(damage) {
-        if (this.isDead) return;
-        
-        this.hp -= damage;
-        this.isFlashing = true;
-        this.lastFlashTime = performance.now();
-        
-        if (this.hp <= 0) {
-            this.die();
-        }
-    }
-    
-    die() {
-        this.isDead = true;
-        // Additional death logic like particles would go here
-    }
-    
-    draw(ctx) {
-        if (this.isDead) return;
-        
-        const currentPoint = this.getCurrentPosition();
-        if (!currentPoint) return;
-        
-        // Calculate the current frame position in the sprite sheet
-        const frameX = (this.currentFrame % this.framesPerRow) * this.frameWidth;
-        const frameY = Math.floor(this.currentFrame / this.framesPerRow) * this.frameHeight;
-        
-        // Save the current context state
-        ctx.save();
-        
-        // Move to the enemy's position
-        ctx.translate(currentPoint.x, currentPoint.y);
-        
-        // Apply flash effect if needed
-        if (this.isFlashing) {
-            // Create a temporary canvas for the enemy sprite
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = this.frameWidth * this.scale;
-            tempCanvas.height = this.frameHeight * this.scale;
-            const tempCtx = tempCanvas.getContext('2d');
-            
-            // Draw the enemy to the temporary canvas
-            tempCtx.drawImage(
-                this.sprite,
-                frameX, frameY, this.frameWidth, this.frameHeight,
-                0, 0, this.frameWidth * this.scale, this.frameHeight * this.scale
-            );
-            
-            // Apply brightness filter
-            tempCtx.filter = 'brightness(200%) contrast(200%)';
-            tempCtx.globalCompositeOperation = 'source-atop';
-            tempCtx.fillStyle = 'white';
-            tempCtx.fillRect(0, 0, this.frameWidth * this.scale, this.frameHeight * this.scale);
-            
-            // Draw the filtered enemy
-            ctx.drawImage(
-                tempCanvas,
-                -this.frameWidth * this.scale / 2, -this.frameHeight * this.scale / 2, 
-                this.frameWidth * this.scale, this.frameHeight * this.scale
-            );
-        } else {
-            // Draw the normal enemy sprite
-            ctx.drawImage(
-                this.sprite,
-                frameX, frameY, this.frameWidth, this.frameHeight,
-                -this.frameWidth * this.scale / 2, -this.frameHeight * this.scale / 2, 
-                this.frameWidth * this.scale, this.frameHeight * this.scale
-            );
-        }
-        
-        // Draw health bar
-        const healthBarWidth = 30;
-        const healthBarHeight = 4;
-        const healthPercentage = this.hp / this.maxHp;
-        
-        // Background of health bar
-        ctx.fillStyle = 'red';
-        ctx.fillRect(
-            -healthBarWidth / 2, 
-            -this.frameHeight * this.scale / 2 - 10, 
-            healthBarWidth, 
-            healthBarHeight
-        );
-        
-        // Current health
-        ctx.fillStyle = 'green';
-        ctx.fillRect(
-            -healthBarWidth / 2, 
-            -this.frameHeight * this.scale / 2 - 10, 
-            healthBarWidth * healthPercentage, 
-            healthBarHeight
-        );
-        
-        // Restore the context state
-        ctx.restore();
-    }
-    
-    getCurrentPosition() {
-        const index = Math.floor(this.currentPathIndex);
-        const nextIndex = Math.min(index + 1, this.waypoints.length - 1);
-        const t = this.currentPathIndex - index;
-        
-        return this.interpolate(
-            this.waypoints[index],
-            this.waypoints[nextIndex],
-            t
-        );
-    }
-    
-    interpolate(p1, p2, t) {
-        return {
-            x: p1.x + (p2.x - p1.x) * t,
-            y: p1.y + (p2.y - p1.y) * t
-        };
     }
 }
