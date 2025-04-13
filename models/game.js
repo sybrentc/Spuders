@@ -1,6 +1,7 @@
 import WaveManager from '../waveManager.js'; // Import the WaveManager
 import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
+import Base from './base.js'; // Import the Base class
 
 export default class Game {
     constructor() {
@@ -10,18 +11,20 @@ export default class Game {
         this.levelData = null;
         this.pathData = null;
         this.waveDataPath = null;
+        this.baseDataPath = null; // ADD path for base config
         this.waveManager = null;
         this.canvas = null;
         this.initialized = false;
         this.tuningManager = new TuningManager(500);
         this.enemyManager = null;
+        this.base = null; // ADD base instance property
         this.lastTimestamp = 0;
         this._initPromise = this.initialize();
     }
     
     async initialize() {
         try {
-            // Load level data
+            // Load level data (paths for enemies, waves, base)
             await this.loadLevel(1);
             
             // Create game layers
@@ -54,6 +57,21 @@ export default class Game {
                 // Optionally throw error or prevent game start
             }
             
+            // Initialize Base using static factory method
+            if (!this.baseDataPath) {
+                 throw new Error("Game Initialize: Level data is missing required 'baseData' path.");
+            }
+            try {
+                // Call the static method on the Base class
+                this.base = await Base.createFromPath(this.baseDataPath);
+                console.log("Game: Base initialized successfully via static method."); 
+
+            } catch(baseError) {
+                 // Catch errors from createFromPath (fetch, json, constructor, loadAssets)
+                 console.error(`Game Initialize: Failed to initialize Base: ${baseError}`);
+                 throw baseError; // Re-throw to stop game initialization
+            }
+            
             // Draw background and waypoints
             this.drawBackground();
             
@@ -66,10 +84,19 @@ export default class Game {
             // Register EnemyManager with TuningManager and start it
             if (this.enemyManager) {
                 this.tuningManager.register(this.enemyManager, this.enemyManager.getDataPath());
-                this.tuningManager.start();
+            }
+            // REGISTER BASE with Tuning Manager
+            if (this.base && this.baseDataPath) {
+                this.tuningManager.register(this.base, this.baseDataPath);
             } else {
-                // This case should technically be caught by the earlier check/throw
-                 console.warn("Game Initialize: EnemyManager not available, TuningManager not started for enemies.");
+                 console.warn('Game Initialize: Base not registered with TuningManager. Base:', this.base, 'Path:', this.baseDataPath);
+            }
+            
+            // Start TuningManager (only if something was registered)
+            if (this.tuningManager.registeredManagers.length > 0) {
+                 this.tuningManager.start();
+            } else {
+                 console.warn("Game Initialize: No managers registered with TuningManager.")
             }
             
             // Start the wave system via the manager
@@ -82,8 +109,7 @@ export default class Game {
             return true;
         } catch (error) {
             console.error('Failed to initialize game:', error);
-            // Consider setting a global error state or stopping the game
-            this.initialized = false; // Ensure not marked as initialized on error
+            this.initialized = false;
             return false;
         }
     }
@@ -146,6 +172,15 @@ export default class Game {
                 this.waveDataPath = null; // Explicitly set to null if missing
             }
             
+            // Store base data PATH
+            if (this.levelData.baseData) { // Ensure field name matches level1.json
+                this.baseDataPath = this.levelData.baseData;
+                console.log(`Game: Found base data path: ${this.baseDataPath}`);
+            } else {
+                console.warn(`No baseData path found in level ${levelId} configuration.`);
+                this.baseDataPath = null;
+            }
+            
             return this.levelData;
         } catch (error) {
             console.error(`Failed to load level ${levelId}:`, error);
@@ -186,17 +221,20 @@ export default class Game {
             this.waveManager.update(timestamp, deltaTime);
         }
 
-        // 2. ---> Delegate to EnemyManager
+        // 2. Update EnemyManager
         if (this.enemyManager) {
             this.enemyManager.update(timestamp, deltaTime);
         }
 
-        // 3. Update Towers/Other Game Logic (Placeholder)
-
-        // 4. Periodic Parameter Updates (keep existing logic)
-        // Note: This is handled by setInterval currently, not directly in the loop.
-        // If you wanted finer control or updates tied to frames, you might move
-        // the check for periodic updates here.
+        // 3. Update Base
+        if (this.base) {
+            try {
+                 this.base.update(timestamp, deltaTime);
+            } catch (error) {
+                 console.error("Error during base.update():", error);
+                 return; // Keep return to stop update on error
+            }
+        }
     }
     
     createLayer(className, zIndex) {
@@ -212,10 +250,15 @@ export default class Game {
     }
     
     render() {
-        // Clear only the foreground canvas for game elements
+        // Clear foreground canvas
         this.fgCtx.clearRect(0, 0, this.fgCanvas.width, this.fgCanvas.height);
         
-        // ---> Delegate to EnemyManager
+        // Render Base first (usually behind enemies)
+        if (this.base) {
+            this.base.render(this.fgCtx);
+        }
+
+        // Render Enemies
         if (this.enemyManager) {
             this.enemyManager.render(this.fgCtx);
         }

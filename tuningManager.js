@@ -63,28 +63,27 @@ export default class TuningManager {
      * Called periodically by setInterval.
      */
     async checkForUpdates() {
-        if (!this.isRunning) return; // Don't run if stopped between interval firing and execution
-
-        // console.log("TuningManager: Checking for parameter updates..."); // Optional: for debugging
+        if (!this.isRunning) return;
 
         for (const registration of this.registeredManagers) {
             try {
-                const response = await fetch(registration.dataPath);
+                // Add cache-busting query parameter to fetch
+                const cacheBustingUrl = `${registration.dataPath}?t=${Date.now()}`;
+
+                const response = await fetch(cacheBustingUrl);
+                
                 if (!response.ok) {
-                    // Log warning for network/server issues, but don't stop the whole process
                     console.warn(`TuningManager: Failed to fetch updates from ${registration.dataPath}: ${response.statusText}`);
-                    continue; // Skip to the next manager
+                    continue;
                 }
 
                 const newData = await response.json();
-
+                
                 // Call the specific manager's update method
                 registration.manager.applyParameterUpdates(newData);
 
             } catch (error) {
-                // Log errors during fetch or processing (e.g., invalid JSON)
                 console.error(`TuningManager: Error processing updates from ${registration.dataPath}:`, error);
-                // Continue trying other managers even if one fails
             }
         }
     }
