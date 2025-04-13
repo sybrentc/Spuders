@@ -133,7 +133,11 @@ export default class EnemyManager {
     render(ctx) {
         if (!this.isLoaded) return;
 
-        this.activeEnemies.forEach(enemy => {
+        // Sort enemies by scale (smallest first) before rendering
+        const sortedEnemies = [...this.activeEnemies].sort((a, b) => a.scale - b.scale);
+
+        // Render the sorted enemies
+        sortedEnemies.forEach(enemy => {
             enemy.draw(ctx);
         });
     }
