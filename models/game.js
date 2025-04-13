@@ -1,6 +1,6 @@
 import WaveManager from '../waveManager.js'; // Import the WaveManager
-import Enemy from './enemy.js'; // Import the Enemy class
 import TuningManager from '../tuningManager.js'; // Import the new manager
+import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
 
 export default class Game {
     constructor() {
@@ -9,16 +9,13 @@ export default class Game {
         this.config = null;
         this.levelData = null;
         this.pathData = null;
-        this.waveData = null; // Add property to store wave data
-        this.waveManager = null; // Add property for the WaveManager instance
-        this.canvas = null; // Will store canvas dimensions
+        this.waveDataPath = null;
+        this.waveManager = null;
+        this.canvas = null;
         this.initialized = false;
-        this.enemyTypes = {}; // Store enemy type definitions
-        this.activeEnemies = []; // Store active enemies on the map
-        this.enemySprites = {}; // Store loaded sprite images
-        this.enemyDataPath = null; // Store path for reloading
-        this.tuningManager = new TuningManager(500); // Instantiate with 500ms interval
-        this.lastTimestamp = 0; // Add lastTimestamp for deltaTime calculation
+        this.tuningManager = new TuningManager(500);
+        this.enemyManager = null;
+        this.lastTimestamp = 0;
         this._initPromise = this.initialize();
     }
     
@@ -37,13 +34,24 @@ export default class Game {
             this.fgCanvas = this.layers.foreground.canvas;
             this.fgCtx = this.layers.foreground.ctx;           
             
-            // Initialize WaveManager AFTER waveData is loaded
-            if (this.waveData) {
-                // Pass wave data and the method to create enemies (bound to this Game instance)
-                this.waveManager = new WaveManager(this.waveData, this.createEnemy.bind(this));
+            // Initialize EnemyManager first
+            const enemyDataPath = this.levelData?.enemyData;
+            if (!enemyDataPath) {
+                throw new Error("Game Initialize: Level data is missing required 'enemyData' path.");
+            }
+            this.enemyManager = new EnemyManager(enemyDataPath, this.pathData);
+            await this.enemyManager.load(); // Load enemy definitions and sprites
+            
+            // Initialize WaveManager - PASS PATH and ENEMY MANAGER CREATE FUNCTION
+            if (this.waveDataPath && this.enemyManager) {
+                this.waveManager = new WaveManager(
+                    this.waveDataPath, // Pass the path
+                    this.enemyManager.createEnemy.bind(this.enemyManager)
+                );
+                await this.waveManager.load(); // Load wave data within the manager
             } else {
-                console.error("Cannot initialize WaveManager: waveData is missing.");
-                // Optionally handle this error more gracefully
+                console.error("Cannot initialize WaveManager: waveDataPath or EnemyManager is missing.");
+                // Optionally throw error or prevent game start
             }
             
             // Draw background and waypoints
@@ -55,23 +63,27 @@ export default class Game {
             // Mark as initialized
             this.initialized = true;
 
-            // ADD: Register Game instance with TuningManager and start it
-            if (this.enemyDataPath) {
-                 // Register the Game instance itself for now
-                this.tuningManager.register(this, this.enemyDataPath);
-                this.tuningManager.start(); // Start the centralized updates
+            // Register EnemyManager with TuningManager and start it
+            if (this.enemyManager) {
+                this.tuningManager.register(this.enemyManager, this.enemyManager.getDataPath());
+                this.tuningManager.start();
             } else {
-                console.warn("Game Initialize: No enemyDataPath found, TuningManager not started for enemies.")
+                // This case should technically be caught by the earlier check/throw
+                 console.warn("Game Initialize: EnemyManager not available, TuningManager not started for enemies.");
             }
             
             // Start the wave system via the manager
-            if (this.waveManager) {
+            if (this.waveManager && this.waveManager.isLoaded) { // Check if loaded before starting
                 this.waveManager.start();
+            } else {
+                console.warn("Game Initialize: WaveManager not loaded or available, cannot start waves.")
             }
             
             return true;
         } catch (error) {
             console.error('Failed to initialize game:', error);
+            // Consider setting a global error state or stopping the game
+            this.initialized = false; // Ensure not marked as initialized on error
             return false;
         }
     }
@@ -125,110 +137,19 @@ export default class Game {
                 }
             }
             
-            // Load enemy data
-            if (this.levelData.enemyData) {
-                try {
-                    await this.loadEnemyTypes(this.levelData.enemyData);
-                } catch (enemyError) {
-                    console.error('Failed to load enemy data:', enemyError);
-                }
-            }
-            
-            // Load wave data
-            if (this.levelData.waveData) {
-                this.waveData = this.levelData.waveData; // Store the wave data
-                console.log(`Loaded wave data with ${this.waveData.waves.length} waves defined.`);
+            // Store wave data PATH
+            if (this.levelData.waveDataPath) {
+                this.waveDataPath = this.levelData.waveDataPath;
+                console.log(`Game: Found wave data path: ${this.waveDataPath}`);
             } else {
-                console.warn(`No wave data found in level ${levelId} configuration.`);
-                this.waveData = { globalWaveSettings: {}, waves: [] }; // Default empty structure
+                console.warn(`No waveDataPath found in level ${levelId} configuration.`);
+                this.waveDataPath = null; // Explicitly set to null if missing
             }
             
             return this.levelData;
         } catch (error) {
             console.error(`Failed to load level ${levelId}:`, error);
         }
-    }
-    
-    async loadEnemyTypes(enemyDataPath) {
-        try {
-            const response = await fetch(enemyDataPath);
-            const enemyDefinitions = await response.json();
-            
-            console.log(`Loading ${enemyDefinitions.length} enemy types`);
-            
-            // Create a class for each enemy type
-            for (const enemyDef of enemyDefinitions) {
-                // Load sprite image for this enemy type
-                const sprite = await this.loadSprite(enemyDef.sprite.path);
-                this.enemySprites[enemyDef.id] = sprite;
-                
-                // Store the enemy definition
-                this.enemyTypes[enemyDef.id] = enemyDef;
-                
-                console.log(`Loaded enemy type: ${enemyDef.name}`);
-            }
-            
-            this.enemyDataPath = enemyDataPath;
-            console.log('All enemy types loaded successfully. Path stored for periodic updates.');
-        } catch (error) {
-            console.error('Error loading enemy types:', error);
-            throw error;
-        }
-    }
-    
-    loadSprite(path) {
-        return new Promise((resolve, reject) => {
-            const sprite = new Image();
-            sprite.onload = () => resolve(sprite);
-            sprite.onerror = (e) => reject(new Error(`Failed to load sprite: ${path}`));
-            sprite.src = path;
-        });
-    }
-    
-    // Create an enemy of the specified type
-    createEnemy(enemyTypeId, startIndex = 0) {
-        if (!this.enemyTypes[enemyTypeId]) {
-            console.error(`Enemy type ${enemyTypeId} not found`);
-            return null;
-        }
-        
-        const enemyDef = this.enemyTypes[enemyTypeId];
-        const sprite = this.enemySprites[enemyTypeId];
-        
-        if (!sprite) {
-            console.error(`Sprite for enemy type ${enemyTypeId} not loaded`);
-            return null;
-        }
-        
-        // Create a new Enemy instance
-        const enemy = new Enemy({
-            id: enemyTypeId,
-            name: enemyDef.name,
-            waypoints: this.pathData,
-            sprite: sprite,
-            startIndex: startIndex,
-            // Pass all configuration from the enemy definition
-            frameWidth: enemyDef.sprite.frameWidth,
-            frameHeight: enemyDef.sprite.frameHeight,
-            framesPerRow: enemyDef.sprite.framesPerRow,
-            totalFrames: enemyDef.sprite.totalFrames,
-            frameDuration: enemyDef.sprite.frameDuration,
-            scale: enemyDef.sprite.scale,
-            // Pass all stats
-            hp: enemyDef.stats.hp,
-            speed: enemyDef.stats.speed,
-            attackRate: enemyDef.stats.attackRate,
-            attackStrength: enemyDef.stats.attackStrength,
-            attackRange: enemyDef.stats.attackRange,
-            bounty: enemyDef.stats.bounty,
-            // Pass all effects
-            flashDuration: enemyDef.effects.flashDuration
-        });
-        
-        // Add to active enemies list
-        this.activeEnemies.push(enemy);
-        
-        return enemy;
     }
     
     drawBackground() {
@@ -260,23 +181,17 @@ export default class Game {
      * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
      */
     update(timestamp, deltaTime) {
-        // 1. Update Wave Manager (handles spawning)
+        // 1. Update Wave Manager
         if (this.waveManager) {
             this.waveManager.update(timestamp, deltaTime);
         }
 
-        // 2. Update all active enemies (movement, animation, attacks etc. will go here)
-        for (let i = this.activeEnemies.length - 1; i >= 0; i--) {
-            const enemy = this.activeEnemies[i];
-            enemy.update(timestamp, deltaTime); // Pass deltaTime if needed by enemy logic
-            
-            // Remove dead enemies
-            if (enemy.isDead) {
-                this.activeEnemies.splice(i, 1);
-            }
+        // 2. ---> Delegate to EnemyManager
+        if (this.enemyManager) {
+            this.enemyManager.update(timestamp, deltaTime);
         }
 
-        // 3. Update Towers/Other Game Logic (to be added later)
+        // 3. Update Towers/Other Game Logic (Placeholder)
 
         // 4. Periodic Parameter Updates (keep existing logic)
         // Note: This is handled by setInterval currently, not directly in the loop.
@@ -300,37 +215,9 @@ export default class Game {
         // Clear only the foreground canvas for game elements
         this.fgCtx.clearRect(0, 0, this.fgCanvas.width, this.fgCanvas.height);
         
-        // Draw all active enemies
-        this.activeEnemies.forEach(enemy => {
-            enemy.draw(this.fgCtx);
-        });
-    }
-
-    // New method to apply updates, called BY TuningManager
-    applyParameterUpdates(newEnemyDefinitions) {
-         // Create a map for efficient lookup of new definitions by ID
-        const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
-
-        // 2. Update Blueprints (this.enemyTypes)
-        newDefinitionsMap.forEach((newDef, enemyId) => {
-            // Update the blueprint in memory.
-            // Note: This doesn't reload sprites, only definition data.
-            // Check if the blueprint exists before updating - prevents adding new types via tuning
-            if (this.enemyTypes.hasOwnProperty(enemyId)) {
-                 this.enemyTypes[enemyId] = newDef;
-            } else {
-                console.warn(`TuningManager update contained unknown enemyId: ${enemyId}. Ignoring.`);
-            }
-        });
-
-        // 3. Update Active Enemy Instances
-        this.activeEnemies.forEach(enemy => {
-            // Find the updated definition for this specific enemy instance
-            const updatedDef = newDefinitionsMap.get(enemy.id);
-            if (updatedDef) {
-                // Call the enemy's own update method
-                enemy.applyUpdate(updatedDef);
-            }
-        });
+        // ---> Delegate to EnemyManager
+        if (this.enemyManager) {
+            this.enemyManager.render(this.fgCtx);
+        }
     }
 }

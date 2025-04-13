@@ -1,12 +1,19 @@
 export default class WaveManager {
     /**
      * Manages the timing and spawning of enemies based on wave data.
-     * @param {object} waveData - The wave configuration loaded from the level file.
-     * @param {function} createEnemyCallback - A function (e.g., game.createEnemy) to call when an enemy should be spawned.
+     * @param {string} waveDataPath - The path to the wave configuration JSON file.
+     * @param {function} createEnemyCallback - A function (e.g., enemyManager.createEnemy) to call when an enemy should be spawned.
      */
-    constructor(waveData, createEnemyCallback) {
-        this.waveData = waveData;
+    constructor(waveDataPath, createEnemyCallback) {
+        if (!waveDataPath) {
+            throw new Error("WaveManager requires a waveDataPath.");
+        }
+        this.waveDataPath = waveDataPath;
         this.createEnemy = createEnemyCallback; // Reference to the function that actually creates an enemy instance
+        
+        // Internal state, initialized after loading
+        this.waveData = null;            // Will hold the loaded wave configuration
+        this.isLoaded = false;           // Flag to indicate if definitions are loaded
 
         this.currentWaveNumber = 0;      // Tracks the wave we are currently processing or waiting for
         this.waveStartTime = 0;          // Timestamp when the current wave's spawning began
@@ -17,11 +24,41 @@ export default class WaveManager {
     }
 
     /**
+     * Loads the wave data from the provided path.
+     */
+    async load() {
+        try {
+            const response = await fetch(this.waveDataPath);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch wave data: ${response.statusText}`);
+            }
+            this.waveData = await response.json();
+            this.isLoaded = true;
+            console.log(`WaveManager: Successfully loaded wave data from ${this.waveDataPath}`);
+            // Basic validation
+            if (!this.waveData.globalWaveSettings || !this.waveData.waves) {
+                console.warn("WaveManager: Loaded wave data is missing expected structure (globalWaveSettings or waves). May cause issues.");
+            }
+            return true;
+        } catch (error) {
+            console.error('WaveManager: Error loading wave data:', error);
+            this.isLoaded = false;
+            this.isFinished = true; // Prevent operation if load fails
+            throw error; // Re-throw
+        }
+    }
+
+    /**
      * Starts the wave system, beginning with the initial delay before the first wave.
+     * REQUIRES load() to have been called successfully first.
      */
     start() {
-        if (this.isStarted || !this.waveData || !this.waveData.globalWaveSettings) {
-            console.error("WaveManager already started or waveData invalid.");
+        if (this.isStarted) {
+            console.warn("WaveManager: Already started.");
+            return;
+        }
+        if (!this.isLoaded || !this.waveData || !this.waveData.globalWaveSettings) {
+            console.error("WaveManager: Cannot start. Data not loaded or invalid.");
             this.isFinished = true; // Prevent updates if setup is wrong
             return;
         }
@@ -36,8 +73,14 @@ export default class WaveManager {
 
     /**
      * Sets up the spawners for the next wave in the sequence.
+     * REQUIRES load() to have been called successfully first.
      */
     startNextWave() {
+        if (!this.isLoaded) {
+            console.error("WaveManager: Cannot start next wave, data not loaded.");
+            this.isFinished = true;
+            return;
+        }
         this.currentWaveNumber++;
         console.log(`WaveManager: Starting Wave ${this.currentWaveNumber}`);
 
@@ -77,8 +120,8 @@ export default class WaveManager {
      * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
      */
     update(timestamp, deltaTime) {
-        if (this.isFinished || !this.isStarted) {
-            return; // Do nothing if all waves are done or not started
+        if (this.isFinished || !this.isStarted || !this.isLoaded) {
+            return; // Do nothing if finished, not started, or data not loaded
         }
 
         // Check if waiting for the next wave
