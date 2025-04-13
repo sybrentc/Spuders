@@ -1,3 +1,5 @@
+import WaveManager from '../waveManager.js'; // Import the WaveManager
+
 export default class Game {
     constructor() {
         this.container = document.getElementById('gameContainer');
@@ -5,11 +7,16 @@ export default class Game {
         this.config = null;
         this.levelData = null;
         this.pathData = null;
+        this.waveData = null; // Add property to store wave data
+        this.waveManager = null; // Add property for the WaveManager instance
         this.canvas = null; // Will store canvas dimensions
         this.initialized = false;
         this.enemyTypes = {}; // Store enemy type definitions
         this.activeEnemies = []; // Store active enemies on the map
         this.enemySprites = {}; // Store loaded sprite images
+        this.enemyDataPath = null; // Store path for reloading
+        this.enemyUpdateInterval = null; // Store interval ID for updating parameters
+        this.lastTimestamp = 0; // Add lastTimestamp for deltaTime calculation
         this._initPromise = this.initialize();
     }
     
@@ -28,6 +35,15 @@ export default class Game {
             this.fgCanvas = this.layers.foreground.canvas;
             this.fgCtx = this.layers.foreground.ctx;           
             
+            // Initialize WaveManager AFTER waveData is loaded
+            if (this.waveData) {
+                // Pass wave data and the method to create enemies (bound to this Game instance)
+                this.waveManager = new WaveManager(this.waveData, this.createEnemy.bind(this));
+            } else {
+                console.error("Cannot initialize WaveManager: waveData is missing.");
+                // Optionally handle this error more gracefully
+            }
+            
             // Draw background and waypoints
             this.drawBackground();
             this.drawWaypoints();
@@ -37,6 +53,17 @@ export default class Game {
             
             // Mark as initialized
             this.initialized = true;
+
+            // Start periodic enemy updates if enemy data was loaded
+            if (this.enemyDataPath) {
+                this.enemyUpdateInterval = setInterval(() => this.periodicallyUpdateEnemies(), 500); // Check every 500ms
+            }
+            
+            // Start the wave system via the manager
+            if (this.waveManager) {
+                this.waveManager.start();
+            }
+            
             return true;
         } catch (error) {
             console.error('Failed to initialize game:', error);
@@ -55,13 +82,13 @@ export default class Game {
             const response = await fetch(`./assets/level${levelId}.json`);
             this.levelData = await response.json();
             
-            // Store canvas dimensions from level data
+            // Load canvas dimensions
             this.canvas = {
                 width: this.levelData.canvas.width,
                 height: this.levelData.canvas.height
             };
             
-            // Load background image using path from level data
+            // Load background image
             if (this.levelData.mapImage) {
                 await new Promise((resolve) => {
                     const bgImage = new Image();
@@ -73,7 +100,7 @@ export default class Game {
                 });
             }
             
-            // Load path data from CSV if path is provided in level data
+            // Load waypoint data
             if (this.levelData.pathData) {
                 try {
                     const pathResponse = await fetch(this.levelData.pathData);
@@ -93,13 +120,22 @@ export default class Game {
                 }
             }
             
-            // Load enemy data if provided in level data
+            // Load enemy data
             if (this.levelData.enemyData) {
                 try {
                     await this.loadEnemyTypes(this.levelData.enemyData);
                 } catch (enemyError) {
                     console.error('Failed to load enemy data:', enemyError);
                 }
+            }
+            
+            // Load wave data
+            if (this.levelData.waveData) {
+                this.waveData = this.levelData.waveData; // Store the wave data
+                console.log(`Loaded wave data with ${this.waveData.waves.length} waves defined.`);
+            } else {
+                console.warn(`No wave data found in level ${levelId} configuration.`);
+                this.waveData = { globalWaveSettings: {}, waves: [] }; // Default empty structure
             }
             
             return this.levelData;
@@ -127,7 +163,8 @@ export default class Game {
                 console.log(`Loaded enemy type: ${enemyDef.name}`);
             }
             
-            console.log('All enemy types loaded successfully');
+            this.enemyDataPath = enemyDataPath;
+            console.log('All enemy types loaded successfully. Path stored for periodic updates.');
         } catch (error) {
             console.error('Error loading enemy types:', error);
             throw error;
@@ -210,7 +247,14 @@ export default class Game {
     
     startGameLoop() {
         const gameLoop = (timestamp) => {
-            this.update(timestamp);
+            // Calculate deltaTime
+            if (!this.lastTimestamp) {
+                this.lastTimestamp = timestamp; // Initialize on first frame
+            }
+            const deltaTime = timestamp - this.lastTimestamp;
+            this.lastTimestamp = timestamp;
+
+            this.update(timestamp, deltaTime); // Pass both timestamp and deltaTime
             this.render();
             requestAnimationFrame(gameLoop);
         };
@@ -218,17 +262,34 @@ export default class Game {
         requestAnimationFrame(gameLoop);
     }
     
-    update(timestamp) {
-        // Update all active enemies
+    /**
+     * Main game update loop.
+     * @param {number} timestamp - The current high-resolution timestamp.
+     * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
+     */
+    update(timestamp, deltaTime) {
+        // 1. Update Wave Manager (handles spawning)
+        if (this.waveManager) {
+            this.waveManager.update(timestamp, deltaTime);
+        }
+
+        // 2. Update all active enemies (movement, animation, attacks etc. will go here)
         for (let i = this.activeEnemies.length - 1; i >= 0; i--) {
             const enemy = this.activeEnemies[i];
-            enemy.update(timestamp);
+            enemy.update(timestamp, deltaTime); // Pass deltaTime if needed by enemy logic
             
             // Remove dead enemies
             if (enemy.isDead) {
                 this.activeEnemies.splice(i, 1);
             }
         }
+
+        // 3. Update Towers/Other Game Logic (to be added later)
+
+        // 4. Periodic Parameter Updates (keep existing logic)
+        // Note: This is handled by setInterval currently, not directly in the loop.
+        // If you wanted finer control or updates tied to frames, you might move
+        // the check for periodic updates here.
     }
     
     createLayer(className, zIndex) {
@@ -251,6 +312,63 @@ export default class Game {
         this.activeEnemies.forEach(enemy => {
             enemy.draw(this.fgCtx);
         });
+    }
+
+    // New method to periodically fetch and update enemies
+    async periodicallyUpdateEnemies() {
+        if (!this.enemyDataPath) return; // Don't run if path is not set
+
+        try {
+            // 1. Fetch the latest enemy definitions
+            const response = await fetch(this.enemyDataPath);
+            if (!response.ok) {
+                // Log a warning but don't stop the interval for temporary network issues
+                console.warn(`Failed to fetch enemy updates: ${response.statusText}`);
+                return;
+            }
+            const newEnemyDefinitions = await response.json();
+
+            // Create a map for efficient lookup of new definitions by ID
+            const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
+
+            // 2. Update Blueprints (this.enemyTypes)
+            newDefinitionsMap.forEach((newDef, enemyId) => {
+                // Update the blueprint in memory.
+                // Note: This doesn't reload sprites, only definition data.
+                this.enemyTypes[enemyId] = newDef;
+            });
+
+            // 3. Update Active Enemy Instances
+            this.activeEnemies.forEach(enemy => {
+                // Find the updated definition for this specific enemy instance
+                const updatedDef = newDefinitionsMap.get(enemy.id);
+                if (updatedDef) {
+                    // Directly apply updated stats and properties to the active enemy instance.
+                    enemy.name = updatedDef.name;
+                    // Update animation properties
+                    enemy.frameWidth = updatedDef.sprite.frameWidth;
+                    enemy.frameHeight = updatedDef.sprite.frameHeight;
+                    enemy.framesPerRow = updatedDef.sprite.framesPerRow;
+                    enemy.totalFrames = updatedDef.sprite.totalFrames;
+                    enemy.frameDuration = updatedDef.sprite.frameDuration;
+                    enemy.scale = updatedDef.sprite.scale;
+                    // Update stats
+                    enemy.hp = updatedDef.stats.hp; // Directly set current HP
+                    enemy.maxHp = updatedDef.stats.hp; // Update max HP too
+                    enemy.speed = updatedDef.stats.speed;
+                    enemy.attackRate = updatedDef.stats.attackRate;
+                    enemy.attackStrength = updatedDef.stats.attackStrength;
+                    enemy.attackRange = updatedDef.stats.attackRange;
+                    enemy.bounty = updatedDef.stats.bounty;
+                    // Update effects
+                    enemy.flashDuration = updatedDef.effects.flashDuration;
+                }
+            });
+
+        } catch (error) {
+            // Log errors during the update process (e.g., invalid JSON)
+            console.error('Error during periodic enemy update:', error);
+        }
     }
 }
 
@@ -300,7 +418,7 @@ class Enemy {
         this.lastAttackTime = 0;
     }
     
-    update(timestamp) {
+    update(timestamp, deltaTime) {
         if (this.isDead) return;
         
         // Update flash effect
