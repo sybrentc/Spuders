@@ -86,8 +86,8 @@ export default class Enemy {
 
         // Calculate spawn point by moving backwards from p0 along the normal vector
         const spawnPoint = {
-            x: p0.x - normStartX * spriteDiagonal,
-            y: p0.y - normStartY * spriteDiagonal
+            x: p0.x - normStartX * spriteDiagonal/2,
+            y: p0.y - normStartY * spriteDiagonal/2
         };
 
         // --- Calculate Despawn Point ---
@@ -108,8 +108,8 @@ export default class Enemy {
 
         // Calculate despawn point by moving forwards from pn along the normal vector
         const despawnPoint = {
-            x: pn.x + normEndX * spriteDiagonal,
-            y: pn.y + normEndY * spriteDiagonal
+            x: pn.x + normEndX * spriteDiagonal/2,
+            y: pn.y + normEndY * spriteDiagonal/2
         };
 
         // Return the new array with added points

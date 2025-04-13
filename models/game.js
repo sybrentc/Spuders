@@ -1,5 +1,6 @@
 import WaveManager from '../waveManager.js'; // Import the WaveManager
 import Enemy from './enemy.js'; // Import the Enemy class
+import TuningManager from '../tuningManager.js'; // Import the new manager
 
 export default class Game {
     constructor() {
@@ -16,7 +17,7 @@ export default class Game {
         this.activeEnemies = []; // Store active enemies on the map
         this.enemySprites = {}; // Store loaded sprite images
         this.enemyDataPath = null; // Store path for reloading
-        this.enemyUpdateInterval = null; // Store interval ID for updating parameters
+        this.tuningManager = new TuningManager(500); // Instantiate with 500ms interval
         this.lastTimestamp = 0; // Add lastTimestamp for deltaTime calculation
         this._initPromise = this.initialize();
     }
@@ -54,9 +55,13 @@ export default class Game {
             // Mark as initialized
             this.initialized = true;
 
-            // Start periodic enemy updates if enemy data was loaded
+            // ADD: Register Game instance with TuningManager and start it
             if (this.enemyDataPath) {
-                this.enemyUpdateInterval = setInterval(() => this.periodicallyUpdateEnemies(), 500); // Check every 500ms
+                 // Register the Game instance itself for now
+                this.tuningManager.register(this, this.enemyDataPath);
+                this.tuningManager.start(); // Start the centralized updates
+            } else {
+                console.warn("Game Initialize: No enemyDataPath found, TuningManager not started for enemies.")
             }
             
             // Start the wave system via the manager
@@ -301,43 +306,31 @@ export default class Game {
         });
     }
 
-    // New method to periodically fetch and update enemies
-    async periodicallyUpdateEnemies() {
-        if (!this.enemyDataPath) return; // Don't run if path is not set
+    // New method to apply updates, called BY TuningManager
+    applyParameterUpdates(newEnemyDefinitions) {
+         // Create a map for efficient lookup of new definitions by ID
+        const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
 
-        try {
-            // 1. Fetch the latest enemy definitions
-            const response = await fetch(this.enemyDataPath);
-            if (!response.ok) {
-                // Log a warning but don't stop the interval for temporary network issues
-                console.warn(`Failed to fetch enemy updates: ${response.statusText}`);
-                return;
+        // 2. Update Blueprints (this.enemyTypes)
+        newDefinitionsMap.forEach((newDef, enemyId) => {
+            // Update the blueprint in memory.
+            // Note: This doesn't reload sprites, only definition data.
+            // Check if the blueprint exists before updating - prevents adding new types via tuning
+            if (this.enemyTypes.hasOwnProperty(enemyId)) {
+                 this.enemyTypes[enemyId] = newDef;
+            } else {
+                console.warn(`TuningManager update contained unknown enemyId: ${enemyId}. Ignoring.`);
             }
-            const newEnemyDefinitions = await response.json();
+        });
 
-            // Create a map for efficient lookup of new definitions by ID
-            const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
-
-            // 2. Update Blueprints (this.enemyTypes)
-            newDefinitionsMap.forEach((newDef, enemyId) => {
-                // Update the blueprint in memory.
-                // Note: This doesn't reload sprites, only definition data.
-                this.enemyTypes[enemyId] = newDef;
-            });
-
-            // 3. Update Active Enemy Instances
-            this.activeEnemies.forEach(enemy => {
-                // Find the updated definition for this specific enemy instance
-                const updatedDef = newDefinitionsMap.get(enemy.id);
-                if (updatedDef) {
-                    // Call the enemy's own update method
-                    enemy.applyUpdate(updatedDef);
-                }
-            });
-
-        } catch (error) {
-            // Log errors during the update process (e.g., invalid JSON)
-            console.error('Error during periodic enemy update:', error);
-        }
+        // 3. Update Active Enemy Instances
+        this.activeEnemies.forEach(enemy => {
+            // Find the updated definition for this specific enemy instance
+            const updatedDef = newDefinitionsMap.get(enemy.id);
+            if (updatedDef) {
+                // Call the enemy's own update method
+                enemy.applyUpdate(updatedDef);
+            }
+        });
     }
 }

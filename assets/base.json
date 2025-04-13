@@ -1,0 +1,19 @@
+{
+  "id": "main_base",
+  "name": "Main Base",
+  "stats": {
+    "hp": 1000 
+  },
+  "display": {
+    "anchorX": 0.5,
+    "anchorY": 0.8, 
+    "scale": 0.5 
+  },
+  "sprite": {
+    "path": "./assets/images/tower.png",
+    "frameWidth": 64, 
+    "frameHeight": 64, 
+    "totalFrames": 4,
+    "framesPerRow": 4 
+  }
+}
