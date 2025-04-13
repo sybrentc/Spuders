@@ -1,13 +1,12 @@
 import Game from './models/game.js';
 
 // Create and start game
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
     const game = new Game();
     
-    function gameLoop() {
-        game.render();
-        requestAnimationFrame(gameLoop);
-    }
+    // Wait for game to be fully initialized
+    await game.ready();
     
-    requestAnimationFrame(gameLoop);
+    // At this point, the game is already running itself
+    // Controller will be used for future UI functionality
 });

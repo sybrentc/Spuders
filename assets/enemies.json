@@ -1,0 +1,77 @@
+[
+  {
+    "id": "spider_normal",
+    "name": "Spider",
+    "description": "Basic spider enemy that follows waypoints",
+    "sprite": {
+      "path": "./assets/images/spider.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150,
+      "scale": 0.5
+    },
+    "stats": {
+      "hp": 100,
+      "speed": 0.02,
+      "attackRate": 1000,
+      "attackStrength": 10,
+      "attackRange": 50,
+      "bounty": 5
+    },
+    "effects": {
+      "flashDuration": 200
+    }
+  },
+  {
+    "id": "spider_fast",
+    "name": "Fast Spider",
+    "description": "Faster but weaker spider variant",
+    "sprite": {
+      "path": "./assets/images/spider.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 120,
+      "scale": 0.45
+    },
+    "stats": {
+      "hp": 75,
+      "speed": 0.035,
+      "attackRate": 1200,
+      "attackStrength": 8,
+      "attackRange": 45,
+      "bounty": 7
+    },
+    "effects": {
+      "flashDuration": 150
+    }
+  },
+  {
+    "id": "spider_tank",
+    "name": "Tank Spider",
+    "description": "Slower but more durable spider variant",
+    "sprite": {
+      "path": "./assets/images/spider.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 180,
+      "scale": 0.6
+    },
+    "stats": {
+      "hp": 200,
+      "speed": 0.015,
+      "attackRate": 1500,
+      "attackStrength": 15,
+      "attackRange": 55,
+      "bounty": 10
+    },
+    "effects": {
+      "flashDuration": 250
+    }
+  }
+]

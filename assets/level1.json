@@ -1,0 +1,9 @@
+{
+    "mapImage": "/assets/images/map.webp",
+    "pathData": "/assets/paths/path.csv",
+    "enemyData": "/assets/enemies.json",
+    "canvas": {
+      "width": 1024,
+      "height": 1024
+    }
+  }
