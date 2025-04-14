@@ -18,7 +18,7 @@
     },
     "stats": {
       "hp": 150,
-      "speed": 90,
+      "speed": 50,
       "attackRate": 1000,
       "attackStrength": 10,
       "attackRange": 50,

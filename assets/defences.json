@@ -28,8 +28,8 @@
     "name": "Super Laser Tower",
     "stats": {
       "hp": 150,
-      "cost": 5000,
-      "attackRate": 3000,
+      "cost": 1000,
+      "attackRate": 300,
       "attackStrength": 20000,
       "attackRange": 200
     },
@@ -54,7 +54,7 @@
       "hp": 80,
       "cost": 300,
       "attackRate": 300,
-      "attackStrength": 5,
+      "attackStrength": 10,
       "attackRange": 150
     },
     "sprite": {
@@ -130,7 +130,7 @@
       "attackRange": 170
     },
     "effects": {
-      "speedFactor": 0.2,
+      "speedFactor": 0.5,
       "duration": 5000,
       "radius": 20
     },
