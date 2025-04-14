@@ -14,7 +14,7 @@
     "display": {
       "scale": 0.5,
       "anchorX": 0.5,
-      "anchorY": 0.5
+      "anchorY": 0.6
     },
     "stats": {
       "hp": 100,
@@ -43,7 +43,7 @@
     "display": {
       "scale": 0.3,
       "anchorX": 0.5,
-      "anchorY": 0.5
+      "anchorY": 0.6
     },
     "stats": {
       "hp": 75,
@@ -72,7 +72,7 @@
     "display": {
       "scale": 1,
       "anchorX": 0.5,
-      "anchorY": 0.5
+      "anchorY": 0.6
     },
     "stats": {
       "hp": 200,
