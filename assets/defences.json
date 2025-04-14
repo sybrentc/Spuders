@@ -4,9 +4,9 @@
     "name": "Laser Tower",
     "stats": {
       "hp": 150,
-      "cost": 500,
+      "cost": 300,
       "attackRate": 3000,
-      "attackStrength": 50,
+      "attackStrength": 100,
       "attackRange": 200
     },
     "sprite": {
@@ -28,10 +28,10 @@
     "name": "Super Laser Tower",
     "stats": {
       "hp": 150,
-      "cost": 3000,
-      "attackRate": 500,
-      "attackStrength": 25,
-      "attackRange": 300
+      "cost": 5000,
+      "attackRate": 3000,
+      "attackStrength": 20000,
+      "attackRange": 200
     },
     "sprite": {
       "path": "./assets/images/fat_rabbit.png",
@@ -52,7 +52,7 @@
     "name": "Axolotl Gunner",
     "stats": {
       "hp": 80,
-      "cost": 100,
+      "cost": 300,
       "attackRate": 300,
       "attackStrength": 5,
       "attackRange": 150
@@ -78,7 +78,7 @@
       "hp": 200,
       "cost": 200,
       "attackRate": 2000,
-      "attackStrength": 30,
+      "attackStrength": 100,
       "attackRange": 180
     },
     "sprite": {
@@ -97,12 +97,12 @@
   },
   {
     "id": "turret_tower",
-    "name": "Turret Tower",
+    "name": "sniper tower",
     "stats": {
       "hp": 120,
       "cost": 150,
-      "attackRate": 10000,
-      "attackStrength": 800,
+      "attackRate": 5000,
+      "attackStrength": 10000,
       "attackRange": 99999
     },
     "sprite": {
@@ -121,11 +121,11 @@
   },
   {
     "id": "glue_turret",
-    "name": "Glue Turret",
+    "name": "subzero",
     "stats": {
       "hp": 100,
-      "cost": 175,
-      "attackRate": 10000,
+      "cost": 300,
+      "attackRate": 1000,
       "attackStrength": 0,
       "attackRange": 170
     },

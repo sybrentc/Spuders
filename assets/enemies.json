@@ -17,12 +17,12 @@
       "anchorY": 0.6
     },
     "stats": {
-      "hp": 100,
-      "speed": 30,
+      "hp": 150,
+      "speed": 90,
       "attackRate": 1000,
       "attackStrength": 10,
       "attackRange": 50,
-      "bounty": 5
+      "bounty": 15
     },
     "effects": {
       "flashDuration": 200
@@ -46,12 +46,12 @@
       "anchorY": 0.6
     },
     "stats": {
-      "hp": 75,
-      "speed": 60,
+      "hp": 100,
+      "speed": 150,
       "attackRate": 1200,
       "attackStrength": 8,
       "attackRange": 100,
-      "bounty": 7
+      "bounty": 20
     },
     "effects": {
       "flashDuration": 150
@@ -75,12 +75,12 @@
       "anchorY": 0.6
     },
     "stats": {
-      "hp": 200,
-      "speed": 15,
+      "hp": 300,
+      "speed": 40,
       "attackRate": 1500,
       "attackStrength": 15,
       "attackRange": 100,
-      "bounty": 10
+      "bounty": 150
     },
     "effects": {
       "flashDuration": 250
