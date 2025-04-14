@@ -5,7 +5,7 @@
     "stats": {
       "hp": 150,
       "cost": 300,
-      "attackRate": 300,
+      "attackRate": 30000,
       "attackStrength": 100,
       "attackRange": 200
     },
@@ -25,13 +25,13 @@
   },
   {
     "id": "super_laser_tower",
-    "name": "Super Laser Tower",
+    "name": "Big Chungus",
     "stats": {
       "hp": 150,
       "cost": 3000,
-      "attackRate": 300,
-      "attackStrength": 20,
-      "attackRange": 2000
+      "attackRate": 500,
+      "attackStrength": 25,
+      "attackRange": 300
     },
     "sprite": {
       "path": "./assets/images/fat_rabbit.png",
@@ -49,7 +49,7 @@
   },
   {
     "id": "axolotl_gunner",
-    "name": "Axolotl Gunner",
+    "name": "Axolotl with a gun",
     "stats": {
       "hp": 80,
       "cost": 300,
@@ -101,8 +101,8 @@
     "stats": {
       "hp": 120,
       "cost": 150,
-      "attackRate": 5000,
-      "attackStrength": 10000,
+      "attackRate": 10000,
+      "attackStrength": 800,
       "attackRange": 99999
     },
     "sprite": {
@@ -124,7 +124,7 @@
     "name": "subzero",
     "stats": {
       "hp": 100,
-      "cost": 300,
+      "cost": 500,
       "attackRate": 1000,
       "attackStrength": 0,
       "attackRange": 170
@@ -132,7 +132,7 @@
     "effects": {
       "speedFactor": 0.5,
       "duration": 5000,
-      "radius": 20
+      "radius": 30
     },
     "sprite": {
       "path": "./assets/images/subzero.png",
