@@ -3,6 +3,7 @@ import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
 import Base from './base.js'; // Import the Base class
 import DefenceManager from '../defenceManager.js'; // <-- ADD Import
+import Enemy from './enemy.js'; // <--- ADD Enemy import
 
 export default class Game {
     constructor() {
@@ -313,27 +314,38 @@ export default class Game {
         // Clear foreground canvas
         this.fgCtx.clearRect(0, 0, this.fgCanvas.width, this.fgCanvas.height);
         
-        // Render Base first (usually behind enemies)
-        if (this.base) {
-            this.base.render(this.fgCtx);
-        }
-
-        // Render Defence Effects (e.g., puddles) - UNDER enemies
+        // 1. Render UNDERLAY effects (e.g., puddles) first
         if (this.defenceManager) {
-            this.defenceManager.renderEffects(this.fgCtx);
+            this.defenceManager.renderEffects(this.fgCtx); // Keep rendering effects separately underneath
         }
 
-        // Render Enemies
+        // 2. Gather all entities for Y-sorting
+        let renderables = [];
+        if (this.base && !this.base.isDestroyed()) { 
+            renderables.push(this.base);
+        }
         if (this.enemyManager) {
-            this.enemyManager.render(this.fgCtx);
+            // Use slice() to work with a copy if getActiveEnemies might be sensitive to modification, though concat is usually safe
+            renderables = renderables.concat(this.enemyManager.getActiveEnemies()); 
         }
-
-        // Render Defences
         if (this.defenceManager) {
-            this.defenceManager.render(this.fgCtx);
+            renderables = renderables.concat(this.defenceManager.getActiveDefences());
         }
 
-        // Render Defence Preview (if active)
+        // 3. Sort the renderables by their Y coordinate (ascending)
+        renderables.sort((a, b) => a.y - b.y);
+
+        // 4. Render the sorted entities by calling their respective methods
+        renderables.forEach(entity => {
+            if (typeof entity.render === 'function') {
+                entity.render(this.fgCtx); // Call render for all entities
+            } else {
+                // Log a warning if an entity doesn't have a recognized render method
+                console.warn("Renderable entity missing recognized render method:", entity);
+            }
+        });
+
+        // 5. Render OVERLAY effects / UI previews last
         if (this.placementPreview) {
             this.renderPlacementPreview(this.fgCtx);
         }
@@ -354,5 +366,4 @@ export default class Game {
         );
         ctx.restore();
     }
-    // --- END ADD method --- 
 }

@@ -100,7 +100,10 @@ export default class EnemyManager {
             framesPerRow: enemyDef.sprite.framesPerRow,
             totalFrames: enemyDef.sprite.totalFrames,
             frameDuration: enemyDef.sprite.frameDuration,
-            scale: enemyDef.sprite.scale,
+            // Pass display properties directly (assuming they exist in JSON)
+            scale: enemyDef.display?.scale,
+            anchorX: enemyDef.display?.anchorX,
+            anchorY: enemyDef.display?.anchorY,
             // Pass all stats
             hp: enemyDef.stats.hp,
             speed: enemyDef.stats.speed,

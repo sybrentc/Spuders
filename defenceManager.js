@@ -161,4 +161,9 @@ export default class DefenceManager extends EventTarget {
             // console.log(`DefenceManager: No changes detected in definitions.`);
         }
     }
+
+    // Add getter for active defences
+    getActiveDefences() {
+        return this.activeDefences;
+    }
 }

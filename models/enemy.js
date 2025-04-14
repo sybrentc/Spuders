@@ -3,7 +3,8 @@ import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility f
 export default class Enemy {
     constructor({
         id, name, waypoints, sprite, startIndex = 0, // startIndex for original path, we'll adjust based on extension
-        frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration, scale,
+        frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
+        scale, anchorX, anchorY,
         hp, speed, attackRate, attackStrength, attackRange, bounty,
         flashDuration,
         base // Add base dependency
@@ -39,6 +40,8 @@ export default class Enemy {
         this.totalFrames = totalFrames;
         this.frameDuration = frameDuration;
         this.scale = scale;
+        this.anchorX = anchorX;
+        this.anchorY = anchorY;
         this.currentFrame = 0;
         this.lastFrameTime = 0;
         
@@ -213,31 +216,40 @@ export default class Enemy {
     // New method to apply updates from fetched definitions
     applyUpdate(updatedDef) {
         // Update basic info
-        this.name = updatedDef.name;
+        this.name = updatedDef.name; // Assume name always exists in update
 
         // Update animation properties
         // Note: We don't update frameWidth/Height here as it could affect existing sprite logic
-        // If sprite sheets change format dynamically, more complex logic would be needed.
-        this.framesPerRow = updatedDef.sprite.framesPerRow;
-        this.totalFrames = updatedDef.sprite.totalFrames;
-        this.frameDuration = updatedDef.sprite.frameDuration;
-        this.scale = updatedDef.sprite.scale;
+        // Remove defaults, assume properties exist in updatedDef
+        this.framesPerRow = updatedDef.sprite?.framesPerRow;
+        this.totalFrames = updatedDef.sprite?.totalFrames;
+        this.frameDuration = updatedDef.sprite?.frameDuration;
+        
+        // Read scale and anchors directly from the display object
+        this.scale = updatedDef.display?.scale; 
+        this.anchorX = updatedDef.display?.anchorX;
+        this.anchorY = updatedDef.display?.anchorY;
 
-        // Update stats
-        // Handle HP update carefully: maybe scale current HP based on maxHP change?
-        // For simplicity, just updating maxHp and letting current HP stay unless it exceeds new max.
+        // Update stats directly
         const hpRatio = this.hp / this.maxHp; // Keep track of current health percentage
-        this.maxHp = updatedDef.stats.hp;
-        this.hp = Math.min(this.hp, this.maxHp); // Ensure current HP doesn't exceed new max
+        this.maxHp = updatedDef.stats?.hp; 
+        // Need to handle potential undefined maxHp before Math.min
+        if (this.maxHp !== undefined) { 
+             this.hp = Math.min(this.hp, this.maxHp); // Ensure current HP doesn't exceed new max
+        } else {
+            console.warn(`Enemy ${this.id} applyUpdate: maxHp became undefined from tuning data.`);
+            // Decide fallback: keep old maxHp? Set hp to 0? For now, log warning.
+            // Resetting maxHp to a previous value might be safest if available.
+        }
 
-        this.speed = updatedDef.stats.speed; // This updates the speed in units per second
-        this.attackRate = updatedDef.stats.attackRate;
-        this.attackStrength = updatedDef.stats.attackStrength;
-        this.attackRange = updatedDef.stats.attackRange;
-        this.bounty = updatedDef.stats.bounty;
+        this.speed = updatedDef.stats?.speed; 
+        this.attackRate = updatedDef.stats?.attackRate;
+        this.attackStrength = updatedDef.stats?.attackStrength;
+        this.attackRange = updatedDef.stats?.attackRange;
+        this.bounty = updatedDef.stats?.bounty;
 
-        // Update effects
-        this.flashDuration = updatedDef.effects.flashDuration;
+        // Update effects directly
+        this.flashDuration = updatedDef.effects?.flashDuration;
     }
     
     hit(damage) {
@@ -268,19 +280,19 @@ export default class Enemy {
         return { x: this.x, y: this.y };
     }
     
-    draw(ctx) {
+    render(ctx) {
         if (this.isDead) return;
         
         // Calculate source frame from spritesheet
         const frameX = (this.currentFrame % this.framesPerRow) * this.frameWidth;
         const frameY = Math.floor(this.currentFrame / this.framesPerRow) * this.frameHeight;
         
-        // Calculate destination position and size
+        // Calculate destination position and size using anchors
         const drawWidth = this.frameWidth * this.scale;
         const drawHeight = this.frameHeight * this.scale;
-        const drawX = this.x - drawWidth / 2;
-        const drawY = this.y - drawHeight / 2;
-        
+        const drawX = this.x - drawWidth * this.anchorX; // Use anchorX
+        const drawY = this.y - drawHeight * this.anchorY; // Use anchorY
+        //console.log(this.scale);
         ctx.save();
         
         // Apply flash effect if active using temporary canvas
