@@ -1,13 +1,17 @@
+import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+
 export default class Enemy {
     constructor({
         id, name, waypoints, sprite, startIndex = 0, // startIndex for original path, we'll adjust based on extension
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration, scale,
         hp, speed, attackRate, attackStrength, attackRange, bounty,
-        flashDuration
+        flashDuration,
+        base // Add base dependency
     }) {
         // Identification
         this.id = id;
         this.name = name;
+        this.base = base; // Store base reference
         
         // --- Waypoint Extension Logic ---
         const extendedWaypoints = this._extendWaypoints(
@@ -249,9 +253,14 @@ export default class Enemy {
     }
     
     die() {
+        if (this.isDead) return; // Prevent dying multiple times
         this.isDead = true;
-        // TODO: Trigger death particle effects here or in EnemyManager
-        // TODO: Award bounty in EnemyManager or Game state
+        console.log(`${this.name} (${this.id}) died.`);
+        // Award bounty to the base
+        if (this.base && this.bounty > 0) {
+            this.base.addFunds(this.bounty);
+        }
+        // TODO: Add death animation/effect trigger here
     }
     
     getCurrentPosition() {
@@ -262,97 +271,70 @@ export default class Enemy {
     draw(ctx) {
         if (this.isDead) return;
         
-        // Current position is now stored directly in this.x, this.y
-        const currentPoint = { x: this.x, y: this.y };
-        
-        // Calculate the current frame position in the sprite sheet
+        // Calculate source frame from spritesheet
         const frameX = (this.currentFrame % this.framesPerRow) * this.frameWidth;
         const frameY = Math.floor(this.currentFrame / this.framesPerRow) * this.frameHeight;
         
-        // Save the current context state
+        // Calculate destination position and size
+        const drawWidth = this.frameWidth * this.scale;
+        const drawHeight = this.frameHeight * this.scale;
+        const drawX = this.x - drawWidth / 2;
+        const drawY = this.y - drawHeight / 2;
+        
         ctx.save();
         
-        // Move canvas origin to the enemy's position for easier drawing
-        ctx.translate(currentPoint.x, currentPoint.y);
-        
-        // Apply flash effect if needed
+        // Apply flash effect if active using temporary canvas
         if (this.isFlashing) {
             // --- Use Temporary Canvas for Flash Effect --- 
-            const scaledWidth = this.frameWidth * this.scale;
-            const scaledHeight = this.frameHeight * this.scale;
-
             // 1. Create offscreen canvas
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = scaledWidth;
-            tempCanvas.height = scaledHeight;
+            tempCanvas.width = drawWidth; // Use calculated scaled dimensions
+            tempCanvas.height = drawHeight;
             const tempCtx = tempCanvas.getContext('2d');
+            if (!tempCtx) {
+                console.error("Failed to get temporary canvas context for flash effect.");
+                ctx.restore();
+                return; // Cannot perform flash effect
+            }
 
             // 2. Draw current sprite frame onto temp canvas
             tempCtx.drawImage(
                 this.sprite,
                 frameX, frameY, this.frameWidth, this.frameHeight,
                 0, 0, // Draw at top-left corner of temp canvas
-                scaledWidth, scaledHeight
+                drawWidth, drawHeight
             );
 
             // 3. Apply flash effect ONLY on temp canvas using 'source-in'
             tempCtx.globalCompositeOperation = 'source-in'; 
             tempCtx.fillStyle = 'white'; // Pure white
-            tempCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+            tempCtx.fillRect(0, 0, drawWidth, drawHeight);
             // No need to reset composite op on tempCtx
 
             // 4. Draw the result (whitened sprite) onto the main canvas
             ctx.drawImage(
                 tempCanvas, 
-                -scaledWidth / 2, -scaledHeight / 2 // Center the temp canvas content
+                drawX, drawY // Draw at the calculated final position
             );
             // --- End Temporary Canvas Logic --- 
-
-            /* // Remove original direct drawing and overlay logic
-            // Draw the normal enemy sprite
-            ctx.drawImage(...);
-             // Apply a white tint overlay
-             ctx.globalCompositeOperation = 'source-atop';
-             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; // White with 70% opacity
-             ctx.fillRect(...);
-             ctx.globalCompositeOperation = 'source-over';
-            */
-
         } else {
-            // Draw the normal enemy sprite centered at (0,0) relative to the translated origin
+            // Draw the normal enemy sprite frame if not flashing
             ctx.drawImage(
-                this.sprite,
-                frameX, frameY, this.frameWidth, this.frameHeight,
-                -this.frameWidth * this.scale / 2, -this.frameHeight * this.scale / 2, // Center the sprite
-                this.frameWidth * this.scale, this.frameHeight * this.scale
+                this.sprite,         // The spritesheet image
+                frameX,              // Source X from spritesheet
+                frameY,              // Source Y from spritesheet
+                this.frameWidth,     // Source Width
+                this.frameHeight,    // Source Height
+                drawX,               // Destination X on canvas
+                drawY,               // Destination Y on canvas
+                drawWidth,           // Destination Width
+                drawHeight           // Destination Height
             );
         }
         
-        // Draw health bar above the sprite
-        const healthBarWidth = 30;
-        const healthBarHeight = 4;
-        const healthPercentage = Math.max(0, this.hp / this.maxHp);
-        const healthBarOffsetY = -this.frameHeight * this.scale / 2 - 10; // Position above centered sprite
+        ctx.restore(); // Restore context state (e.g., transformations, composite operations if any)
         
-        // Background of health bar
-        ctx.fillStyle = 'red';
-        ctx.fillRect(
-            -healthBarWidth / 2, // Center the health bar
-            healthBarOffsetY,
-            healthBarWidth,
-            healthBarHeight
-        );
-        
-        // Current health
-        ctx.fillStyle = 'green';
-        ctx.fillRect(
-            -healthBarWidth / 2, // Center the health bar
-            healthBarOffsetY,
-            healthBarWidth * healthPercentage,
-            healthBarHeight
-        );
-        
-        // Restore the context state (resets translation, composite operation, etc.)
-        ctx.restore();
+        // --- Draw Health Bar using utility function --- 
+        drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
     }
 }

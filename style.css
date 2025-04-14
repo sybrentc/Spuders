@@ -15,7 +15,7 @@ body {
 /* Added styles for the defence menu */
 #defenceMenu {
     width: var(--defence-menu-width); /* Use the variable */
-    background-color: #282c34; /* Darker, slightly bluish-grey background */
+    background-color: #0b1738;
     height: 100vh; /* Full viewport height */
     padding: 15px 5px; /* More vertical padding, less horizontal */
     box-sizing: border-box; /* Include padding in width/height */
@@ -85,6 +85,20 @@ body {
     color: #1c1e22; /* Dark price on click */
 }
 
+/* Style for disabled/unaffordable buttons */
+.defence-button.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none; /* Make it non-clickable */
+    background-image: linear-gradient(to bottom, #444, #222); /* Darker grey gradient */
+    border-color: #555;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Less pronounced shadow */
+}
+
+.defence-button.disabled .price {
+    color: #aaa; /* Dimmer price color */
+}
+
 /* Styling for the selected button */
 .defence-button.selected {
     border-color: #ffcc00; /* Gold border */
@@ -112,4 +126,47 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
+}
+
+/* UI Overlay Styles */
+#uiOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to the canvas */
+    z-index: 10; /* Ensure overlay is above the canvas */
+    color: white;         /* Default text color for UI elements */
+    /* Add text-shadow for outline */
+    text-shadow: 
+        -1px -1px 0 #000,  
+         1px -1px 0 #000,
+        -1px  1px 0 #000,
+         1px  1px 0 #000; /* 1px black outline */
+    font-family: sans-serif; /* Basic font */
+    font-size: 1.2em;       /* Adjust base font size as needed */
+    padding: 10px;        /* Padding around the edges */
+    box-sizing: border-box; /* Include padding in width/height */
+}
+
+#fundsDisplay {
+    position: absolute;
+    top: 5px;  /* Padding from the top (reduced) */
+    right: 10px; /* Padding from the right */
+    text-align: right;
+    /* Optional: background for better readability */
+    /* background-color: rgba(0, 0, 0, 0.5); */
+    /* padding: 5px; */
+}
+
+#waveInfoDisplay {
+    position: absolute;
+    top: 5px; /* Padding from the top (reduced) */
+    left: 50%;
+    transform: translateX(-50%); /* Center horizontally */
+    text-align: center;
+    /* Optional: background for better readability */
+    /* background-color: rgba(0, 0, 0, 0.5); */
+    /* padding: 5px; */
 }

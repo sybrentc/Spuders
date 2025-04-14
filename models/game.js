@@ -24,6 +24,7 @@ export default class Game {
         this.lastTimestamp = 0;
         this._initPromise = this.initialize();
         this.placementPreview = null; // {x, y} position or null
+        this.updateListeners = []; // Array to hold update listener callbacks
     }
     
     // --- ADD methods for placement preview --- 
@@ -51,12 +52,28 @@ export default class Game {
             this.fgCanvas = this.layers.foreground.canvas;
             this.fgCtx = this.layers.foreground.ctx;           
             
-            // Initialize EnemyManager first
+            // Initialize Base FIRST (as EnemyManager needs it)
+            if (!this.baseDataPath) {
+                 throw new Error("Game Initialize: Level data is missing required 'baseData' path.");
+            }
+            try {
+                // Call the static method on the Base class
+                this.base = await Base.createFromPath(this.baseDataPath);
+                console.log("Game: Base initialized successfully via static method."); 
+
+            } catch(baseError) {
+                 // Catch errors from createFromPath (fetch, json, constructor, loadAssets)
+                 console.error(`Game Initialize: Failed to initialize Base: ${baseError}`);
+                 throw baseError; // Re-throw to stop game initialization
+            }
+
+            // Initialize EnemyManager second, passing the base instance
             const enemyDataPath = this.levelData?.enemyData;
             if (!enemyDataPath) {
                 throw new Error("Game Initialize: Level data is missing required 'enemyData' path.");
             }
-            this.enemyManager = new EnemyManager(enemyDataPath, this.pathData);
+            // Pass this.base to the constructor
+            this.enemyManager = new EnemyManager(enemyDataPath, this.pathData, this.base);
             await this.enemyManager.load(); // Load enemy definitions and sprites
             
             // Initialize WaveManager - PASS PATH and ENEMY MANAGER CREATE FUNCTION
@@ -71,25 +88,10 @@ export default class Game {
                 // Optionally throw error or prevent game start
             }
             
-            // Initialize Base using static factory method
-            if (!this.baseDataPath) {
-                 throw new Error("Game Initialize: Level data is missing required 'baseData' path.");
-            }
-            try {
-                // Call the static method on the Base class
-                this.base = await Base.createFromPath(this.baseDataPath);
-                console.log("Game: Base initialized successfully via static method."); 
-
-            } catch(baseError) {
-                 // Catch errors from createFromPath (fetch, json, constructor, loadAssets)
-                 console.error(`Game Initialize: Failed to initialize Base: ${baseError}`);
-                 throw baseError; // Re-throw to stop game initialization
-            }
-            
             // Initialize DefenceManager // <-- ADD this block
             if (this.defencesPath) {
-                // Pass enemyManager instance to DefenceManager constructor
-                this.defenceManager = new DefenceManager(this.defencesPath, this.enemyManager); 
+                // Pass enemyManager AND base instances to DefenceManager constructor
+                this.defenceManager = new DefenceManager(this.defencesPath, this.enemyManager, this.base); 
                 await this.defenceManager.load(); // Wait for defence data to load
             } else {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
@@ -252,33 +254,45 @@ export default class Game {
     }
     
     /**
+     * Adds a listener function to be called on every game update.
+     * @param {function} callback - The function to call. It will receive (timestamp, deltaTime).
+     */
+    addUpdateListener(callback) {
+        if (typeof callback === 'function') {
+            this.updateListeners.push(callback);
+        } else {
+            console.error("Attempted to add non-function listener to game update.", callback);
+        }
+    }
+
+    /**
      * Main game update loop.
      * @param {number} timestamp - The current high-resolution timestamp.
      * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
      */
     update(timestamp, deltaTime) {
-        // 1. Update Wave Manager
+        // Update game components
         if (this.waveManager) {
             this.waveManager.update(timestamp, deltaTime);
         }
-
-        // 2. Update EnemyManager
         if (this.enemyManager) {
-            this.enemyManager.update(timestamp, deltaTime, this.base);
+            // No longer pass base here
+            this.enemyManager.update(timestamp, deltaTime); 
         }
-        
-        // 3. Update DefenceManager (No longer need to pass enemies)
         if (this.defenceManager) {
             this.defenceManager.update(timestamp, deltaTime);
         }
-
-        // 4. Update Base
         if (this.base) {
+            this.base.update(timestamp, deltaTime);
+        }
+        
+        // Call registered update listeners
+        for (const listener of this.updateListeners) {
             try {
-                 this.base.update(timestamp, deltaTime);
+                listener(timestamp, deltaTime);
             } catch (error) {
-                 console.error("Error during base.update():", error);
-                 return; // Keep return to stop update on error
+                console.error("Error in game update listener:", error);
+                // Consider removing the listener if it consistently fails
             }
         }
     }

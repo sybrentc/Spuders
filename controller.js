@@ -18,6 +18,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     const defenceMenu = document.getElementById('defenceMenu');
     // Assuming foreground layer canvas exists and is accessible
     const gameCanvas = game.layers.foreground?.canvas; 
+    // Get UI display elements
+    const fundsDisplay = document.getElementById('fundsDisplay');
+    const waveInfoDisplay = document.getElementById('waveInfoDisplay');
 
     if (!gameCanvas) {
         console.error("Foreground canvas not found!");
@@ -50,7 +53,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 // Create span for price
                 const priceSpan = document.createElement('span');
                 priceSpan.classList.add('price');
-                priceSpan.textContent = `$${def.stats.cost}`;
+                priceSpan.textContent = `${def.stats.cost}G`;
 
                 // Append spans to button
                 button.appendChild(nameSpan);
@@ -144,6 +147,61 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.error('Could not initially populate defence menu or set up listener.');
     }
 
-    // At this point, the game is already running itself
-    // Controller will be used for future UI functionality
+    // --- UI Update Function (Handles Text and Button States) ---
+    function updateUI() {
+        if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !game.defenceManager || !defenceMenu) return;
+
+        // --- Update Text Displays ---
+        fundsDisplay.textContent = `${game.base.currentFunds}G`; 
+
+        let waveText = '';
+        if (game.waveManager.isFinished) {
+            waveText = "All Waves Complete!";
+        } else if (game.waveManager.timeUntilNextWave > 0) {
+            const seconds = Math.ceil(game.waveManager.timeUntilNextWave / 1000);
+            waveText = `Next wave in ${seconds}s`;
+        } else if (game.waveManager.currentWaveNumber > 0) {
+            waveText = `Wave ${game.waveManager.currentWaveNumber}`;
+        } else {
+            waveText = "Get Ready!";
+        }
+        waveInfoDisplay.textContent = waveText;
+
+        // --- Update Button Affordability ---
+        const currentFunds = game.base.currentFunds;
+        const definitions = game.defenceManager.getDefinitions();
+        const buttons = defenceMenu.querySelectorAll('.defence-button');
+
+        buttons.forEach(button => {
+            const defenceId = button.dataset.defenceId;
+            const definition = definitions[defenceId];
+            const cost = definition?.stats?.cost;
+
+            if (cost === undefined) {
+                button.classList.add('disabled'); // Disable if cost is missing
+                return;
+            }
+
+            if (currentFunds >= cost) {
+                button.classList.remove('disabled');
+            } else {
+                button.classList.add('disabled');
+                // If the currently selected defence becomes unaffordable, deselect it
+                if (selectedDefenceType === defenceId) {
+                    handleDefenceSelection(defenceId, button); // Calling with same ID deselects
+                }
+            }
+        });
+    }
+
+    // --- Register Main UI Update with Game Loop ---
+    if (game.addUpdateListener) { 
+        game.addUpdateListener(updateUI); // Register the combined function
+        console.log("Controller: Registered UI update listener with game loop.");
+    } else {
+        console.error("Controller: Game object missing addUpdateListener method. UI will not update dynamically.");
+    }
+
+    // Initial UI update after menu population
+    updateUI(); 
 });

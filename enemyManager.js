@@ -1,7 +1,7 @@
 import Enemy from './models/enemy.js'; // EnemyManager needs to know about Enemy
 
 export default class EnemyManager {
-    constructor(enemyDataPath, pathData) {
+    constructor(enemyDataPath, pathData, base) {
         if (!enemyDataPath) {
             throw new Error("EnemyManager requires an enemyDataPath.");
         }
@@ -9,8 +9,12 @@ export default class EnemyManager {
             // Or handle this more gracefully depending on whether pathData is always expected
             console.warn("EnemyManager created without pathData. Waypoints might be missing for enemies.");
         }
+        if (!base) {
+             throw new Error("EnemyManager requires a Base instance.");
+        }
         this.enemyDataPath = enemyDataPath; // Path to load definitions
         this.pathData = pathData;           // Waypoints for enemies
+        this.base = base;                   // Store reference to the Base instance
 
         this.enemyTypes = {};       // Stores enemy definitions/blueprints
         this.enemySprites = {};     // Stores loaded sprite Images keyed by enemyTypeId
@@ -89,6 +93,7 @@ export default class EnemyManager {
             waypoints: this.pathData, // Use pathData from manager
             sprite: sprite,
             startIndex: startIndex,
+            base: this.base, // Pass the base instance
             // Pass all configuration from the enemy definition
             frameWidth: enemyDef.sprite.frameWidth,
             frameHeight: enemyDef.sprite.frameHeight,
@@ -114,12 +119,12 @@ export default class EnemyManager {
     }
 
     // Update loop for all enemies (logic moved from Game.update)
-    update(timestamp, deltaTime, base) {
+    update(timestamp, deltaTime) {
         if (!this.isLoaded) return;
 
         for (let i = this.activeEnemies.length - 1; i >= 0; i--) {
             const enemy = this.activeEnemies[i];
-            enemy.update(timestamp, deltaTime, base);
+            enemy.update(timestamp, deltaTime, this.base);
 
             // Remove dead enemies
             if (enemy.isDead) {

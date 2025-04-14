@@ -1,3 +1,5 @@
+import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+
 /**
  * Represents the player's main base.
  */
@@ -41,6 +43,7 @@ export default class Base {
         // Validate required configuration fields
         if (!baseConfig) throw new Error("Base constructor requires a configuration object.");
         if (!baseConfig.stats?.hp) throw new Error("Base config requires 'stats.hp'.");
+        if (baseConfig.stats?.money === undefined) throw new Error("Base config requires 'stats.money'."); // Add money validation
         if (!baseConfig.position?.x === undefined || !baseConfig.position?.y === undefined) throw new Error("Base config requires 'position.x' and 'position.y'."); // Check existence including 0
         if (!baseConfig.sprite?.path) throw new Error("Base config requires 'sprite.path'.");
         if (!baseConfig.sprite?.frameWidth) throw new Error("Base config requires 'sprite.frameWidth'.");
@@ -53,6 +56,8 @@ export default class Base {
         this.maxHp = baseConfig.stats.hp;
         this.currentHp = this.maxHp;
         this._isDestroyed = false;
+        this.startingFunds = baseConfig.stats.money; // Store the initial value for reference/tuning
+        this.currentFunds = this.startingFunds; // This will be the actively tracked funds
 
         // --- Display Properties ---
         this.x = baseConfig.position.x;
@@ -167,6 +172,9 @@ export default class Base {
              console.error("Error during Base ctx.drawImage:", e);
              console.error("Draw arguments:", { spriteSheet: this.spriteSheet, sourceX, sourceY, frameWidth: this.frameWidth, frameHeight: this.frameHeight, drawX, drawY, drawWidth, drawHeight });
         }
+
+        // --- Draw Health Bar using utility function --- 
+        drawHealthBar(ctx, this.currentHp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
     }
 
     /**
@@ -204,6 +212,43 @@ export default class Base {
     }
 
     /**
+     * Checks if the base has enough funds for a given cost.
+     * @param {number} amount - The cost to check against.
+     * @returns {boolean} True if funds are sufficient, false otherwise.
+     */
+    canAfford(amount) {
+        return this.currentFunds >= amount;
+    }
+
+    /**
+     * Attempts to spend funds if sufficient funds are available.
+     * @param {number} amount - The amount to spend.
+     * @returns {boolean} True if funds were spent successfully, false otherwise.
+     */
+    spendFunds(amount) {
+        if (this.canAfford(amount)) {
+            this.currentFunds -= amount;
+            console.log(`Base spent ${amount}. Funds remaining: ${this.currentFunds}`);
+            // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
+            return true;
+        }
+        console.log(`Base cannot afford to spend ${amount}. Funds available: ${this.currentFunds}`);
+        return false;
+    }
+
+    /**
+     * Adds funds to the base's current total.
+     * @param {number} amount - The amount to add.
+     */
+    addFunds(amount) {
+        if (amount > 0) {
+            this.currentFunds += amount;
+            console.log(`Base earned ${amount}. Funds remaining: ${this.currentFunds}`);
+            // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
+        }
+    }
+
+    /**
      * Applies parameter updates received from the TuningManager.
      * @param {object} newData - The new configuration data fetched from base.json.
      */
@@ -226,6 +271,25 @@ export default class Base {
                 configChanged = true;
             }
              // Add logic for other stats here if needed in the future
+             if (newData.stats.money !== undefined && newData.stats.money !== this.startingFunds) {
+                 const oldStartingFunds = this.startingFunds;
+                 const newStartingFunds = newData.stats.money;
+                 const delta = newStartingFunds - oldStartingFunds;
+
+                 console.log(`Base startingFunds updated from ${oldStartingFunds} to ${newStartingFunds} (Delta: ${delta})`);
+                 
+                 this.startingFunds = newStartingFunds; // Update the stored starting funds value
+                 this.currentFunds += delta; // Apply the difference to the actual current funds
+
+                 // Ensure currentFunds don't drop below zero due to tuning, though unlikely
+                 if (this.currentFunds < 0) {
+                    console.warn(`Base currentFunds dropped below zero (${this.currentFunds}) after tuning adjustment. Clamping to 0.`);
+                    this.currentFunds = 0;
+                 }
+                 console.log(`Base currentFunds adjusted by ${delta}. New currentFunds: ${this.currentFunds}`);
+                 
+                 configChanged = true;
+             }
         } else {
             console.warn("Base received parameter update data without 'stats' object.");
         }

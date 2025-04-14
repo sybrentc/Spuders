@@ -2,7 +2,7 @@ import DefenceEntity from './models/defender.js'; // Import the entity class
 
 // Make DefenceManager an EventTarget to dispatch update events
 export default class DefenceManager extends EventTarget {
-    constructor(dataPath, enemyManager) {
+    constructor(dataPath, enemyManager, base) {
         super(); // Call EventTarget constructor
         if (!dataPath) {
             throw new Error("DefenceManager requires a valid dataPath.");
@@ -10,8 +10,12 @@ export default class DefenceManager extends EventTarget {
         if (!enemyManager) {
             throw new Error("DefenceManager requires a valid EnemyManager instance.");
         }
+        if (!base) {
+            throw new Error("DefenceManager requires a valid Base instance.");
+        }
         this.dataPath = dataPath;
         this.enemyManager = enemyManager; // Store reference
+        this.base = base; // Store reference to base
         this.defenceDefinitions = {}; // To store loaded defence data by ID
         this.activeDefences = []; // Array to hold active instances
         this.isLoaded = false;
@@ -67,10 +71,23 @@ export default class DefenceManager extends EventTarget {
             console.error(`DefenceManager: Unknown defence ID: ${defenceId}`);
             return null;
         }
-        // TODO: Check cost vs player currency
-        // if (game.state.money < definition.stats.cost) { return false; }
-        // game.state.money -= definition.stats.cost;
 
+        // Check cost vs player currency
+        const cost = definition.stats?.cost || 0;
+        if (!this.base.canAfford(cost)) {
+            console.log(`Cannot afford ${defenceId}. Cost: ${cost}, Funds: ${this.base.currentFunds}`);
+            // Optionally: Provide UI feedback here (e.g., flash cost red)
+            return null; // Placement failed
+        }
+
+        // Spend funds *before* creating the entity
+        if (!this.base.spendFunds(cost)) {
+             // This check is slightly redundant due to canAfford, but safe
+             console.error(`Placement Error: Failed to spend funds for ${defenceId} even after canAfford check.`);
+             return null;
+        }
+        
+        // Create and add the defence
         const newDefence = new DefenceEntity(defenceId, definition, position);
         this.activeDefences.push(newDefence);
         console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
