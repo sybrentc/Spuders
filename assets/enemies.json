@@ -70,7 +70,7 @@
       "frameDuration": 400
     },
     "display": {
-      "scale": 1,
+      "scale": 0.8,
       "anchorX": 0.5,
       "anchorY": 0.6
     },

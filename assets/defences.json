@@ -5,7 +5,7 @@
     "stats": {
       "hp": 150,
       "cost": 300,
-      "attackRate": 3000,
+      "attackRate": 300,
       "attackStrength": 100,
       "attackRange": 200
     },
@@ -28,10 +28,10 @@
     "name": "Super Laser Tower",
     "stats": {
       "hp": 150,
-      "cost": 1000,
+      "cost": 3000,
       "attackRate": 300,
-      "attackStrength": 20000,
-      "attackRange": 200
+      "attackStrength": 20,
+      "attackRange": 2000
     },
     "sprite": {
       "path": "./assets/images/fat_rabbit.png",
