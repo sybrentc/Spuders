@@ -8,6 +8,19 @@
       "attackRate": 3000,
       "attackStrength": 50,
       "attackRange": 200
+    },
+    "sprite": {
+      "path": "./assets/images/laser.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.8
     }
   },
   {
@@ -30,6 +43,19 @@
       "attackRate": 300,
       "attackStrength": 5,
       "attackRange": 150
+    },
+    "sprite": {
+      "path": "./assets/images/axolotl2.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.5
     }
   },
   {
@@ -41,6 +67,19 @@
       "attackRate": 2000,
       "attackStrength": 30,
       "attackRange": 180
+    },
+    "sprite": {
+      "path": "./assets/images/tank.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.5
     }
   },
   {

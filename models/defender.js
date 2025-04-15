@@ -164,26 +164,25 @@ export default class DefenceEntity {
         if (this.isAttacking && this.spriteDefinition) {
             const frameDuration = this.spriteDefinition.frameDuration;
             const framesInRow = this.spriteDefinition.framesPerRow;
-            
-            if (timestamp - this.lastFrameChangeTime > frameDuration) {
-                this.currentFrame = (this.currentFrame + 1) % framesInRow;
-                this.lastFrameChangeTime = timestamp;
+            // Assuming frame 0 is idle and frames 1 to N-1 are the attack animation
+            const lastAttackFrameIndex = framesInRow - 1; 
 
-                // If we've looped back to the first frame, stop attacking animation (unless still firing)
-                // For now, assume attack animation lasts one cycle
-                if (this.currentFrame === 0) { 
-                    // Check if still within attack cooldown window to decide if we *should* stop animating
-                    if (timestamp - this.lastAttackTime >= this.attackRate) {
-                         this.isAttacking = false;
-                    }
-                    
-                }
+            if (timestamp - this.lastFrameChangeTime > frameDuration) {
+                 // Check if we are still within the attack animation frames (1 to lastAttackFrameIndex)
+                 if (this.currentFrame < lastAttackFrameIndex) {
+                    this.currentFrame++; // Advance to the next frame
+                    this.lastFrameChangeTime = timestamp;
+                 } else {
+                    // Animation cycle finished
+                    this.isAttacking = false;
+                    this.currentFrame = 0; // Reset to idle frame (frame 0)
+                 }
             }
         } else {
-            // Not attacking, stay on the first frame
+            // Not attacking, ensure we are on the idle frame
             this.currentFrame = 0;
         }
-        // --- End Animation Update --- 
+        // --- End Animation Update ---
 
         // 3. Update Effects (Puddles/Slow)
         // Check if this entity manages puddles (has effect properties)
@@ -298,6 +297,36 @@ export default class DefenceEntity {
         this.effectSpeedFactor = this.effects?.speedFactor;
         // --- End effects update --- 
         
+        // --- Update Sprite and Display ---
+        if (updatedDef.sprite) {
+            // Check if sprite path changed to reload image
+            if (!this.spriteDefinition || this.spriteDefinition.path !== updatedDef.sprite.path) {
+                this.spriteImage = new Image();
+                this.spriteImage.src = updatedDef.sprite.path;
+                // TODO: Add error handling for image loading
+            }
+            // Update the rest of the sprite definition
+            this.spriteDefinition = { ...this.spriteDefinition, ...updatedDef.sprite }; 
+        } else {
+            // Handle case where sprite info might be removed
+            this.spriteDefinition = undefined;
+            this.spriteImage = null;
+        }
+
+        if (updatedDef.display) {
+            this.displayScale = updatedDef.display.scale ?? this.displayScale;
+            this.displayAnchorX = updatedDef.display.anchorX ?? this.displayAnchorX;
+            this.displayAnchorY = updatedDef.display.anchorY ?? this.displayAnchorY;
+        } else {
+             // Handle case where display info might be removed
+             // Reset to defaults or keep existing? Decide based on desired behavior.
+             // Keeping existing for now:
+             // this.displayScale = 1.0; 
+             // this.displayAnchorX = 0.5;
+             // this.displayAnchorY = 0.5;
+        }
+        // --- End Sprite and Display Update ---
+
         // Update the stored definition reference if needed
         this.definition = { ...this.definition, ...updatedDef }; 
         
