@@ -28,10 +28,23 @@
     "name": "Super Laser Tower",
     "stats": {
       "hp": 150,
-      "cost": 5000,
-      "attackRate": 3000,
-      "attackStrength": 50,
-      "attackRange": 200
+      "cost": 3000,
+      "attackRate": 500,
+      "attackStrength": 25,
+      "attackRange": 300
+    },
+    "sprite": {
+      "path": "./assets/images/fat_rabbit.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.7,
+      "anchorX": 0.5,
+      "anchorY": 0.8
     }
   },
   {
@@ -88,9 +101,22 @@
     "stats": {
       "hp": 120,
       "cost": 150,
-      "attackRate": 300,
-      "attackStrength": 8,
-      "attackRange": 160
+      "attackRate": 10000,
+      "attackStrength": 800,
+      "attackRange": 99999
+    },
+    "sprite": {
+      "path": "./assets/images/sniper_tower.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.8
     }
   },
   {
