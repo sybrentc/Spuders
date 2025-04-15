@@ -2,8 +2,8 @@
   "id": "main_base",
   "name": "Main Base",
   "position": {
-    "x": 950,
-    "y": 780
+    "x": 970,
+    "y": 785
   },
   "stats": {
     "hp": 1000,
@@ -15,7 +15,7 @@
     "scale": 0.5 
   },
   "sprite": {
-    "path": "./assets/images/tower.png",
+    "path": "./assets/images/tower2.png",
     "frameWidth": 335,
     "frameHeight": 403,
     "totalFrames": 4,

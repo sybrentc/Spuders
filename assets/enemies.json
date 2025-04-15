@@ -33,7 +33,7 @@
     "name": "Fast Spider",
     "description": "Faster but weaker spider variant",
     "sprite": {
-      "path": "./assets/images/spider.png",
+      "path": "./assets/images/spider-blue.png",
       "frameWidth": 192,
       "frameHeight": 192,
       "framesPerRow": 4,
@@ -62,7 +62,7 @@
     "name": "Tank Spider",
     "description": "Slower but more durable spider variant",
     "sprite": {
-      "path": "./assets/images/spider.png",
+      "path": "./assets/images/spider-red.png",
       "frameWidth": 192,
       "frameHeight": 192,
       "framesPerRow": 4,

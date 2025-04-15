@@ -68,6 +68,19 @@
       "speedFactor": 0.2,
       "duration": 5000,
       "radius": 20
+    },
+    "sprite": {
+      "path": "./assets/images/subzero.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.4,
+      "anchorX": 0.5,
+      "anchorY": 0.85
     }
   }
 ]

@@ -88,7 +88,7 @@ export default class DefenceManager extends EventTarget {
         }
         
         // Create and add the defence
-        const newDefence = new DefenceEntity(defenceId, definition, position);
+        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite);
         this.activeDefences.push(newDefence);
         console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
         return newDefence; // Return the created instance

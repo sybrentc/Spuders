@@ -1,5 +1,5 @@
 {
-    "mapImage": "/assets/images/map.webp",
+    "mapImage": "/assets/images/map.png",
     "pathData": "/assets/paths/path.csv",
     "enemyData": "/assets/enemies.json",
     "baseData": "/assets/base.json",
