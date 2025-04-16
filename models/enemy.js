@@ -2,35 +2,35 @@ import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility f
 
 export default class Enemy {
     constructor({
-        id, name, waypoints, sprite, startIndex = 0, // startIndex for original path, we'll adjust based on extension
+        id, name, extendedPath, sprite, 
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
         scale, anchorX, anchorY,
         hp, speed, attackRate, attackStrength, attackRange, bounty,
         flashDuration,
-        base // Add base dependency
+        base
     }) {
         // Identification
         this.id = id;
         this.name = name;
-        this.base = base; // Store base reference
+        this.base = base;
         
-        // --- Waypoint Extension Logic ---
-        const extendedWaypoints = this._extendWaypoints(
-            waypoints,
-            frameWidth,
-            frameHeight,
-            scale
-        );
-        this.waypoints = extendedWaypoints; // Use the extended path
-
-        // Adjust starting position and target based on the *extended* path
-        // Enemy starts at the newly added first waypoint (index 0)
-        this.x = this.waypoints[0].x;
-        this.y = this.waypoints[0].y;
-        // The first target is the original starting waypoint (now index 1)
-        this.targetWaypointIndex = 1;
-
-        // ---------------------------------
+        // --- Path Setup --- 
+        if (!extendedPath || extendedPath.length < 2) {
+            console.error(`Enemy ${this.id}: Received invalid extended path. Cannot initialize position or movement.`);
+            // Set defaults to prevent errors, but enemy won't move
+            this.waypoints = [];
+            this.x = 0;
+            this.y = 0;
+            this.targetWaypointIndex = Infinity; // Prevent movement updates
+        } else {
+            this.waypoints = extendedPath; // Use the received extended path
+            // Enemy starts at the first waypoint of the extended path (index 0)
+            this.x = this.waypoints[0].x;
+            this.y = this.waypoints[0].y;
+            // The first target is the second waypoint of the extended path (index 1)
+            this.targetWaypointIndex = 1; 
+        }
+        // --- End Path Setup ---
         
         // Sprite and animation
         this.sprite = sprite;
@@ -48,8 +48,8 @@ export default class Enemy {
         // Stats
         this.hp = hp;
         this.maxHp = hp;
-        this.speed = speed; // Speed in pixels per second
-        this.attackRate = attackRate; 
+        this.speed = speed;
+        this.attackRate = attackRate;
         this.attackStrength = attackStrength;
         this.attackRange = attackRange;
         this.bounty = bounty;
@@ -62,66 +62,7 @@ export default class Enemy {
         this.isAttacking = false;
         this.targetTower = null;
         this.lastAttackTime = 0;
-        this.speedModifier = 1.0; // Add speed modifier, 1.0 = normal speed
-    }
-    
-    // Helper function to calculate the extended waypoint path
-    _extendWaypoints(originalWaypoints, frameWidth, frameHeight, scale) {
-        // Need at least 2 waypoints to determine direction
-        if (!originalWaypoints || originalWaypoints.length < 2) {
-            console.warn(`Enemy ${this.id}: Cannot extend path with less than 2 waypoints.`);
-            return originalWaypoints; // Return original if extension isn't possible
-        }
-
-        // Calculate the diagonal size of the scaled sprite
-        const spriteDiagonal = Math.sqrt(frameWidth * frameWidth + frameHeight * frameHeight) * scale;
-
-        // --- Calculate Spawn Point ---
-        const p0 = originalWaypoints[0]; // First original waypoint
-        const p1 = originalWaypoints[1]; // Second original waypoint
-
-        let normStartX = 0;
-        let normStartY = 0;
-        const dxStart = p1.x - p0.x;
-        const dyStart = p1.y - p0.y;
-        const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
-
-        // Calculate normalized vector from p0 to p1
-        if (distStart > 0.001) { // Avoid division by zero
-            normStartX = dxStart / distStart;
-            normStartY = dyStart / distStart;
-        }
-
-        // Calculate spawn point by moving backwards from p0 along the normal vector
-        const spawnPoint = {
-            x: p0.x - normStartX * spriteDiagonal,
-            y: p0.y - normStartY * spriteDiagonal
-        };
-
-        // --- Calculate Despawn Point ---
-        const pn = originalWaypoints[originalWaypoints.length - 1]; // Last original waypoint
-        const pn_1 = originalWaypoints[originalWaypoints.length - 2]; // Penultimate original waypoint
-
-        let normEndX = 0;
-        let normEndY = 0;
-        const dxEnd = pn.x - pn_1.x;
-        const dyEnd = pn.y - pn_1.y;
-        const distEnd = Math.sqrt(dxEnd * dxEnd + dyEnd * dyEnd);
-
-        // Calculate normalized vector from pn_1 to pn
-        if (distEnd > 0.001) { // Avoid division by zero
-            normEndX = dxEnd / distEnd;
-            normEndY = dyEnd / distEnd;
-        }
-
-        // Calculate despawn point by moving forwards from pn along the normal vector
-        const despawnPoint = {
-            x: pn.x + normEndX * spriteDiagonal,
-            y: pn.y + normEndY * spriteDiagonal
-        };
-
-        // Return the new array with added points
-        return [spawnPoint, ...originalWaypoints, despawnPoint];
+        this.speedModifier = 1.0;
     }
     
     update(timestamp, deltaTime, base) {
@@ -132,74 +73,43 @@ export default class Enemy {
             this.isFlashing = false;
         }
 
-        // --- Debugging Base Attack Logic ---
-        const baseExists = !!base;
-        const baseDestroyed = baseExists ? base.isDestroyed() : 'N/A';
+        // --- Base Attack Logic --- 
         let distanceToBase = Infinity;
-        let baseCoords = { x: 'N/A', y: 'N/A' };
-        if (baseExists && !baseDestroyed) {
+        if (base && !base.isDestroyed()) {
             const dxBase = base.x - this.x;
             const dyBase = base.y - this.y;
             distanceToBase = Math.sqrt(dxBase * dxBase + dyBase * dyBase);
-            baseCoords = { x: base.x, y: base.y };
         }
-        const isInRange = distanceToBase <= this.attackRange;
-        // --- End Debugging ---
-
-        // Check distance to base and determine if attacking
         if (distanceToBase <= this.attackRange && base && !base.isDestroyed()) {
-            this.isAttacking = true; // Stop moving
-            // Check if enough time has passed to attack again
+            this.isAttacking = true; 
             if (timestamp - this.lastAttackTime >= this.attackRate) {
-                console.log(`Enemy ${this.id} attacking base!`); // Debug log
                 base.takeDamage(this.attackStrength);
                 this.lastAttackTime = timestamp;
             }
         } else {
-            this.isAttacking = false; // Resume moving if base is destroyed or out of range
-            // If we were just attacking, reset attack timer so we don't attack immediately upon re-entering range
-            // Although, maybe we want that? Let's keep it simple for now.
+            this.isAttacking = false; 
         }
+        // --- End Base Attack ---
         
         // Move along path if not attacking and not past the final waypoint
-        // Check against waypoints.length because targetWaypointIndex can reach length after the last move
+        // Uses this.waypoints which is now the extended path
         if (!this.isAttacking && this.targetWaypointIndex < this.waypoints.length) {
-            // 1) Read current spider x,y coordinates (this.x, this.y)
-            
-            // 2) Read the spider's current target waypoint
             const target = this.waypoints[this.targetWaypointIndex];
-            
-            // Calculate vector from current position to target
             const dx = target.x - this.x;
             const dy = target.y - this.y;
-            
-            // Calculate distance to target
             const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Calculate distance to move this frame (use speedModifier)
             const currentSpeed = this.speed * this.speedModifier;
-            const moveDistance = currentSpeed * (deltaTime / 1000); // Convert ms to seconds
+            const moveDistance = currentSpeed * (deltaTime / 1000); 
             
-            // Check if we have reached or passed the target waypoint
-            if (distance <= moveDistance || distance < 0.1) { // Check if close enough or will pass it
-                // Snap position to the target waypoint
+            if (distance <= moveDistance || distance < 0.1) {
                 this.x = target.x;
                 this.y = target.y;
-                // Advance to the next waypoint index
                 this.targetWaypointIndex++;
-                // Note: This simple version doesn't handle overshooting precisely within the same frame.
             } else {
-                // 3) Calculate a normal vector (unit vector)
                 const normX = dx / distance;
                 const normY = dy / distance;
-                
-                // 4) Multiply the normal vector by speed and time delta for displacement
-                const deltaX = normX * moveDistance;
-                const deltaY = normY * moveDistance;
-                
-                // 5) Update spider position coordinates
-                this.x += deltaX;
-                this.y += deltaY;
+                this.x += normX * moveDistance;
+                this.y += normY * moveDistance;
             }
         }
         
@@ -208,12 +118,8 @@ export default class Enemy {
             this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
             this.lastFrameTime = timestamp;
         }
-        
-        // Handle tower attacks (to be implemented with tower system)
-        // TODO: Handle attacking specific towers if implemented later
     }
     
-    // New method to apply updates from fetched definitions
     applyUpdate(updatedDef) {
         // Update basic info
         this.name = updatedDef.name; // Assume name always exists in update
@@ -254,29 +160,23 @@ export default class Enemy {
     
     hit(damage) {
         if (this.isDead) return;
-        
         this.hp -= damage;
         this.isFlashing = true;
         this.lastFlashTime = performance.now();
-        
         if (this.hp <= 0) {
             this.die();
         }
     }
     
     die() {
-        if (this.isDead) return; // Prevent dying multiple times
+        if (this.isDead) return; 
         this.isDead = true;
-        console.log(`${this.name} (${this.id}) died.`);
-        // Award bounty to the base
         if (this.base && this.bounty > 0) {
             this.base.addFunds(this.bounty);
         }
-        // TODO: Add death animation/effect trigger here
     }
     
     getCurrentPosition() {
-        // Simply return the current x, y coordinates
         return { x: this.x, y: this.y };
     }
     
@@ -292,7 +192,6 @@ export default class Enemy {
         const drawHeight = this.frameHeight * this.scale;
         const drawX = this.x - drawWidth * this.anchorX; // Use anchorX
         const drawY = this.y - drawHeight * this.anchorY; // Use anchorY
-        //console.log(this.scale);
         ctx.save();
         
         // Apply flash effect if active using temporary canvas

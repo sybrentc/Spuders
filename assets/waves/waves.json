@@ -1,62 +1,12 @@
 {
-    "globalWaveSettings": {
-      "initialDelayMs": 5000,
-      "delayBetweenWavesMs": 30000
-    },
-    "waves": [
-      {
-        "waveNumber": 1,
-        "description": "A few basic spiders to start.",
-        "spawns": [
-          {
-            "enemyTypeId": "spider_normal",
-            "count": 10,
-            "spawnIntervalMs": 2000,
-            "initialDelayMs": 0
-          }
-        ]
-      },
-      {
-        "waveNumber": 2,
-        "description": "Introducing faster spiders.",
-        "spawns": [
-          {
-            "enemyTypeId": "spider_normal",
-            "count": 8,
-            "spawnIntervalMs": 2500,
-            "initialDelayMs": 0
-          },
-          {
-            "enemyTypeId": "spider_fast",
-            "count": 5,
-            "spawnIntervalMs": 1500,
-            "initialDelayMs": 5000
-          }
-        ]
-      },
-      {
-        "waveNumber": 3,
-        "description": "Here come the tanks!",
-        "spawns": [
-          {
-            "enemyTypeId": "spider_normal",
-            "count": 12,
-            "spawnIntervalMs": 2000,
-            "initialDelayMs": 0
-          },
-          {
-            "enemyTypeId": "spider_tank",
-            "count": 3,
-            "spawnIntervalMs": 6000,
-            "initialDelayMs": 10000
-          },
-          {
-            "enemyTypeId": "spider_fast",
-            "count": 4,
-            "spawnIntervalMs": 1800,
-            "initialDelayMs": 15000
-          }
-        ]
-      }
-    ]
+  "initialDelayMs": 3000,
+  "delayBetweenWavesMs": 5000,
+  "delayBetweenEnemiesMs": 1000,
+  "delayBetweenEnemiesVarianceMs": 0,
+  "startingDifficulty": 15000,
+  "difficultyIncreaseFactor": 1.1,
+  "waveGeneration": {
+      "difficultyTolerance": 0.10,
+      "maxSelectionAttempts": 200
   }
+}

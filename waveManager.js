@@ -1,47 +1,80 @@
 export default class WaveManager {
     /**
-     * Manages the timing and spawning of enemies based on wave data.
-     * @param {string} waveDataPath - The path to the wave configuration JSON file.
-     * @param {function} createEnemyCallback - A function (e.g., enemyManager.createEnemy) to call when an enemy should be spawned.
+     * Manages the timing and algorithmic generation of enemy waves.
+     * @param {string} waveDataPath - Path to the wave configuration JSON file (e.g., assets/waves/waves.json).
+     * @param {EnemyManager} enemyManager - Instance of the EnemyManager to access current enemy data.
+     * @param {function} createEnemyCallback - Function (e.g., enemyManager.createEnemy) to call for spawning.
      */
-    constructor(waveDataPath, createEnemyCallback) {
+    constructor(waveDataPath, enemyManager, createEnemyCallback) {
         if (!waveDataPath) {
             throw new Error("WaveManager requires a waveDataPath.");
         }
-        this.waveDataPath = waveDataPath;
-        this.createEnemy = createEnemyCallback; // Reference to the function that actually creates an enemy instance
-        
-        // Internal state, initialized after loading
-        this.waveData = null;            // Will hold the loaded wave configuration
-        this.isLoaded = false;           // Flag to indicate if definitions are loaded
+        if (!enemyManager) {
+            throw new Error("WaveManager requires an EnemyManager instance.");
+        }
+        if (typeof createEnemyCallback !== 'function') {
+            throw new Error("WaveManager requires a valid createEnemyCallback function.");
+        }
 
-        this.currentWaveNumber = 0;      // Tracks the wave we are currently processing or waiting for
-        this.waveStartTime = 0;          // Timestamp when the current wave's spawning began
-        this.spawners = [];              // Holds active spawn batch controllers for the current wave
-        this.timeUntilNextWave = 0;      // Countdown timer (in ms) between waves
-        this.isFinished = false;         // Flag indicating if all waves are completed
+        this.waveDataPath = waveDataPath;
+        this.enemyManager = enemyManager;
+        this.createEnemy = createEnemyCallback;
+
+        // Internal state
+        this.waveConfig = null;          // Holds loaded wave parameters (initialDelayMs, etc.)
+        this.isLoaded = false;           // Flag for successful initial load
         this.isStarted = false;          // Flag to prevent multiple starts
+        this.isFinished = false;         // Flag indicating all waves completed (logic TBD)
+
+        this.currentWaveNumber = 0;      // Tracks the wave number
+        this.waveStartTime = 0;          // Timestamp when the current wave's spawning began (or calculation)
+        this.timeUntilNextWave = 0;      // Countdown timer (in ms) between waves
+        
+        // Placeholder for the details of the currently active/spawning wave
+        // This will be populated by the algorithmic calculation in startNextWave
+        this.activeWaveState = {
+            groups: [],
+            spawnedCount: 0,
+            spawnIntervalMs: 0, // Calculated interval for this wave
+            lastSpawnTime: 0,
+            nextSpawnTimestamp: 0 // Will be set below if spawning starts
+        }; 
+        this.waitingForClear = false; // Initialize the new flag
+        this.lastAverageDeathDistance = null; // Store the average distance from the last wave
+
+        console.log("WaveManager: Instance created.");
     }
 
     /**
-     * Loads the wave data from the provided path.
+     * Loads the core wave configuration data from the specified path.
      */
     async load() {
         try {
-            const response = await fetch(this.waveDataPath);
+            // Use cache-busting for the initial load as well
+            const cacheBustingUrl = `${this.waveDataPath}?t=${Date.now()}`;
+            const response = await fetch(cacheBustingUrl);
             if (!response.ok) {
-                throw new Error(`Failed to fetch wave data: ${response.statusText}`);
+                throw new Error(`Failed to fetch wave config: ${response.statusText} (${response.status})`);
             }
-            this.waveData = await response.json();
+            const configData = await response.json();
+            
+            // Initial validation of required parameters
+            if (configData.initialDelayMs === undefined || 
+                configData.delayBetweenWavesMs === undefined || 
+                configData.startingDifficulty === undefined ||
+                configData.difficultyIncreaseFactor === undefined) {
+                 console.warn("WaveManager: Loaded wave config is missing one or more expected top-level parameters (initialDelayMs, delayBetweenWavesMs, startingDifficulty, difficultyIncreaseFactor). Check waves.json.");
+                 // Decide if this should be a fatal error
+                 // throw new Error("WaveManager: Invalid wave configuration loaded.");
+            }
+
+            this.waveConfig = configData;
             this.isLoaded = true;
-            console.log(`WaveManager: Successfully loaded wave data from ${this.waveDataPath}`);
-            // Basic validation
-            if (!this.waveData.globalWaveSettings || !this.waveData.waves) {
-                console.warn("WaveManager: Loaded wave data is missing expected structure (globalWaveSettings or waves). May cause issues.");
-            }
+            console.log(`WaveManager: Successfully loaded and applied wave config from ${this.waveDataPath}`);
+            // console.log("WaveManager: Initial Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log initial config
             return true;
         } catch (error) {
-            console.error('WaveManager: Error loading wave data:', error);
+            console.error(`WaveManager: Error loading wave config from ${this.waveDataPath}:`, error);
             this.isLoaded = false;
             this.isFinished = true; // Prevent operation if load fails
             throw error; // Re-throw
@@ -49,136 +82,398 @@ export default class WaveManager {
     }
 
     /**
-     * Starts the wave system, beginning with the initial delay before the first wave.
-     * REQUIRES load() to have been called successfully first.
+     * Applies updated wave configuration parameters.
+     * Called by TuningManager when the wave config file changes.
+     * @param {object} newConfigData - The new data object fetched from waveDataPath.
+     */
+    applyParameterUpdates(newConfigData) {
+        if (!this.isLoaded) {
+            console.warn("WaveManager: Received parameter updates but not loaded yet. Ignoring.");
+            return;
+        }
+        if (!newConfigData) {
+            console.warn("WaveManager: Received empty or invalid data for parameter update. Ignoring.");
+            return;
+        }
+        // Simple overwrite for now. Add validation/merging if needed.
+        this.waveConfig = newConfigData; 
+        // console.log("WaveManager: Updated Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log updated config
+
+        // Potentially adjust ongoing timers if parameters like delayBetweenWavesMs change mid-wait?
+        // For simplicity, we'll let the current timer run out based on the old value.
+    }
+
+    /**
+     * Starts the wave system, beginning with the initial delay.
+     * REQUIRES load() to have been called successfully.
      */
     start() {
         if (this.isStarted) {
             console.warn("WaveManager: Already started.");
             return;
         }
-        if (!this.isLoaded || !this.waveData || !this.waveData.globalWaveSettings) {
-            console.error("WaveManager: Cannot start. Data not loaded or invalid.");
-            this.isFinished = true; // Prevent updates if setup is wrong
+        if (!this.isLoaded || !this.waveConfig) {
+            console.error("WaveManager: Cannot start. Config not loaded or invalid.");
+            this.isFinished = true; // Prevent updates
             return;
         }
+
         this.isStarted = true;
-        const initialDelay = this.waveData.globalWaveSettings.initialDelayMs || 0;
-        console.log(`WaveManager: Starting system. First wave in ${initialDelay / 1000} seconds.`);
+        const initialDelay = this.waveConfig.initialDelayMs || 0;
+        console.log(`WaveManager: Starting system. First wave calculation in ${initialDelay / 1000} seconds.`);
+
         // Use timeout for the very first wave delay
         setTimeout(() => {
-            this.startNextWave();
+            if (this.isStarted && !this.isFinished) { // Check if stopped during delay
+                 this.startNextWave();
+            }
         }, initialDelay);
     }
 
     /**
-     * Sets up the spawners for the next wave in the sequence.
-     * REQUIRES load() to have been called successfully first.
+     * Calculates and initiates the next wave, attempting to align group centers at the last average death distance.
      */
     startNextWave() {
-        if (!this.isLoaded) {
-            console.error("WaveManager: Cannot start next wave, data not loaded.");
-            this.isFinished = true;
-            return;
+        // --- Initial Checks ---
+        if (!this.isLoaded || !this.waveConfig || !this.enemyManager?.isLoaded) {
+            console.error("WaveManager: Cannot start next wave. Config or EnemyManager not ready.");
+            this.isFinished = true; return;
         }
+        // Check if previous wave's groups are still processing (using the new structure)
+        if (this.activeWaveState.groups && this.activeWaveState.groups.some(g => g.spawnedCount < g.enemies.length)) {
+             console.warn("WaveManager: Tried to start next wave while previous groups are still spawning.");
+             return;
+        }
+
         this.currentWaveNumber++;
-        console.log(`WaveManager: Starting Wave ${this.currentWaveNumber}`);
+        console.log(`WaveManager: Starting calculation for Wave ${this.currentWaveNumber}`);
+        this.waveStartTime = performance.now(); // Record when wave calculation/setup starts
+        this.timeUntilNextWave = 0; // Clear inter-wave timer
 
-        const waveConfig = this.waveData.waves.find(w => w.waveNumber === this.currentWaveNumber);
-
-        // Check if waves are completed
-        if (!waveConfig) {
-            console.log("WaveManager: All waves completed!");
-            this.isFinished = true;
-            this.spawners = []; // Ensure no more spawns
-            return;
+        // --- Target Point & Fallback ---
+        const targetDistance = this.lastAverageDeathDistance;
+        let useCoordinatedSpawn = targetDistance !== null && targetDistance > 0;
+        if (!useCoordinatedSpawn) {
+            console.warn(`WaveManager: lastAverageDeathDistance (${targetDistance}) is invalid. Reverting to simple speed-sorted spawn for Wave ${this.currentWaveNumber}.`);
+        } else {
+            console.log(`WaveManager: Targeting coordinated arrival at distance ${targetDistance.toFixed(0)}px for Wave ${this.currentWaveNumber}.`);
         }
 
-        this.waveStartTime = performance.now(); // Record when the wave officially starts
-        this.spawners = []; // Clear spawners from the previous wave
+        // --- Difficulty & Enemy Selection ---
+        const targetDifficulty = this.waveConfig.startingDifficulty * Math.pow(this.waveConfig.difficultyIncreaseFactor, this.currentWaveNumber - 1);
+        console.log(`WaveManager: Target difficulty: ${targetDifficulty.toFixed(0)}`);
+        const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
+        const availableEnemyCosts = [];
+        const enemyIdsToConsider = Object.keys(enemyDefinitions);
+        for (const id of enemyIdsToConsider) {
+            const def = enemyDefinitions[id];
+            if (def && def.stats) {
+                const cost = (def.stats.hp || 0) * (def.stats.speed || 0);
+                if (cost > 0) { availableEnemyCosts.push({ id: id, cost: cost }); }
+            }
+        }
+        if (availableEnemyCosts.length === 0) { // ... handle no available enemies error ...
+            console.error(`WaveManager: No enemies available... cannot generate wave.`);
+            this.activeWaveState = { groups: [] }; // Set empty state
+            this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
+        }
+        let selectedEnemies = [];
+        let currentDifficulty = 0;
+        const maxAttempts = this.waveConfig.waveGeneration?.maxSelectionAttempts || 200;
+        const tolerance = this.waveConfig.waveGeneration?.difficultyTolerance || 0.10;
+        let attempts = 0;
+        // --- Selection Loop (Trial & Error) ---
+        while (attempts < maxAttempts) { // ... selection loop as before ...
+            attempts++;
+            const diff = targetDifficulty - currentDifficulty;
+            const relativeDiff = targetDifficulty > 0 ? Math.abs(diff) / targetDifficulty : 0;
+            if (relativeDiff <= tolerance && currentDifficulty > 0) break;
+            if (diff > 0 || selectedEnemies.length === 0) {
+                const randomIndex = Math.floor(Math.random() * availableEnemyCosts.length);
+                const enemyToAdd = availableEnemyCosts[randomIndex];
+                selectedEnemies.push(enemyToAdd);
+                currentDifficulty += enemyToAdd.cost;
+            } else {
+                const randomIndex = Math.floor(Math.random() * selectedEnemies.length);
+                currentDifficulty -= selectedEnemies[randomIndex].cost;
+                selectedEnemies.splice(randomIndex, 1);
+            }
+        }
+        if (attempts >= maxAttempts) { console.warn(`WaveManager: Reached max selection attempts...`); }
+        // --- End Selection ---
 
-        // Create spawner controllers for each batch defined in the wave config
-        waveConfig.spawns.forEach(spawnBatch => {
-            this.spawners.push({
-                enemyTypeId: spawnBatch.enemyTypeId,
-                count: spawnBatch.count,
-                spawnIntervalMs: spawnBatch.spawnIntervalMs,
-                initialDelayMs: spawnBatch.initialDelayMs,
-                spawnedCount: 0,          // How many have spawned from this batch so far
-                lastSpawnTime: 0,         // Timestamp of the last spawn in this batch
-                isActive: false           // Becomes true after this batch's initialDelayMs passes
+        if (selectedEnemies.length === 0) {
+             console.log(`WaveManager: Wave ${this.currentWaveNumber} finished (0 enemies selected). Starting delay for next wave.`);
+             this.activeWaveState = { groups: [] }; // Ensure state is cleared
+             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
+             return;
+        }
+
+        // --- Group by Speed ---
+        const speedGroupsMap = new Map();
+        selectedEnemies.forEach(enemy => {
+            const speed = enemyDefinitions[enemy.id]?.stats?.speed;
+            if (!speedGroupsMap.has(speed)) {
+                speedGroupsMap.set(speed, []);
+            }
+            speedGroupsMap.get(speed).push(enemy.id);
+        });
+        let sortedGroupsData = Array.from(speedGroupsMap.entries())
+            .map(([speed, enemies]) => ({ speed, enemies }))
+            .sort((a, b) => a.speed - b.speed); // Slowest first
+
+        // --- [DEBUG OVERRIDE] Force 1 enemy of each available type ---
+        const DEBUG_FORCE_ONE_OF_EACH = false; // Set to false to disable override
+        if (DEBUG_FORCE_ONE_OF_EACH) {
+            console.warn("WaveManager: [DEBUG] OVERRIDE ACTIVE - Forcing 1 of each valid enemy type.");
+            const availableTypes = Object.keys(enemyDefinitions);
+            let overriddenGroupsData = [];
+            availableTypes.forEach(id => {
+                const speed = enemyDefinitions[id]?.stats?.speed;
+                // Only include if speed is valid and positive
+                if (speed && speed > 0) {
+                    overriddenGroupsData.push({ speed: speed, enemies: [id] }); // Group with one enemy
+                } else {
+                    console.warn(`WaveManager: [DEBUG OVERRIDE] Skipping type ${id} due to invalid speed.`);
+                }
             });
+            // Re-sort the overridden groups by speed
+            overriddenGroupsData.sort((a, b) => a.speed - b.speed);
+            // Replace the original sorted data with the override
+            sortedGroupsData = overriddenGroupsData;
+            console.log("WaveManager: [DEBUG] Using Overridden groups:", JSON.stringify(sortedGroupsData.map(g=>({speed: g.speed, id: g.enemies[0]})))); // Log simplified view
+        }
+        // -----------------------------------------------------------
+
+        // --- Calculate Group Metrics and Start Times ---
+        const averageInterEnemyDelay = this.waveConfig.delayBetweenEnemiesMs || 500;
+        const calculatedGroupInfo = []; // Will store { ...group, count, travelTime, offsetTime, totalTime }
+
+        // 1. Calculate metrics for all groups first
+        sortedGroupsData.forEach((group, index) => {
+            const count = group.enemies.length;
+            const speed = group.speed;
+            let travelTime = Infinity;
+            
+            // Log the config value being used for this specific group's calculation
+            // REMOVED: console.log(`  [DEBUG] Group ${index} Offset Calc Check: Using delayBetweenEnemiesMs = ${currentDelayConfig}`);
+            const currentDelayConfig = this.waveConfig.delayBetweenEnemiesMs || 500;
+
+            // Use (count - 1) for offset, reading directly from config (with fallback)
+            const offsetTime = (count > 1) ? ((count - 1) * currentDelayConfig / 2) : 0;
+
+            if (useCoordinatedSpawn) {
+                if (speed <= 0) {
+                    console.warn(`WaveManager: Group with speed <= 0. Disabling coordinated spawn.`);
+                    useCoordinatedSpawn = false;
+                    travelTime = Infinity;
+                } else {
+                    // Log inputs before calculation
+                    // REMOVED: console.log(`  [DEBUG] Travel Time Calc: targetDistance = ${targetDistance?.toFixed(2)}, speed = ${speed}`);
+                    // Calculate time in seconds, then convert to milliseconds
+                    travelTime = (targetDistance / speed) * 1000;
+                }
+            } else {
+                 travelTime = 0; // Set non-infinite for fallback logic if needed
+            }
+            // 4. Calculate Total Time (CoM Arrival Time if started at t=0)
+            const totalTime = useCoordinatedSpawn ? (offsetTime + travelTime) : 0; // Use 0 if not coordinating
+
+            calculatedGroupInfo.push({ ...group, count, travelTime, offsetTime, totalTime });
         });
 
-        console.log(`WaveManager: Wave ${this.currentWaveNumber} configured with ${this.spawners.length} spawn batches.`);
+        // --- Calculate Final Start Times (Based on Latest CoM Arrival) ---
+        let maxTotalTime = 0; // Initialize to 0
+        if (useCoordinatedSpawn) {
+            // 2. Find the maximum total time across all groups
+             calculatedGroupInfo.forEach(group => {
+                 if (isFinite(group.totalTime)) {
+                    maxTotalTime = Math.max(maxTotalTime, group.totalTime);
+                 } else {
+                    useCoordinatedSpawn = false;
+                 }
+             });
+
+             if (!useCoordinatedSpawn) {
+                 console.warn("WaveManager: Infinite total time found. Reverting to sequential spawn.");
+                 maxTotalTime = 0;
+             } else if (calculatedGroupInfo.length > 0){
+                 // REMOVED: console.log(`WaveManager: [DEBUG] Latest CoM arrival time calculated: ${maxTotalTime.toFixed(0)}ms`);
+             }
+        } else {
+            maxTotalTime = 0; // For sequential fallback
+        }
+        
+        // REMOVED: Redundant log for averageInterEnemyDelay variable
+
+        let sequentialStartTimeOffset = 0; // For non-coordinated fallback
+        const finalGroupsState = calculatedGroupInfo.map((group, index) => {
+            let finalStartTime = 0;
+            
+            // --- Debug Log Group Metrics ---
+            // REMOVED: console.log(`  [DEBUG] Group ${index} (Speed: ${group.speed}, Count: ${group.count}) | OffsetT: ${group.offsetTime.toFixed(0)}, TravelT: ${isFinite(group.travelTime) ? group.travelTime.toFixed(0) : 'Inf'}, TotalT: ${isFinite(group.totalTime) ? group.totalTime.toFixed(0) : 'Inf'}`);
+            // ----------------------------->
+
+            if (useCoordinatedSpawn) {
+                // 3. Calculate start time relative to the latest arrival
+                finalStartTime = isFinite(group.totalTime) ? (maxTotalTime - group.totalTime) : 0;
+                // Keep final start time log for now
+                console.log(`    -> Coordinated Final Start (based on latest arrival): +${finalStartTime.toFixed(0)}ms`);
+            } else {
+                // Non-coordinated fallback: Stack groups sequentially
+                if (index > 0) {
+                     const prevGroup = calculatedGroupInfo[index-1];
+                     const averageInterEnemyDelay = this.waveConfig.delayBetweenEnemiesMs || 500;
+                     const prevDurationEstimate = (prevGroup.count > 1) ? ((prevGroup.count - 1) * averageInterEnemyDelay) : 0;
+                     sequentialStartTimeOffset += prevDurationEstimate + averageInterEnemyDelay; // Add full delay
+                     finalStartTime = sequentialStartTimeOffset;
+                }
+                // Keep final start time log for now
+                 console.log(`    -> Sequential Fallback Final Start: +${finalStartTime.toFixed(0)}ms`);
+            }
+
+            finalStartTime = Math.max(0, finalStartTime);
+
+            return {
+                speed: group.speed,
+                enemies: group.enemies,
+                count: group.count,
+                startTime: finalStartTime, // Use the start time relative to latest arrival
+                spawnedCount: 0,
+                nextSpawnTimestamp: Infinity,
+                isActive: false
+            };
+        });
+        // --- End Final Start Time Calculation ---
+
+        // --- Finalize Wave State ---
+        this.activeWaveState = { 
+            groups: finalGroupsState,
+            calculatedMetrics: calculatedGroupInfo // Store the detailed metrics
+        };
+        // Keep this summary log
+        console.log(`WaveManager: Wave ${this.currentWaveNumber} configured with ${this.activeWaveState.groups.reduce((sum, g) => sum + g.count, 0)} enemies across ${this.activeWaveState.groups.length} speed groups.`);
+    }
+
+    // Helper method - unchanged
+    _calculateRandomSpawnDelay() {
+        const baseDelay = this.waveConfig.delayBetweenEnemiesMs || 500;
+        const variance = this.waveConfig.delayBetweenEnemiesVarianceMs || 0;
+        const randomVariance = (Math.random() * 2 - 1) * variance;
+        const nextDelay = Math.max(0, baseDelay + randomVariance);
+        return nextDelay;
     }
 
     /**
      * Updates the state of wave spawning based on the elapsed time.
      * Should be called in the main game loop.
-     * @param {number} timestamp - The current high-resolution timestamp (e.g., from performance.now() or requestAnimationFrame).
+     * @param {number} timestamp - The current high-resolution timestamp (e.g., from performance.now()).
      * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
      */
     update(timestamp, deltaTime) {
-        if (this.isFinished || !this.isStarted || !this.isLoaded) {
-            return; // Do nothing if finished, not started, or data not loaded
+        if (this.isFinished || !this.isStarted || !this.isLoaded || !this.waveConfig) {
+            return; // Do nothing if finished, not started, or config not loaded
         }
 
-        // Check if waiting for the next wave
-        if (this.spawners.length === 0) {
-            if (this.timeUntilNextWave > 0) {
-                this.timeUntilNextWave -= deltaTime;
-                if (this.timeUntilNextWave <= 0) {
-                    this.timeUntilNextWave = 0;
-                    this.startNextWave(); // Start the next wave
-                }
-            }
-            // If spawners are empty and timeUntilNextWave is 0, it means we're waiting for the initial start timeout or waves are truly finished.
-            return; // Nothing else to do if between waves
-        }
+        let allGroupsFinishedSpawning = true; // Assume finished until proven otherwise
 
-        // --- Process Active Wave Spawners --- 
-        let allBatchesInWaveComplete = true;
-        const currentTimeInWave = timestamp - this.waveStartTime; // Time elapsed since this wave started
-
-        this.spawners.forEach(spawner => {
-            // Only process batches that haven't finished spawning yet
-            if (spawner.spawnedCount < spawner.count) {
-                allBatchesInWaveComplete = false; // Mark that this wave is still spawning
-
-                // Activate the spawner if its initial delay has passed
-                if (!spawner.isActive && currentTimeInWave >= spawner.initialDelayMs) {
-                    spawner.isActive = true;
-                    // Allow immediate first spawn if interval is 0 by setting lastSpawnTime appropriately
-                    // Set it slightly in the past relative to the interval to ensure the first check passes.
-                    spawner.lastSpawnTime = timestamp - spawner.spawnIntervalMs; 
-                    console.log(`WaveManager: Spawner active for ${spawner.enemyTypeId} in Wave ${this.currentWaveNumber}`);
+        // --- Process Spawning Groups ---
+        if (this.activeWaveState.groups && this.activeWaveState.groups.length > 0) {
+            this.activeWaveState.groups.forEach((group, groupIndex) => {
+                // If group has finished spawning, skip
+                if (group.spawnedCount >= group.count) {
+                    return; // Go to next group
                 }
 
-                // If the spawner is active and enough time has passed for the next spawn
-                if (spawner.isActive && (timestamp - spawner.lastSpawnTime >= spawner.spawnIntervalMs)) {
-                    // Call the provided callback to create the enemy instance
-                    this.createEnemy(spawner.enemyTypeId, 0); // Spawn at waypoint 0
-                    
-                    spawner.spawnedCount++;
-                    spawner.lastSpawnTime = timestamp; // Record the time of this spawn
+                allGroupsFinishedSpawning = false; // Found a group still spawning
 
-                    // Log batch completion
-                    if (spawner.spawnedCount === spawner.count) {
-                        console.log(`WaveManager: Spawn batch complete for ${spawner.enemyTypeId} in Wave ${this.currentWaveNumber}`);
+                // Check if group should become active (based on its calculated start time)
+                const activationTime = this.waveStartTime + group.startTime;
+                if (!group.isActive && timestamp >= activationTime) {
+                    group.isActive = true;
+                    // Set the *first* spawn time predictably (e.g., 10ms after activation)
+                    const FIXED_FIRST_DELAY = 10; // ms - make configurable later?
+                    group.nextSpawnTimestamp = timestamp + FIXED_FIRST_DELAY; 
+                }
+
+                // If the group is active and has enemies left and it's time to spawn
+                if (group.isActive && group.spawnedCount < group.count && timestamp >= group.nextSpawnTimestamp) {
+                    // Spawn the next enemy for this group
+                    const enemyTypeId = group.enemies[group.spawnedCount];
+                    this.createEnemy(enemyTypeId, 0);
+                    const spawnLogTime = timestamp.toFixed(0);
+                    group.spawnedCount++;
+
+                    // If there are more enemies left *in this group*, calculate the next spawn time
+                    if (group.spawnedCount < group.count) {
+                        const nextDelay = this._calculateRandomSpawnDelay();
+                        group.nextSpawnTimestamp = timestamp + nextDelay;
+                        console.log(` -> Spawned ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Next in group: ${nextDelay.toFixed(0)}ms`);
+                    } else {
+                        // This was the last enemy for this group
+                        group.nextSpawnTimestamp = Infinity;
+                         console.log(` -> Spawned LAST ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Group complete.`);
                     }
                 }
-            }
-        });
-
-        // If all batches in the current wave have finished spawning all their enemies
-        if (allBatchesInWaveComplete) {
-            console.log(`WaveManager: All spawning complete for Wave ${this.currentWaveNumber}.`);
-            this.spawners = []; // Clear the spawners for the completed wave
-            this.timeUntilNextWave = this.waveData.globalWaveSettings.delayBetweenWavesMs || 0;
-            console.log(`WaveManager: Next wave in ${this.timeUntilNextWave / 1000} seconds.`);
-            // Note: We start the timer as soon as spawning finishes. We might later add logic
-            //       to wait until all enemies are *cleared* from the screen if desired.
+            }); // End of groups.forEach
+        } else {
+             allGroupsFinishedSpawning = true;
         }
+
+        // --- Post-Spawning Logic (Waiting for Clear / Next Wave Timer) ---
+        // Check if ALL groups have finished spawning AND we are not already waiting for clear
+        if (allGroupsFinishedSpawning && !this.waitingForClear && this.isStarted) {
+             const waveHadEnemies = this.activeWaveState.groups && this.activeWaveState.groups.some(g => g.count > 0);
+             if (waveHadEnemies) {
+                 console.log(`WaveManager: All group spawning complete for Wave ${this.currentWaveNumber}. Waiting for screen clear.`);
+                 this.waitingForClear = true; 
+             }
+        }
+
+        // Check if waiting for the screen to clear AFTER all spawning is complete
+        if (this.waitingForClear) {
+            if (this.enemyManager && typeof this.enemyManager.getActiveEnemies === 'function' && this.enemyManager.getActiveEnemies().length === 0) {
+                console.log(`WaveManager: Screen cleared after Wave ${this.currentWaveNumber} at ${timestamp.toFixed(0)}ms.`);
+                // Calculate average death distance for the wave that just cleared
+                if (typeof this.enemyManager.calculateAverageDeathDistance === 'function') {
+                    this.lastAverageDeathDistance = this.enemyManager.calculateAverageDeathDistance(); // Log is inside the function
+                }
+                this.waitingForClear = false; // Stop checking
+                // NOW start the timer for the next wave
+                this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
+                console.log(`WaveManager: Next wave calculation starting in ${this.timeUntilNextWave / 1000} seconds.`);
+                 this.activeWaveState = { groups: [] }; // Clear groups state for the completed wave
+            }
+        }
+        // Else, check if the inter-wave timer is running (after screen clear)
+        else if (this.timeUntilNextWave > 0) {
+            this.timeUntilNextWave -= deltaTime;
+            if (this.timeUntilNextWave <= 0) {
+                this.timeUntilNextWave = 0;
+                this.startNextWave(); // Time's up, start calculating the next wave
+            }
+        }
+    }
+     
+     // Helper to expose the data path for TuningManager registration
+     getDataPath() {
+         return this.waveDataPath;
+     }
+
+    /**
+     * Returns the average death distance calculated after the last completed wave.
+     * @returns {number | null} The distance in pixels, or null if not calculated yet.
+     */
+    getLastAverageDeathDistance() {
+        return this.lastAverageDeathDistance;
+    }
+
+    /**
+     * Returns the calculated metrics (speed, count, travelTime, offsetTime, totalTime) 
+     * for the groups in the currently active or most recently calculated wave.
+     * @returns {Array | null} An array of group metric objects, or null.
+     */
+    getActiveWaveGroupMetrics() {
+        return this.activeWaveState?.calculatedMetrics || null;
     }
 }

@@ -43,8 +43,6 @@ export default class DefenceEntity {
         this.displayAnchorX = definition.display?.anchorX
         this.displayAnchorY = definition.display?.anchorY
         // --- End Display Properties ---
-        
-        console.log(`DefenceEntity created: ${this.id} at (${this.x}, ${this.y})`);
     }
 
     findTarget(enemies) {
@@ -68,7 +66,6 @@ export default class DefenceEntity {
             }
         }
         this.target = closestEnemy;
-        // console.log(`Target for ${this.id}: ${this.target ? this.target.id : 'None'}`);
     }
 
     attack(timestamp) {
@@ -110,16 +107,12 @@ export default class DefenceEntity {
                 radius: this.effectRadius,
                 speedFactor: this.effectSpeedFactor
             });
-            console.log(`${this.id} created splash effect near ${this.target.id}`);
         }
         
         // Apply direct damage if applicable
         if (this.attackStrength > 0) {
             this.target.hit(this.attackStrength);
-            console.log(`${this.id} attacked ${this.target.id} for ${this.attackStrength} damage.`);
         }
-        // --- End attack types --- 
-
         return true;
     }
 
@@ -329,7 +322,5 @@ export default class DefenceEntity {
 
         // Update the stored definition reference if needed
         this.definition = { ...this.definition, ...updatedDef }; 
-        
-        // console.log(`DefenceEntity ${this.id} updated.`);
     }
 } 

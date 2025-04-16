@@ -77,10 +77,11 @@ export default class Game {
             this.enemyManager = new EnemyManager(enemyDataPath, this.pathData, this.base);
             await this.enemyManager.load(); // Load enemy definitions and sprites
             
-            // Initialize WaveManager - PASS PATH and ENEMY MANAGER CREATE FUNCTION
+            // Initialize WaveManager - PASS PATH, ENEMY MANAGER INSTANCE, and CREATE FUNCTION
             if (this.waveDataPath && this.enemyManager) {
                 this.waveManager = new WaveManager(
                     this.waveDataPath, // Pass the path
+                    this.enemyManager, // Pass the EnemyManager instance
                     this.enemyManager.createEnemy.bind(this.enemyManager)
                 );
                 await this.waveManager.load(); // Load wave data within the manager
@@ -100,7 +101,7 @@ export default class Game {
             }
             // <-- END ADDED block
             
-            // Draw background and waypoints
+            // Draw background (Path drawing is now part of render loop)
             this.drawBackground();
             
             // Start game loop
@@ -120,6 +121,10 @@ export default class Game {
                 // ADD registration for DefenceManager // <-- ADD THIS
                 if (this.defenceManager && this.defencesPath) {
                     this.tuningManager.register(this.defenceManager, this.defencesPath);
+                }
+                // ADD registration for WaveManager
+                if (this.waveManager && this.waveDataPath) { // Check if waveManager exists
+                    this.tuningManager.register(this.waveManager, this.waveDataPath); // Use waveDataPath
                 }
             } else {
                 console.warn("Game Initialize: TuningManager not available for registrations.");
@@ -316,7 +321,7 @@ export default class Game {
         
         // 1. Render UNDERLAY effects (e.g., puddles) first
         if (this.defenceManager) {
-            this.defenceManager.renderEffects(this.fgCtx); // Keep rendering effects separately underneath
+            this.defenceManager.renderEffects(this.fgCtx); 
         }
 
         // 2. Gather all entities for Y-sorting
@@ -325,12 +330,12 @@ export default class Game {
             renderables.push(this.base);
         }
         if (this.enemyManager) {
-            // Use slice() to work with a copy if getActiveEnemies might be sensitive to modification, though concat is usually safe
             renderables = renderables.concat(this.enemyManager.getActiveEnemies()); 
         }
         if (this.defenceManager) {
             renderables = renderables.concat(this.defenceManager.getActiveDefences());
         }
+        // TODO: Add towerManager entities if needed
 
         // 3. Sort the renderables by their Y coordinate (ascending)
         renderables.sort((a, b) => a.y - b.y);
@@ -339,16 +344,53 @@ export default class Game {
         renderables.forEach(entity => {
             if (typeof entity.render === 'function') {
                 entity.render(this.fgCtx); // Call render for all entities
+            } else if (typeof entity.draw === 'function') {
+                 // Fallback for entities like Base that might use 'draw'
+                entity.draw(this.fgCtx); 
             } else {
-                // Log a warning if an entity doesn't have a recognized render method
-                console.warn("Renderable entity missing recognized render method:", entity);
+                console.warn("Renderable entity missing recognized render/draw method:", entity);
             }
         });
+
+        // --- Draw Path (REMOVED) ---
+        
+        // --- REMOVED: Target Death Point (Red Dot) & Group Arrival Times (Blue Dots) ---
+        // const avgDeathDist = this.waveManager.getLastAverageDeathDistance();
+        // if (avgDeathDist !== null && avgDeathDist > 0) {
+        //     const deathPoint = this.enemyManager.getPointAtDistance(avgDeathDist);
+        //     if (deathPoint) {
+        //         // Draw Red Dot
+        //         ...
+        //         // Draw Blue Dots for Group CoM Arrival Times
+        //         const groupMetrics = this.waveManager.getActiveWaveGroupMetrics();
+        //         if (groupMetrics && groupMetrics.length > 0) {
+        //             ...
+        //         }
+        //     }
+        // }
+        // --- END REMOVED ---
+
+        // --- REMOVED: Last Death Test Markers (Orange Recalculated, Yellow Original) ---
+        // const lastDeath = this.enemyManager.getLastDeathInfo();
+        // if (lastDeath && lastDeath.distance !== null) {
+        //     const recalculatedPoint = this.enemyManager.getPointAtDistance(lastDeath.distance);
+        //     if (recalculatedPoint) {
+        //         // Draw Orange marker at recalculated position
+        //         ...
+        //         // Draw Yellow X marker at original death position
+        //         ...
+        //     }
+        // }
+        // --- END REMOVED ---
 
         // 5. Render OVERLAY effects / UI previews last
         if (this.placementPreview) {
             this.renderPlacementPreview(this.fgCtx);
         }
+        // ADD UI Manager Render Call
+        // if (this.uiManager) { // Assuming you have a UIManager
+        //     this.uiManager.draw(this.fgCtx);
+        // }
     }
 
     // --- ADD method to render preview --- 

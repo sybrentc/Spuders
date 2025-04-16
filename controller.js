@@ -11,8 +11,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     // Wait for game to be fully initialized
     await game.ready();
-    
-    console.log('Game is ready, populating defence menu...');
 
     // Get menu and canvas elements
     const defenceMenu = document.getElementById('defenceMenu');
@@ -64,7 +62,6 @@ window.addEventListener('DOMContentLoaded', async () => {
                 console.warn('Skipping invalid defence definition:', def);
             }
         }
-        console.log('Defence menu updated/populated.');
     }
 
     // Function to handle defence selection
@@ -75,12 +72,10 @@ window.addEventListener('DOMContentLoaded', async () => {
             isPlacingDefence = false;
             placementPreviewPos = null;
             clickedButton.classList.remove('selected');
-            console.log('Defence selection cleared.');
         } else {
             // Select new defence type
             selectedDefenceType = defenceId;
             isPlacingDefence = true;
-            console.log(`Selected defence: ${selectedDefenceType}`);
             
             // Update button styling
             document.querySelectorAll('.defence-button.selected').forEach(btn => btn.classList.remove('selected'));
@@ -109,8 +104,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Canvas Click Listener
     gameCanvas.addEventListener('click', (event) => {
         if (!isPlacingDefence || !selectedDefenceType || !placementPreviewPos) return;
-
-        console.log(`Placing ${selectedDefenceType} at`, placementPreviewPos);
         
         // Tell DefenceManager to place the defence
         if (game.defenceManager) {
@@ -127,14 +120,12 @@ window.addEventListener('DOMContentLoaded', async () => {
         placementPreviewPos = null;
         // Update game state to remove preview
         game.setPlacementPreview(null);
-        console.log('Placement complete, selection cleared.');
     });
 
     // Initial population and setup listener for updates
     if (game.defenceManager && game.defenceManager.isLoaded) {
         updateDefenceMenu(game.defenceManager.getDefinitions());
         game.defenceManager.addEventListener('definitionsUpdated', () => {
-            console.log('Controller: Detected definitionsUpdated event, updating menu.');
             // Preserve selection if possible when menu updates
             const currentSelectedId = selectedDefenceType;
             updateDefenceMenu(game.defenceManager.getDefinitions());
@@ -197,7 +188,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     // --- Register Main UI Update with Game Loop ---
     if (game.addUpdateListener) { 
         game.addUpdateListener(updateUI); // Register the combined function
-        console.log("Controller: Registered UI update listener with game loop.");
     } else {
         console.error("Controller: Game object missing addUpdateListener method. UI will not update dynamically.");
     }
