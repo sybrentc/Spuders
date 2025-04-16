@@ -75,7 +75,7 @@
       "anchorY": 0.6
     },
     "stats": {
-      "hp": 2000,
+      "hp": 1500,
       "speed": 40,
       "attackRate": 1500,
       "attackStrength": 15,

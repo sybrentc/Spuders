@@ -29,8 +29,8 @@
     "stats": {
       "hp": 150,
       "cost": 3000,
-      "attackRate": 500,
-      "attackStrength": 25,
+      "attackRate": 300,
+      "attackStrength": 45,
       "attackRange": 300
     },
     "sprite": {
@@ -100,9 +100,9 @@
     "name": "sniper tower",
     "stats": {
       "hp": 120,
-      "cost": 150,
+      "cost": 300,
       "attackRate": 10000,
-      "attackStrength": 800,
+      "attackStrength": 300,
       "attackRange": 99999
     },
     "sprite": {
@@ -146,6 +146,30 @@
       "scale": 0.4,
       "anchorX": 0.5,
       "anchorY": 0.85
+    }
+  },
+  {
+    "id": "mega_chungus",
+    "name": "Mega Chungus",
+    "stats": {
+      "hp": 150,
+      "cost": 10000,
+      "attackRate": 100,
+      "attackStrength": 70,
+      "attackRange": 300
+    },
+    "sprite": {
+      "path": "./assets/images/fat_rabbit2.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.7,
+      "anchorX": 0.5,
+      "anchorY": 0.8
     }
   }
 ]
