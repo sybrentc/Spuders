@@ -53,11 +53,12 @@ export default class Base {
         this.config = baseConfig; // Store the raw config
 
         // --- Core Stats ---
-        this.maxHp = baseConfig.stats.hp;
+        this.stats = baseConfig.stats; // Assign the whole stats object
+        this.maxHp = this.stats.hp;
         this.currentHp = this.maxHp;
         this._isDestroyed = false;
-        this.startingFunds = baseConfig.stats.money; // Store the initial value for reference/tuning
-        this.currentFunds = this.startingFunds; // This will be the actively tracked funds
+        this.startingFunds = this.stats.money; // Use this.stats now
+        this.currentFunds = this.startingFunds;
 
         // --- Display Properties ---
         this.x = baseConfig.position.x;
@@ -255,11 +256,14 @@ export default class Base {
     applyParameterUpdates(newData) {
         let configChanged = false; // Flag to track if any relevant config changed
 
-        // --- Update Stats (HP) --- 
+        // --- Update Stats (HP, Money, Exchange Rate etc.) --- 
         if (newData.stats) { // Check if stats object exists
-            if (newData.stats.hp !== undefined && newData.stats.hp !== this.maxHp) {
+            // --- HP Update --- 
+            if (newData.stats.hp !== undefined && newData.stats.hp !== this.stats.hp) { // Compare with this.stats.hp
                 const oldMaxHp = this.maxHp;
-                this.maxHp = newData.stats.hp;
+                // Update both maxHp and the value within this.stats
+                this.stats.hp = newData.stats.hp;
+                this.maxHp = this.stats.hp; 
                 console.log(`Base Max HP updated from ${oldMaxHp} to ${this.maxHp}`);
                 if (this.currentHp > this.maxHp) {
                     this.currentHp = this.maxHp; // Clamp current HP
@@ -270,10 +274,13 @@ export default class Base {
                 }
                 configChanged = true;
             }
-             // Add logic for other stats here if needed in the future
-             if (newData.stats.money !== undefined && newData.stats.money !== this.startingFunds) {
+            
+            // --- Money Update --- 
+             if (newData.stats.money !== undefined && newData.stats.money !== this.stats.money) { // Compare with this.stats.money
                  const oldStartingFunds = this.startingFunds;
-                 const newStartingFunds = newData.stats.money;
+                 // Update both startingFunds and the value within this.stats
+                 this.stats.money = newData.stats.money;
+                 const newStartingFunds = this.stats.money;
                  const delta = newStartingFunds - oldStartingFunds;
 
                  console.log(`Base startingFunds updated from ${oldStartingFunds} to ${newStartingFunds} (Delta: ${delta})`);
@@ -290,6 +297,19 @@ export default class Base {
                  
                  configChanged = true;
              }
+
+             // --- Exchange Rate Update --- 
+             if (newData.stats.exchangeRate !== undefined && newData.stats.exchangeRate !== this.stats.exchangeRate) {
+                 const oldRate = this.stats.exchangeRate;
+                 // Directly update the value within this.stats
+                 this.stats.exchangeRate = newData.stats.exchangeRate;
+                 console.log(`Base exchangeRate updated from ${oldRate} to ${this.stats.exchangeRate}`);
+                 configChanged = true;
+                 // Note: PriceManager will pick this up on its next calculation.
+             }
+
+             // Add other stats updates here...
+
         } else {
             console.warn("Base received parameter update data without 'stats' object.");
         }
@@ -332,13 +352,15 @@ export default class Base {
         }
         
         // --- Update internal config representation if anything changed --- 
-        // This is important if other parts of the code might reference this.config
+        // This section is now LESS critical as we update this.stats directly,
+        // but keep it if other parts rely on this.config
         if (configChanged) {
              console.log("Base: Updating internal config representation after parameter changes.");
              // Deep merge might be safer, but shallow merge is simpler for now
              this.config = { 
                  ...this.config, 
-                 stats: { ...this.config.stats, ...newData.stats },
+                 // Ensure the stats object within config is also updated
+                 stats: { ...this.stats }, // Use the updated this.stats
                  position: { ...this.config.position, ...newData.position },
                  display: { ...this.config.display, ...newData.display },
              };

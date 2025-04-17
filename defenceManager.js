@@ -2,28 +2,23 @@ import DefenceEntity from './models/defender.js'; // Import the entity class
 
 // Make DefenceManager an EventTarget to dispatch update events
 export default class DefenceManager extends EventTarget {
-    constructor(dataPath, enemyManager, base) {
+    constructor(game) { // Accept Game instance instead of individual managers
         super(); // Call EventTarget constructor
-        if (!dataPath) {
-            throw new Error("DefenceManager requires a valid dataPath.");
+        if (!game) {
+            throw new Error("DefenceManager requires a valid Game instance.");
         }
-        if (!enemyManager) {
-            throw new Error("DefenceManager requires a valid EnemyManager instance.");
-        }
-        if (!base) {
-            throw new Error("DefenceManager requires a valid Base instance.");
-        }
-        this.dataPath = dataPath;
-        this.enemyManager = enemyManager; // Store reference
-        this.base = base; // Store reference to base
+        this.game = game; // Store reference to the game instance
+        this.enemyManager = game.enemyManager; // Convenience reference
+        this.base = game.base; // Convenience reference
         this.defenceDefinitions = {}; // To store loaded defence data by ID
         this.activeDefences = []; // Array to hold active instances
         this.isLoaded = false;
+        this.dataPath = './assets/defences.json'; // Assume default path or get from game config if needed
     }
 
-    async load() {
+    async loadDefinitions(dataPath = this.dataPath) { // Renamed from load for clarity
         try {
-            const response = await fetch(this.dataPath);
+            const response = await fetch(dataPath);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -42,11 +37,11 @@ export default class DefenceManager extends EventTarget {
             }
             
             this.isLoaded = true;
-            console.log(`DefenceManager: Loaded ${Object.keys(this.defenceDefinitions).length} defence definitions from ${this.dataPath}`);
+            console.log(`DefenceManager: Loaded ${Object.keys(this.defenceDefinitions).length} defence definitions from ${dataPath}`);
             // TODO: Load associated assets (sprites, sounds) if needed later
 
         } catch (error) {
-            console.error(`DefenceManager: Failed to load defence data from ${this.dataPath}:`, error);
+            console.error(`DefenceManager: Failed to load defence data from ${dataPath}:`, error);
             this.isLoaded = false;
             // Re-throw or handle error appropriately
             throw error;
@@ -72,8 +67,20 @@ export default class DefenceManager extends EventTarget {
             return null;
         }
 
-        // Check cost vs player currency
-        const cost = definition.stats?.cost || 0;
+        // Get dynamically calculated cost from PriceManager
+        if (!this.game.priceManager) {
+            console.error("DefenceManager: PriceManager not available on Game instance.");
+            return null;
+        }
+        const calculatedCosts = this.game.priceManager.calculateAllCosts();
+        const cost = calculatedCosts[defenceId];
+
+        if (cost === undefined || cost === Infinity) {
+             console.error(`DefenceManager: Invalid calculated cost (${cost}) for ${defenceId}. Cannot place.`);
+             return null;
+        }
+
+        // Check cost vs player currency using calculated cost
         if (!this.base.canAfford(cost)) {
             console.log(`Cannot afford ${defenceId}. Cost: ${cost}, Funds: ${this.base.currentFunds}`);
             // Optionally: Provide UI feedback here (e.g., flash cost red)

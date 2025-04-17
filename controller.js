@@ -9,7 +9,7 @@ let placementPreviewPos = null; // {x, y} in canvas coordinates
 window.addEventListener('DOMContentLoaded', async () => {
     const game = new Game();
     
-    // Wait for game to be fully initialized
+    // Wait for game to be fully initialized (including PriceManager)
     await game.ready();
 
     // Get menu and canvas elements
@@ -27,13 +27,17 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Function to create/update menu buttons
     function updateDefenceMenu(definitions) {
-        if (!defenceMenu) return;
+        if (!defenceMenu || !game.priceManager) return;
 
         defenceMenu.innerHTML = ''; // Clear existing content
+        const calculatedCosts = game.priceManager.calculateAllCosts(); // Get costs once
 
         for (const id in definitions) {
             const def = definitions[id];
-            if (def && def.name && def.stats && def.stats.cost !== undefined) {
+            // Use calculated cost instead of static cost
+            const cost = calculatedCosts[id]; 
+
+            if (def && def.name && cost !== undefined) { // Check for defined cost
                 const button = document.createElement('button');
                 button.classList.add('defence-button');
                 button.dataset.defenceId = id;
@@ -48,10 +52,10 @@ window.addEventListener('DOMContentLoaded', async () => {
                 nameSpan.classList.add('name');
                 nameSpan.textContent = def.name;
 
-                // Create span for price
+                // Create span for price using calculated cost
                 const priceSpan = document.createElement('span');
                 priceSpan.classList.add('price');
-                priceSpan.textContent = `${def.stats.cost}G`;
+                priceSpan.textContent = `${cost}G`; // Use calculated cost
 
                 // Append spans to button
                 button.appendChild(nameSpan);
@@ -59,7 +63,7 @@ window.addEventListener('DOMContentLoaded', async () => {
                 
                 defenceMenu.appendChild(button);
             } else {
-                console.warn('Skipping invalid defence definition:', def);
+                console.warn('Skipping defence definition or missing calculated cost:', id, def);
             }
         }
     }
@@ -140,7 +144,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // --- UI Update Function (Handles Text and Button States) ---
     function updateUI() {
-        if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !game.defenceManager || !defenceMenu) return;
+        if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !game.defenceManager || !defenceMenu || !game.priceManager) return;
 
         // --- Update Text Displays ---
         fundsDisplay.textContent = `${game.base.currentFunds}G`; 
@@ -158,30 +162,39 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
         waveInfoDisplay.textContent = waveText;
 
-        // --- Update Button Affordability ---
+        // --- Update Button Affordability AND Price Text ---
         const currentFunds = game.base.currentFunds;
-        const definitions = game.defenceManager.getDefinitions();
+        const calculatedCosts = game.priceManager.calculateAllCosts(); // Get current costs
         const buttons = defenceMenu.querySelectorAll('.defence-button');
 
         buttons.forEach(button => {
             const defenceId = button.dataset.defenceId;
-            const definition = definitions[defenceId];
-            const cost = definition?.stats?.cost;
+            const cost = calculatedCosts[defenceId]; 
 
-            if (cost === undefined) {
-                button.classList.add('disabled'); // Disable if cost is missing
+            // --- Update Price Text --- 
+            const priceSpan = button.querySelector('.price'); // Find the price span inside the button
+            if (priceSpan && cost !== undefined && cost !== Infinity) {
+                priceSpan.textContent = `${cost}G`; // Update the displayed text
+            } else if (priceSpan) {
+                priceSpan.textContent = `---G`; // Indicate invalid/missing cost
+            }
+            // ------------------------
+
+            if (cost === undefined || cost === Infinity) { 
+                button.classList.add('disabled'); 
                 return;
             }
 
+            // --- Update Affordability --- 
             if (currentFunds >= cost) {
                 button.classList.remove('disabled');
             } else {
                 button.classList.add('disabled');
-                // If the currently selected defence becomes unaffordable, deselect it
                 if (selectedDefenceType === defenceId) {
-                    handleDefenceSelection(defenceId, button); // Calling with same ID deselects
+                    handleDefenceSelection(defenceId, button); 
                 }
             }
+            // --------------------------
         });
     }
 

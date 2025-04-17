@@ -4,6 +4,10 @@ import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
 import Base from './base.js'; // Import the Base class
 import DefenceManager from '../defenceManager.js'; // <-- ADD Import
 import Enemy from './enemy.js'; // <--- ADD Enemy import
+import PriceManager from '../priceManager.js'; // Import PriceManager
+
+const DEFAULT_WIDTH = 1024;
+const DEFAULT_HEIGHT = 1024;
 
 export default class Game {
     constructor() {
@@ -26,6 +30,7 @@ export default class Game {
         this._initPromise = this.initialize();
         this.placementPreview = null; // {x, y} position or null
         this.updateListeners = []; // Array to hold update listener callbacks
+        this.priceManager = null; // Initialize as null
     }
     
     // --- ADD methods for placement preview --- 
@@ -90,16 +95,15 @@ export default class Game {
                 // Optionally throw error or prevent game start
             }
             
-            // Initialize DefenceManager // <-- ADD this block
+            // Initialize DefenceManager
             if (this.defencesPath) {
-                // Pass enemyManager AND base instances to DefenceManager constructor
-                this.defenceManager = new DefenceManager(this.defencesPath, this.enemyManager, this.base); 
-                await this.defenceManager.load(); // Wait for defence data to load
+                // Pass the Game instance ('this') to the constructor
+                this.defenceManager = new DefenceManager(this); 
+                // Call the renamed method loadDefinitions
+                await this.defenceManager.loadDefinitions(this.defencesPath); 
             } else {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
-                // Optionally throw an error or prevent game start if defences are critical
             }
-            // <-- END ADDED block
             
             // Draw background (Path drawing is now part of render loop)
             this.drawBackground();
@@ -145,6 +149,23 @@ export default class Game {
                 console.warn("Game Initialize: WaveManager not loaded or available, cannot start waves.")
             }
             
+            // Now instantiate PriceManager as its dependencies are ready
+            // Ensure dependencies are actually loaded before creating PriceManager
+            if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
+                const canvasWidth = this.layers.foreground?.canvas?.width || DEFAULT_WIDTH;
+                const canvasHeight = this.layers.foreground?.canvas?.height || DEFAULT_HEIGHT;
+                this.priceManager = new PriceManager(
+                    this.defenceManager,
+                    this.enemyManager,
+                    this.base,
+                    canvasWidth,
+                    canvasHeight
+                );
+            } else {
+                 throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
+            }
+
+            console.log('Game initialization complete.');
             return true;
         } catch (error) {
             console.error('Failed to initialize game:', error);
@@ -407,5 +428,10 @@ export default class Game {
             previewSize
         );
         ctx.restore();
+    }
+
+    // --- Game Setup ---
+    setupGame() {
+        // Implementation of setupGame method
     }
 }

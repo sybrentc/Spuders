@@ -3,11 +3,9 @@
     "id": "laser_tower",
     "name": "Magic tower",
     "stats": {
-      "hp": 150,
-      "cost": 300,
       "attackRate": 30000,
       "attackStrength": 100,
-      "attackRange": 200
+      "attackRange": 500
     },
     "sprite": {
       "path": "./assets/images/laser.png",
@@ -27,8 +25,6 @@
     "id": "super_laser_tower",
     "name": "Big Chungus",
     "stats": {
-      "hp": 150,
-      "cost": 3000,
       "attackRate": 300,
       "attackStrength": 45,
       "attackRange": 300
@@ -51,8 +47,6 @@
     "id": "axolotl_gunner",
     "name": "Platypus with a gun",
     "stats": {
-      "hp": 80,
-      "cost": 300,
       "attackRate": 300,
       "attackStrength": 10,
       "attackRange": 150
@@ -75,8 +69,6 @@
     "id": "tank",
     "name": "Blob tank",
     "stats": {
-      "hp": 200,
-      "cost": 200,
       "attackRate": 2000,
       "attackStrength": 100,
       "attackRange": 180
@@ -99,8 +91,6 @@
     "id": "turret_tower",
     "name": "sniper tower",
     "stats": {
-      "hp": 120,
-      "cost": 300,
       "attackRate": 10000,
       "attackStrength": 300,
       "attackRange": 99999
@@ -123,7 +113,6 @@
     "id": "glue_turret",
     "name": "subzero",
     "stats": {
-      "hp": 100,
       "cost": 500,
       "attackRate": 1000,
       "attackStrength": 0,
@@ -152,8 +141,6 @@
     "id": "mega_chungus",
     "name": "Mega Chungus",
     "stats": {
-      "hp": 150,
-      "cost": 10000,
       "attackRate": 100,
       "attackStrength": 70,
       "attackRange": 300
