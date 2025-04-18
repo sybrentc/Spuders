@@ -7,13 +7,14 @@
   },
   "stats": {
     "hp": 1000,
-    "money": 2000,
-    "exchangeRate": 2000
+    "money": 1000,
+    "costFactor": 600,
+    "bountyFactor": 0.005
   },
   "display": {
     "anchorX": 0.5,
     "anchorY": 0.8, 
-    "scale": 0.5 
+    "scale": 0.5
   },
   "sprite": {
     "path": "./assets/images/tower2.png",

@@ -22,15 +22,15 @@ export default class EnemyManager {
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
         }
-        this.enemyDataPath = enemyDataPath;
+        this.enemyDataPath = enemyDataPath; 
         this.pathDataPath = pathDataPath; // Store the path to the extended path CSV
         this.pathStatsPath = pathStatsPath; // Store the path to the stats file
-        this.base = base;
+        this.base = base;                   
 
-        this.enemyTypes = {};
-        this.enemySprites = {};
-        this.activeEnemies = [];
-        this.isLoaded = false;
+        this.enemyTypes = {};       
+        this.enemySprites = {};     
+        this.activeEnemies = [];    
+        this.isLoaded = false;      
 
         // --- Path Metrics (will be loaded from path-stats.json) ---
         this.extendedPathData = [];
@@ -38,10 +38,10 @@ export default class EnemyManager {
         this.segmentLengths = [];    // Will be loaded
         this.cumulativeDistances = []; // Will be loaded
         // ----------------------------------------------------
-
+        
         // --- Data for Average Death Distance Calculation ---
-        this.currentWaveDeathDistances = [];
-        this.lastDeathInfo = { distance: null, originalX: null, originalY: null };
+        this.currentWaveDeathDistances = []; 
+        this.lastDeathInfo = { distance: null, originalX: null, originalY: null }; 
         // -------------------------------------------------
     }
 
@@ -102,9 +102,9 @@ export default class EnemyManager {
             // Load sprites and store definitions
             const spritePromises = enemyDefinitions.map(async (enemyDef) => {
                 try {
-                    const sprite = await this.loadSprite(enemyDef.sprite.path);
-                    this.enemySprites[enemyDef.id] = sprite;
-                    this.enemyTypes[enemyDef.id] = enemyDef;
+                const sprite = await this.loadSprite(enemyDef.sprite.path);
+                this.enemySprites[enemyDef.id] = sprite;
+                this.enemyTypes[enemyDef.id] = enemyDef;
                 } catch (spriteError) {
                      console.error(`Failed to load sprite for ${enemyDef.id}:`, spriteError);
                      // Optionally, handle this: skip enemy, use placeholder, etc.
@@ -139,7 +139,7 @@ export default class EnemyManager {
         } catch (error) {
             console.error('EnemyManager: Error during loading:', error);
             this.isLoaded = false;
-            throw error;
+            throw error; 
         }
     }
 
@@ -151,6 +151,31 @@ export default class EnemyManager {
             sprite.onerror = (e) => reject(new Error(`EnemyManager: Failed to load sprite: ${path}`));
             sprite.src = path;
         });
+    }
+
+    /**
+     * Calculates the bounty for a given enemy type based on current stats and global factor.
+     * @param {string} enemyTypeId 
+     * @returns {number} The calculated bounty value.
+     */
+    getCalculatedBounty(enemyTypeId) {
+        const enemyDef = this.enemyTypes[enemyTypeId];
+        const alpha = this.base?.stats?.bountyFactor ?? 0;
+
+        if (!enemyDef || !enemyDef.stats || alpha <= 0) {
+            return 0; // No definition or factor
+        }
+
+        const hp = enemyDef.stats.hp ?? 0;
+        const speed = enemyDef.stats.speed ?? 0;
+
+        if (hp <= 0 || speed <= 0) {
+            return 0; // No bounty for invalid stats
+        }
+
+        const rawBounty = alpha * hp * speed;
+        const finalBounty = Math.max(0, rawBounty); // Ensure non-negative
+        return finalBounty;
     }
 
     // Factory method to create enemies
@@ -174,13 +199,12 @@ export default class EnemyManager {
             return null;
         }
 
-        const enemy = new Enemy({ // Pass extended path here
+        const enemy = new Enemy({ 
             id: enemyTypeId,
             name: enemyDef.name,
-            extendedPath: this.extendedPathData, // Pass the calculated extended path
+            extendedPath: this.extendedPathData, 
             sprite: sprite,
-            // startIndex: 0, // Enemy always starts at index 0 of extended path
-            base: this.base, 
+            base: this.base, // Pass base for bounty calculation
             frameWidth: enemyDef.sprite.frameWidth,
             frameHeight: enemyDef.sprite.frameHeight,
             framesPerRow: enemyDef.sprite.framesPerRow,
@@ -194,7 +218,6 @@ export default class EnemyManager {
             attackRate: enemyDef.stats.attackRate,
             attackStrength: enemyDef.stats.attackStrength,
             attackRange: enemyDef.stats.attackRange,
-            bounty: enemyDef.stats.bounty,
             flashDuration: enemyDef.effects.flashDuration
         });
         this.activeEnemies.push(enemy);
@@ -208,12 +231,18 @@ export default class EnemyManager {
             const enemy = this.activeEnemies[i];
             enemy.update(timestamp, deltaTime, this.base); 
             if (enemy.isDead) {
+                // --- Calculate and Award Bounty --- 
+                const bounty = this.getCalculatedBounty(enemy.id);
+                if (bounty > 0 && this.base) {
+                    this.base.addFunds(bounty);
+                }
+                // ----------------------------------
+
+                // --- Record Death Distance --- 
                 let totalDistance = 0;
                 const targetIndex = enemy.targetWaypointIndex;
                 const finalX = enemy.x;
                 const finalY = enemy.y;
-
-                // Use EXTENDED path data and metrics now
                 if (targetIndex > 0 && targetIndex <= this.extendedPathData.length) { 
                     const prevIndex = targetIndex - 1;
                     const p1 = this.extendedPathData[prevIndex]; 
@@ -230,7 +259,11 @@ export default class EnemyManager {
                 }
                 this.currentWaveDeathDistances.push(totalDistance);
                 this.lastDeathInfo = { distance: totalDistance, originalX: finalX, originalY: finalY };
+                // --------------------------- 
+
+                // --- Remove Enemy --- 
                 this.activeEnemies.splice(i, 1);
+                // ------------------
             }
         }
     }

@@ -5,13 +5,17 @@ export default class Enemy {
         id, name, extendedPath, sprite, 
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
         scale, anchorX, anchorY,
-        hp, speed, attackRate, attackStrength, attackRange, bounty,
+        hp, speed, attackRate, attackStrength, attackRange,
         flashDuration,
         base
     }) {
         // Identification
         this.id = id;
         this.name = name;
+        // Ensure base is provided, needed for bounty calculation
+        if (!base) {
+             throw new Error(`Enemy ${id} requires a valid Base instance.`);
+        }
         this.base = base;
         
         // --- Path Setup --- 
@@ -52,7 +56,6 @@ export default class Enemy {
         this.attackRate = attackRate;
         this.attackStrength = attackStrength;
         this.attackRange = attackRange;
-        this.bounty = bounty;
         
         // State
         this.isDead = false;
@@ -148,14 +151,13 @@ export default class Enemy {
             // Resetting maxHp to a previous value might be safest if available.
         }
 
-        this.speed = updatedDef.stats?.speed; 
-        this.attackRate = updatedDef.stats?.attackRate;
-        this.attackStrength = updatedDef.stats?.attackStrength;
-        this.attackRange = updatedDef.stats?.attackRange;
-        this.bounty = updatedDef.stats?.bounty;
+        this.speed = updatedDef.stats?.speed ?? this.speed; // Use nullish coalescing for safety
+        this.attackRate = updatedDef.stats?.attackRate ?? this.attackRate;
+        this.attackStrength = updatedDef.stats?.attackStrength ?? this.attackStrength;
+        this.attackRange = updatedDef.stats?.attackRange ?? this.attackRange;
 
         // Update effects directly
-        this.flashDuration = updatedDef.effects?.flashDuration;
+        this.flashDuration = updatedDef.effects?.flashDuration ?? this.flashDuration;
     }
     
     hit(damage) {
@@ -169,10 +171,13 @@ export default class Enemy {
     }
     
     die() {
+        // Simplified: Just set the flag. Bounty awarded by EnemyManager.
         if (this.isDead) return; 
         this.isDead = true;
-        if (this.base && this.bounty > 0) {
-            this.base.addFunds(this.bounty);
+        // Get bounty dynamically
+        const calculatedBounty = this.getBounty(); 
+        if (this.base && calculatedBounty > 0) {
+            this.base.addFunds(calculatedBounty);
         }
     }
     
@@ -247,5 +252,24 @@ export default class Enemy {
         
         // --- Draw Health Bar using utility function --- 
         drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
+    }
+
+    /**
+     * Calculates the bounty for this enemy based on its current stats and global factor.
+     * Rounds the result to the nearest 5.
+     * @returns {number} The calculated bounty value.
+     */
+    getBounty() {
+        const alpha = this.base?.stats?.bountyFactor ?? 0; // Default to 0 if base or factor missing
+        const currentHp = this.hp ?? 0; // Use current HP for bounty calculation? Or maxHp? Let's use maxHp as difficulty measure
+        const currentSpeed = this.speed ?? 0;
+        
+        if (this.maxHp <= 0 || currentSpeed <= 0 || alpha <= 0) {
+             return 0; // No bounty for invalid stats or factor
+        }
+
+        const rawBounty = alpha * this.maxHp * currentSpeed;
+        const roundedBounty = Math.max(0, Math.round(rawBounty / 5) * 5); // Ensure non-negative
+        return roundedBounty;
     }
 }

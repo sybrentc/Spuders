@@ -97,13 +97,13 @@ class PriceManager {
 
         const defenceDefinitions = this.defenceManager.getDefinitions();
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
-        const beta = this.base.stats.exchangeRate || 1;
+        const beta = this.base.stats.costFactor || 1;
         const costs = {};
 
         // --- Calculate costs for ALL defenders based on definitions ---
         for (const defenceId in defenceDefinitions) {
             const def = defenceDefinitions[defenceId];
-
+                
             // --- Basic Validation --- 
             if (!def || !def.stats) {
                 console.warn(`PriceManager: Skipping defence ${defenceId} due to missing stats block.`);
@@ -146,20 +146,24 @@ class PriceManager {
 
             for (const enemyId in enemyDefinitions) {
                 const enemy = enemyDefinitions[enemyId];
-                 if (!enemy || !enemy.stats || !enemy.stats.speed || enemy.stats.speed <= 0 || !enemy.stats.hp || enemy.stats.hp <= 0 || !enemy.stats.bounty || enemy.stats.bounty <= 0) {
+                 if (!enemy || !enemy.stats || !enemy.stats.speed || enemy.stats.speed <= 0 || !enemy.stats.hp || enemy.stats.hp <= 0) {
                     continue; // Skip invalid enemies
                 }
                 validEnemyCount++;
 
                 const speed = enemy.stats.speed;
                 const hp = enemy.stats.hp;
-                const bounty = enemy.stats.bounty;
+
+                // --- Get Bounty from EnemyManager --- 
+                const calculatedBounty = this.enemyManager.getCalculatedBounty(enemyId);
+                if (calculatedBounty <= 0) continue; // If bounty is 0, skip
+                // -----------------------------------
 
                 // --- Calculate R* (Ideal Bounty Rate) --- 
                 const timePerShotSec = rate / 1000.0;
-                const shotsToKill = Math.ceil(hp / strength); // Use ceil for discrete shots
+                const shotsToKill = Math.ceil(hp / strength); 
                 const timeToKillSec = shotsToKill * timePerShotSec;
-                const R_star = (timeToKillSec > 1e-6) ? (bounty / timeToKillSec) : 0; // Avoid division by zero
+                const R_star = (timeToKillSec > 1e-6) ? (calculatedBounty / timeToKillSec) : 0; 
                 
                 if (R_star <= 0) continue; // Cannot earn from this enemy
 

@@ -298,14 +298,21 @@ export default class Base {
                  configChanged = true;
              }
 
-             // --- Exchange Rate Update --- 
-             if (newData.stats.exchangeRate !== undefined && newData.stats.exchangeRate !== this.stats.exchangeRate) {
-                 const oldRate = this.stats.exchangeRate;
-                 // Directly update the value within this.stats
-                 this.stats.exchangeRate = newData.stats.exchangeRate;
-                 console.log(`Base exchangeRate updated from ${oldRate} to ${this.stats.exchangeRate}`);
+             // --- Cost Factor Update (Renamed from Exchange Rate) --- 
+             if (newData.stats.costFactor !== undefined && newData.stats.costFactor !== this.stats.costFactor) {
+                 const oldFactor = this.stats.costFactor;
+                 this.stats.costFactor = newData.stats.costFactor; // Update the value in this.stats
+                 console.log(`Base costFactor updated from ${oldFactor} to ${this.stats.costFactor}`);
                  configChanged = true;
-                 // Note: PriceManager will pick this up on its next calculation.
+             }
+
+             // --- Bounty Factor Update ---
+             if (newData.stats.bountyFactor !== undefined && newData.stats.bountyFactor !== this.stats.bountyFactor) {
+                 const oldFactor = this.stats.bountyFactor;
+                 this.stats.bountyFactor = newData.stats.bountyFactor; // Update the value in this.stats
+                 console.log(`Base bountyFactor updated from ${oldFactor} to ${this.stats.bountyFactor}`);
+                 configChanged = true;
+                 // Note: EnemyManager/PriceManager will pick this up automatically.
              }
 
              // Add other stats updates here...
