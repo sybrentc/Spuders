@@ -8,152 +8,140 @@ function distanceBetween(point1, point2) {
 }
 
 export default class EnemyManager {
-    constructor(enemyDataPath, pathData, base) {
+    // Note: pathDataPath parameter now expects the path to the PRE-COMPUTED extended path CSV
+    constructor(enemyDataPath, pathDataPath, pathStatsPath, base) {
         if (!enemyDataPath) {
             throw new Error("EnemyManager requires an enemyDataPath.");
         }
-        if (!pathData || pathData.length < 2) {
-            console.warn("EnemyManager created with invalid original pathData. Path extension and metrics calculation might fail.");
-            this.originalPathData = []; 
-        } else {
-            this.originalPathData = pathData; // Store original path temporarily
+        if (!pathDataPath) {
+             throw new Error("EnemyManager requires a pathDataPath (to the extended path CSV).");
+        }
+        if (!pathStatsPath) {
+             throw new Error("EnemyManager requires a pathStatsPath.");
         }
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
         }
-        this.enemyDataPath = enemyDataPath; 
-        this.base = base;                   
+        this.enemyDataPath = enemyDataPath;
+        this.pathDataPath = pathDataPath; // Store the path to the extended path CSV
+        this.pathStatsPath = pathStatsPath; // Store the path to the stats file
+        this.base = base;
 
-        this.enemyTypes = {};       
-        this.enemySprites = {};     
-        this.activeEnemies = [];    
-        this.isLoaded = false;      
+        this.enemyTypes = {};
+        this.enemySprites = {};
+        this.activeEnemies = [];
+        this.isLoaded = false;
 
-        // --- Path Metrics (will be based on EXTENDED path) ---
-        this.extendedPathData = [];      // Stores the final path including spawn/despawn
-        this.segmentLengths = [];        
-        this.cumulativeDistances = []; 
+        // --- Path Metrics (will be loaded from path-stats.json) ---
+        this.extendedPathData = [];
+        this.totalPathLength = null; // Added property for pre-calculated length
+        this.segmentLengths = [];    // Will be loaded
+        this.cumulativeDistances = []; // Will be loaded
         // ----------------------------------------------------
-        
+
         // --- Data for Average Death Distance Calculation ---
-        this.currentWaveDeathDistances = []; 
-        this.lastDeathInfo = { distance: null, originalX: null, originalY: null }; 
+        this.currentWaveDeathDistances = [];
+        this.lastDeathInfo = { distance: null, originalX: null, originalY: null };
         // -------------------------------------------------
-
-        // Note: Path metrics calculation is deferred until after enemy types are loaded
     }
 
-    // --- Method to calculate path metrics (NOW uses extended path) ---
-    _calculatePathMetrics() {
-        if (!this.extendedPathData || this.extendedPathData.length < 2) {
-            console.error("EnemyManager: Cannot calculate path metrics, extendedPathData is invalid.");
-            this.segmentLengths = [];
-            this.cumulativeDistances = [];
-            return;
+    // --- Helper to load CSV Path Data ---
+    async _loadCsvPath(filePath) {
+        try {
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                 throw new Error(`HTTP error! status: ${response.status} loading ${filePath}`);
+            }
+            const data = await response.text();
+            const lines = data.trim().split('\n');
+            return lines.map(line => {
+                const [x, y] = line.split(',').map(Number);
+                if (isNaN(x) || isNaN(y)) {
+                    console.warn(`Invalid data in CSV line: "${line}" from ${filePath}. Skipping.`);
+                    return null; // Return null for invalid lines
+                }
+                return { x, y };
+            }).filter(p => p !== null); // Filter out invalid entries
+        } catch (error) {
+            console.error(`Error loading CSV path from ${filePath}:`, error);
+            throw error; // Re-throw after logging
         }
-
-        this.segmentLengths = [];
-        this.cumulativeDistances = [];
-        let currentCumulativeDistance = 0;
-
-        for (let i = 0; i < this.extendedPathData.length - 1; i++) {
-            const p1 = this.extendedPathData[i];
-            const p2 = this.extendedPathData[i+1];
-            const length = distanceBetween(p1, p2);
-            
-            this.segmentLengths.push(length);
-            currentCumulativeDistance += length;
-            this.cumulativeDistances.push(currentCumulativeDistance);
-        }
-        console.log(`EnemyManager: Calculated metrics for ${this.segmentLengths.length} extended path segments.`);
-        // console.log("Extended Cumulative Distances:", this.cumulativeDistances);
     }
-    // -------------------------------------------
+    // --- End Helper ---
+
+    // --- Helper to load JSON Stats Data ---
+     async _loadJsonStats(filePath) {
+         try {
+             const response = await fetch(filePath);
+             if (!response.ok) {
+                  throw new Error(`HTTP error! status: ${response.status} loading ${filePath}`);
+             }
+             const stats = await response.json();
+             // Basic validation
+             if (typeof stats.totalPathLength !== 'number' || !Array.isArray(stats.segmentLengths) || !Array.isArray(stats.cumulativeDistances)) {
+                 throw new Error(`Invalid format in path stats file: ${filePath}`);
+             }
+             return stats;
+         } catch (error) {
+             console.error(`Error loading path stats from ${filePath}:`, error);
+             throw error; // Re-throw after logging
+         }
+     }
+    // --- End Helper ---
 
     // Method to load initial data
     async load() {
         try {
-            const response = await fetch(this.enemyDataPath);
-            const enemyDefinitions = await response.json();
+            // 1. Load Enemy Definitions and Sprites
+            const enemyResponse = await fetch(this.enemyDataPath);
+             if (!enemyResponse.ok) throw new Error(`HTTP error! status: ${enemyResponse.status} loading ${this.enemyDataPath}`);
+            const enemyDefinitions = await enemyResponse.json();
 
             console.log(`EnemyManager: Loading ${enemyDefinitions.length} enemy types from ${this.enemyDataPath}`);
 
             // Load sprites and store definitions
-            for (const enemyDef of enemyDefinitions) {
-                const sprite = await this.loadSprite(enemyDef.sprite.path);
-                this.enemySprites[enemyDef.id] = sprite;
-                this.enemyTypes[enemyDef.id] = enemyDef;
-            }
+            const spritePromises = enemyDefinitions.map(async (enemyDef) => {
+                try {
+                    const sprite = await this.loadSprite(enemyDef.sprite.path);
+                    this.enemySprites[enemyDef.id] = sprite;
+                    this.enemyTypes[enemyDef.id] = enemyDef;
+                } catch (spriteError) {
+                     console.error(`Failed to load sprite for ${enemyDef.id}:`, spriteError);
+                     // Optionally, handle this: skip enemy, use placeholder, etc.
+                     // For now, it will prevent the enemy type from being fully loaded.
+                }
+            });
+            await Promise.all(spritePromises); // Wait for all sprites to load (or fail)
 
-            // --- Generate Extended Path and Calculate Metrics --- 
-            const maxDiagonal = this._calculateMaxSpriteDiagonal();
-            this.extendedPathData = this._generateExtendedPath(this.originalPathData, maxDiagonal);
-            this._calculatePathMetrics(); // Calculate metrics based on the extended path
-            // ----------------------------------------------------
+            // 2. Load Pre-computed Extended Path Data
+            console.log(`EnemyManager: Loading pre-computed extended path from ${this.pathDataPath}`);
+            this.extendedPathData = await this._loadCsvPath(this.pathDataPath);
+            if (!this.extendedPathData || this.extendedPathData.length < 2) {
+                 throw new Error(`Failed to load a valid extended path (needs >= 2 points) from ${this.pathDataPath}`);
+            }
+             console.log(`EnemyManager: Loaded ${this.extendedPathData.length} waypoints for the extended path.`);
+
+            // 3. Load Pre-computed Path Statistics
+            console.log(`EnemyManager: Loading pre-computed path stats from ${this.pathStatsPath}`);
+            const pathStats = await this._loadJsonStats(this.pathStatsPath);
+            this.totalPathLength = pathStats.totalPathLength;
+            this.segmentLengths = pathStats.segmentLengths;
+            this.cumulativeDistances = pathStats.cumulativeDistances;
+             if (this.segmentLengths.length !== this.extendedPathData.length - 1) {
+                 console.warn(`EnemyManager: Mismatch between loaded segment lengths (${this.segmentLengths.length}) and path waypoints (${this.extendedPathData.length}).`);
+                 // Decide if this is fatal or just a warning
+             }
+             console.log(`EnemyManager: Loaded path stats - Total Length: ${this.totalPathLength.toFixed(2)}`);
 
             this.isLoaded = true;
-            console.log('EnemyManager: All enemy types loaded and extended path generated.');
+            console.log('EnemyManager: All enemy types, extended path, and path stats loaded.');
             return true;
         } catch (error) {
-            console.error('EnemyManager: Error loading enemy types or generating path:', error);
+            console.error('EnemyManager: Error during loading:', error);
             this.isLoaded = false;
-            throw error; 
+            throw error;
         }
     }
-
-    // --- Helper to find max sprite diagonal --- 
-    _calculateMaxSpriteDiagonal() {
-        let maxDiagonalSq = 0;
-        for (const typeId in this.enemyTypes) {
-            const def = this.enemyTypes[typeId];
-            if (def && def.sprite && def.display) {
-                 const w = def.sprite.frameWidth || 0;
-                 const h = def.sprite.frameHeight || 0;
-                 const s = def.display.scale || 1;
-                 const diagonalSq = (w * w + h * h) * s * s; // Compare squared distances
-                 if (diagonalSq > maxDiagonalSq) {
-                     maxDiagonalSq = diagonalSq;
-                 }
-            }
-        }
-        const maxDiagonal = Math.sqrt(maxDiagonalSq);
-        console.log(`EnemyManager: Calculated max sprite diagonal for path extension: ${maxDiagonal.toFixed(1)}px`);
-        return maxDiagonal; // Return the actual diagonal, not squared
-    }
-    // -----------------------------------------
-
-    // --- Helper to generate the extended path --- 
-    _generateExtendedPath(originalPath, extensionDistance) {
-         if (!originalPath || originalPath.length < 2) {
-            console.warn(`EnemyManager: Cannot extend path with less than 2 waypoints.`);
-            return originalPath || []; 
-        }
-        if (extensionDistance <= 0) {
-             console.warn(`EnemyManager: Extension distance (${extensionDistance}) is zero or negative. Returning original path.`);
-             return [...originalPath]; // Return a copy
-        }
-
-        // Calculate Spawn Point
-        const p0 = originalPath[0];
-        const p1 = originalPath[1];
-        let normStartX = 0, normStartY = 0;
-        const dxStart = p1.x - p0.x, dyStart = p1.y - p0.y;
-        const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
-        if (distStart > 0.001) { normStartX = dxStart / distStart; normStartY = dyStart / distStart; }
-        const spawnPoint = { x: p0.x - normStartX * extensionDistance, y: p0.y - normStartY * extensionDistance };
-
-        // Calculate Despawn Point
-        const pn = originalPath[originalPath.length - 1];
-        const pn_1 = originalPath[originalPath.length - 2];
-        let normEndX = 0, normEndY = 0;
-        const dxEnd = pn.x - pn_1.x, dyEnd = pn.y - pn_1.y;
-        const distEnd = Math.sqrt(dxEnd * dxEnd + dyEnd * dyEnd);
-        if (distEnd > 0.001) { normEndX = dxEnd / distEnd; normEndY = dyEnd / distEnd; }
-        const despawnPoint = { x: pn.x + normEndX * extensionDistance, y: pn.y + normEndY * extensionDistance };
-
-        return [spawnPoint, ...originalPath, despawnPoint];
-    }
-    // -------------------------------------------
 
     // Method to load sprites
     loadSprite(path) {
@@ -345,7 +333,8 @@ export default class EnemyManager {
      * Calculates the (x, y) coordinates at a specific distance along the EXTENDED path.
      */
     getPointAtDistance(targetDistance) {
-        if (targetDistance < 0 || !this.cumulativeDistances || this.cumulativeDistances.length === 0) {
+        if (targetDistance < 0 || !this.cumulativeDistances || this.cumulativeDistances.length === 0 || !this.segmentLengths || this.segmentLengths.length === 0) {
+            console.warn(`getPointAtDistance: Called with invalid targetDistance (${targetDistance}) or path metrics not loaded.`);
             return null; 
         }
         let targetSegmentIndex = -1;
@@ -358,18 +347,19 @@ export default class EnemyManager {
         if (targetSegmentIndex === -1) {
              if(this.extendedPathData && this.extendedPathData.length > 0) {
                  const lastPoint = this.extendedPathData[this.extendedPathData.length - 1];
-                 return { ...lastPoint }; 
+                 return { ...lastPoint }; // Return copy of end point
              } else {
                  return null; 
              }
         }
-        // Use EXTENDED path data here
+        // Use EXTENDED path data and loaded metrics
         const p1 = this.extendedPathData[targetSegmentIndex]; 
         const p2 = this.extendedPathData[targetSegmentIndex + 1]; 
         const distanceToStartOfSegment = (targetSegmentIndex === 0) ? 0 : this.cumulativeDistances[targetSegmentIndex - 1];
         const distanceIntoSegment = targetDistance - distanceToStartOfSegment;
-        const segmentLength = this.segmentLengths[targetSegmentIndex]; // Uses metrics calculated from extended path
-        const factor = (segmentLength > 0.001) ? (distanceIntoSegment / segmentLength) : 0;
+        const segmentLength = this.segmentLengths[targetSegmentIndex]; // Use loaded metric
+        // Avoid division by zero for zero-length segments
+        const factor = (segmentLength > 1e-6) ? (distanceIntoSegment / segmentLength) : 0;
         const x = p1.x + (p2.x - p1.x) * factor;
         const y = p1.y + (p2.y - p1.y) * factor;
         return { x, y };

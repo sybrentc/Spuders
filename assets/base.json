@@ -7,8 +7,8 @@
   },
   "stats": {
     "hp": 1000,
-    "money": 1000,
-    "exchangeRate": 8
+    "money": 2000,
+    "exchangeRate": 2000
   },
   "display": {
     "anchorX": 0.5,

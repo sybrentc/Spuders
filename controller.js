@@ -25,47 +25,50 @@ window.addEventListener('DOMContentLoaded', async () => {
         return; // Stop if canvas is missing
     }
 
-    // Function to create/update menu buttons
+    // Function to create/update menu buttons (NOW SORTS BY PRICE)
     function updateDefenceMenu(definitions) {
         if (!defenceMenu || !game.priceManager) return;
 
         defenceMenu.innerHTML = ''; // Clear existing content
         const calculatedCosts = game.priceManager.calculateAllCosts(); // Get costs once
 
-        for (const id in definitions) {
-            const def = definitions[id];
-            // Use calculated cost instead of static cost
+        // --- Sort defences by calculated cost --- 
+        const sortedDefences = Object.entries(definitions)
+            .filter(([id, def]) => calculatedCosts[id] !== undefined && calculatedCosts[id] !== Infinity) // Filter out invalid costs before sorting
+            .sort(([idA], [idB]) => calculatedCosts[idA] - calculatedCosts[idB]);
+        // --------------------------------------
+
+        // --- Create buttons from sorted list --- 
+        for (const [id, def] of sortedDefences) {
+            // Cost is already calculated and validated during sorting
             const cost = calculatedCosts[id]; 
 
-            if (def && def.name && cost !== undefined) { // Check for defined cost
+            // Check only for name, as cost validity checked in filter
+            if (def && def.name) { 
                 const button = document.createElement('button');
                 button.classList.add('defence-button');
                 button.dataset.defenceId = id;
 
-                // Add click listener to each button
                 button.addEventListener('click', () => {
                     handleDefenceSelection(id, button);
                 });
 
-                // Create span for name
                 const nameSpan = document.createElement('span');
                 nameSpan.classList.add('name');
                 nameSpan.textContent = def.name;
 
-                // Create span for price using calculated cost
                 const priceSpan = document.createElement('span');
                 priceSpan.classList.add('price');
                 priceSpan.textContent = `${cost}G`; // Use calculated cost
 
-                // Append spans to button
                 button.appendChild(nameSpan);
                 button.appendChild(priceSpan);
                 
                 defenceMenu.appendChild(button);
-            } else {
-                console.warn('Skipping defence definition or missing calculated cost:', id, def);
-            }
+            } 
+            // Removed else block - warnings handled by filter implicitly
         }
+        // --- End button creation ---
     }
 
     // Function to handle defence selection

@@ -1,6 +1,8 @@
 {
     "mapImage": "/assets/images/map.png",
-    "pathData": "/assets/paths/path.csv",
+    "pathData": "/assets/paths/path-extended.csv",
+    "pathCoverageData": "/assets/paths/path-coverage.csv",
+    "pathStatsPath": "/assets/paths/path-stats.json",
     "enemyData": "/assets/enemies.json",
     "baseData": "/assets/base.json",
     "waveDataPath": "/assets/waves/waves.json",

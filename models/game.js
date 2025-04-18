@@ -15,7 +15,9 @@ export default class Game {
         this.layers = {}; // Store layers by name
         this.config = null;
         this.levelData = null;
-        this.pathData = null;
+        this.pathDataPath = null; // Store the path string to the extended CSV
+        this.pathCoverageDataPath = null; // <-- ADDED property
+        this.pathStatsPath = null; // <-- ADDED property
         this.waveDataPath = null;
         this.baseDataPath = null; // ADD path for base config
         this.defencesPath = null; // <-- ADD this line
@@ -73,14 +75,25 @@ export default class Game {
                  throw baseError; // Re-throw to stop game initialization
             }
 
-            // Initialize EnemyManager second, passing the base instance
+            // Initialize EnemyManager second, passing paths and base
             const enemyDataPath = this.levelData?.enemyData;
             if (!enemyDataPath) {
                 throw new Error("Game Initialize: Level data is missing required 'enemyData' path.");
             }
-            // Pass this.base to the constructor
-            this.enemyManager = new EnemyManager(enemyDataPath, this.pathData, this.base);
-            await this.enemyManager.load(); // Load enemy definitions and sprites
+            if (!this.pathDataPath) {
+                throw new Error("Game Initialize: pathDataPath was not loaded correctly from level data.");
+            }
+            // Ensure pathStatsPath was loaded <-- ADDED Check
+            if (!this.pathStatsPath) {
+                throw new Error("Game Initialize: pathStatsPath was not loaded correctly from level data.");
+            }
+            this.enemyManager = new EnemyManager(
+                enemyDataPath,
+                this.pathDataPath,
+                this.pathStatsPath, // <-- ADDED Argument
+                this.base
+            );
+            await this.enemyManager.load(); 
             
             // Initialize WaveManager - PASS PATH, ENEMY MANAGER INSTANCE, and CREATE FUNCTION
             if (this.waveDataPath && this.enemyManager) {
@@ -150,17 +163,19 @@ export default class Game {
             }
             
             // Now instantiate PriceManager as its dependencies are ready
-            // Ensure dependencies are actually loaded before creating PriceManager
             if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
-                const canvasWidth = this.layers.foreground?.canvas?.width || DEFAULT_WIDTH;
-                const canvasHeight = this.layers.foreground?.canvas?.height || DEFAULT_HEIGHT;
+                // Ensure the pathCoverageDataPath was loaded in loadLevel
+                if (!this.pathCoverageDataPath) {
+                    throw new Error("Game Initialize: pathCoverageDataPath was not loaded correctly from level data.");
+                }
+
                 this.priceManager = new PriceManager(
                     this.defenceManager,
                     this.enemyManager,
                     this.base,
-                    canvasWidth,
-                    canvasHeight
+                    this.pathCoverageDataPath // Use the loaded path string
                 );
+                await this.priceManager.load();
             } else {
                  throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
             }
@@ -203,25 +218,33 @@ export default class Game {
                 });
             }
             
-            // Load waypoint data
+            // Store waypoint data PATH
             if (this.levelData.pathData) {
-                try {
-                    const pathResponse = await fetch(this.levelData.pathData);
-                    const pathText = await pathResponse.text();
-                    
-                    // Parse CSV into waypoints array
-                    this.pathData = pathText.split('\n')
-                        .filter(line => line.trim() !== '')
-                        .map(line => {
-                            const [x, y] = line.split(',').map(coord => parseFloat(coord.trim()));
-                            return { x, y };
-                        });
-                    
-                    console.log(`Loaded ${this.pathData.length} waypoints`);
-                } catch (pathError) {
-                    console.error('Failed to load path data:', pathError);
-                }
+                 this.pathDataPath = this.levelData.pathData; 
+                 console.log(`Game: Found path data file path: ${this.pathDataPath}`);
+            } else {
+                 console.warn(`No pathData found in level ${levelId} configuration.`);
+                 this.pathDataPath = null;
             }
+            
+            // Store path coverage data PATH
+            if (this.levelData.pathCoverageData) {
+                 this.pathCoverageDataPath = this.levelData.pathCoverageData;
+                 console.log(`Game: Found path coverage data file path: ${this.pathCoverageDataPath}`);
+            } else {
+                 console.warn(`No pathCoverageData found in level ${levelId} configuration.`);
+                 this.pathCoverageDataPath = null;
+            }
+
+            // Store path stats data PATH <-- ADDED Block
+            if (this.levelData.pathStatsPath) {
+                 this.pathStatsPath = this.levelData.pathStatsPath;
+                 console.log(`Game: Found path stats data file path: ${this.pathStatsPath}`);
+            } else {
+                 console.warn(`No pathStatsPath found in level ${levelId} configuration.`);
+                 this.pathStatsPath = null;
+            }
+            // <-- END ADDED Block
             
             // Store wave data PATH
             if (this.levelData.waveDataPath) {
