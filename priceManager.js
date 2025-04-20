@@ -45,15 +45,21 @@ class PriceManager {
      * @param {EnemyManager} enemyManager - Instance of EnemyManager
      * @param {Base} base - Instance of Base
      * @param {string} pathCoverageDataPath - Path to the path-coverage.csv file
+     * @param {Game} game - The main Game instance
      */
-    constructor(defenceManager, enemyManager, base, pathCoverageDataPath) {
+    constructor(defenceManager, enemyManager, base, pathCoverageDataPath, game) {
         if (!defenceManager || !enemyManager || !base || !pathCoverageDataPath) {
             throw new Error("PriceManager requires defenceManager, enemyManager, base, and pathCoverageDataPath.");
         }
+        // Added check for game instance
+        if (!game || typeof game.getDifficulty !== 'function') { // Check if it looks like a Game instance
+            throw new Error("PriceManager requires a valid Game instance.");
+        }
         this.defenceManager = defenceManager;
         this.enemyManager = enemyManager;
-        this.base = base;
+        this.base = base; // Keep base for now, might be needed elsewhere?
         this.pathCoverageDataPath = pathCoverageDataPath;
+        this.game = game; // Store the game instance
         this.isLoaded = false;
         this.coverageLookup = []; // Initialize lookup table
     }
@@ -97,7 +103,8 @@ class PriceManager {
 
         const defenceDefinitions = this.defenceManager.getDefinitions();
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
-        const beta = this.base.stats.costFactor || 1;
+        // Use game.getDifficulty() to get the live value
+        const beta = this.game.getDifficulty();
         const costs = {};
 
         // --- Calculate costs for ALL defenders based on definitions ---

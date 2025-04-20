@@ -9,7 +9,7 @@ function distanceBetween(point1, point2) {
 
 export default class EnemyManager {
     // Note: pathDataPath parameter now expects the path to the PRE-COMPUTED extended path CSV
-    constructor(enemyDataPath, pathDataPath, pathStatsPath, base) {
+    constructor(enemyDataPath, pathDataPath, pathStatsPath, base, game) {
         if (!enemyDataPath) {
             throw new Error("EnemyManager requires an enemyDataPath.");
         }
@@ -22,10 +22,14 @@ export default class EnemyManager {
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
         }
+        if (!game || typeof game.getCurrencyScale !== 'function') {
+             throw new Error("EnemyManager requires a valid Game instance.");
+        }
         this.enemyDataPath = enemyDataPath; 
         this.pathDataPath = pathDataPath; // Store the path to the extended path CSV
         this.pathStatsPath = pathStatsPath; // Store the path to the stats file
         this.base = base;                   
+        this.game = game; // Store game instance
 
         this.enemyTypes = {};       
         this.enemySprites = {};     
@@ -160,9 +164,9 @@ export default class EnemyManager {
      */
     getCalculatedBounty(enemyTypeId) {
         const enemyDef = this.enemyTypes[enemyTypeId];
-        const alpha = this.base?.stats?.bountyFactor ?? 0;
+        const alpha = this.game.getCurrencyScale();
 
-        if (!enemyDef || !enemyDef.stats || alpha <= 0) {
+        if (!enemyDef || !enemyDef.stats || alpha === null || alpha < 0) {
             return 0; // No definition or factor
         }
 

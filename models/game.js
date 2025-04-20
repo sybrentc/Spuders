@@ -33,6 +33,8 @@ export default class Game {
         this.placementPreview = null; // {x, y} position or null
         this.updateListeners = []; // Array to hold update listener callbacks
         this.priceManager = null; // Initialize as null
+        this.difficulty = null;
+        this.currencyScale = null;
     }
     
     // --- ADD methods for placement preview --- 
@@ -87,11 +89,17 @@ export default class Game {
             if (!this.pathStatsPath) {
                 throw new Error("Game Initialize: pathStatsPath was not loaded correctly from level data.");
             }
+            // --> ADDED: Get currencyScale from levelData
+            const currencyScale = this.levelData?.currencyScale;
+            if (typeof currencyScale !== 'number' || currencyScale < 0) {
+                throw new Error(`Game Initialize: Invalid currencyScale (${currencyScale}) found in level data.`);
+            }
             this.enemyManager = new EnemyManager(
                 enemyDataPath,
                 this.pathDataPath,
                 this.pathStatsPath, // <-- ADDED Argument
-                this.base
+                this.base,
+                this // <-- Pass the Game instance instead of currencyScale
             );
             await this.enemyManager.load(); 
             
@@ -129,6 +137,15 @@ export default class Game {
 
             // --- Register Managers with TuningManager --- 
             if (this.tuningManager) { // Ensure TuningManager exists
+                // Register THIS Game instance for level data updates
+                 if (this.levelData) { // levelData should exist here
+                      // Construct the path dynamically based on convention or store it
+                      const levelDataPath = './assets/level1.json'; // TODO: Make this dynamic if needed
+                      this.tuningManager.register(this, levelDataPath);
+                 } else {
+                      console.warn("Game Initialize: Cannot register Game for tuning, levelData is missing.");
+                 }
+
                 if (this.enemyManager && this.levelData?.enemyData) {
                     this.tuningManager.register(this.enemyManager, this.levelData.enemyData);
                 }
@@ -173,7 +190,8 @@ export default class Game {
                     this.defenceManager,
                     this.enemyManager,
                     this.base,
-                    this.pathCoverageDataPath // Use the loaded path string
+                    this.pathCoverageDataPath, // Use the loaded path string
+                    this // <-- Pass the Game instance instead of difficulty
                 );
                 await this.priceManager.load();
             } else {
@@ -187,6 +205,33 @@ export default class Game {
             this.initialized = false;
             return false;
         }
+    }
+    
+    /**
+     * Applies live updates to game-level parameters (difficulty, currencyScale).
+     * @param {object} newData - The data object fetched from the level JSON.
+     */
+    applyParameterUpdates(newData) {
+        let updated = false;
+        if (typeof newData.difficulty === 'number' && newData.difficulty > 0 && newData.difficulty !== this.difficulty) {
+            console.log(`Game: Updating difficulty from ${this.difficulty} to ${newData.difficulty}`);
+            this.difficulty = newData.difficulty;
+            updated = true;
+            // Note: PriceManager will automatically pick this up next time it calculates costs.
+        }
+        if (typeof newData.currencyScale === 'number' && newData.currencyScale >= 0 && newData.currencyScale !== this.currencyScale) {
+            console.log(`Game: Updating currencyScale from ${this.currencyScale} to ${newData.currencyScale}`);
+            this.currencyScale = newData.currencyScale;
+            updated = true;
+            // Note: EnemyManager will automatically pick this up next time it calculates bounty.
+        }
+        // Add more parameter checks here if needed
+
+        // if (updated) {
+        //     // Optionally, trigger events or recalculations if immediate effect is needed beyond polling
+        //     // For example, if PriceManager needed to immediately recalculate all prices:
+        //     // if (this.priceManager) this.priceManager.calculateAllCosts(); // But this recalculates all, maybe too much
+        // }
     }
     
     // Returns a promise that resolves when the game is fully initialized
@@ -205,6 +250,23 @@ export default class Game {
                 width: this.levelData.canvas.width,
                 height: this.levelData.canvas.height
             };
+            
+            // --> Store initial difficulty and currencyScale from levelData
+            if (typeof this.levelData.difficulty === 'number' && this.levelData.difficulty > 0) {
+                 this.difficulty = this.levelData.difficulty;
+                 console.log(`Game: Initial difficulty set to ${this.difficulty}`);
+            } else {
+                 console.warn(`Game: Using default difficulty ${this.difficulty}. Invalid or missing value in level data.`);
+                 // No throw, use default
+            }
+            if (typeof this.levelData.currencyScale === 'number' && this.levelData.currencyScale >= 0) {
+                 this.currencyScale = this.levelData.currencyScale;
+                 console.log(`Game: Initial currencyScale set to ${this.currencyScale}`);
+            } else {
+                 console.warn(`Game: Using default currencyScale ${this.currencyScale}. Invalid or missing value in level data.`);
+                 // No throw, use default
+            }
+            // --- End storing initial values ---
             
             // Load background image
             if (this.levelData.mapImage) {
@@ -457,4 +519,14 @@ export default class Game {
     setupGame() {
         // Implementation of setupGame method
     }
+
+    // --- Getters for Live Parameters ---
+    getDifficulty() {
+         return this.difficulty;
+    }
+
+    getCurrencyScale() {
+         return this.currencyScale;
+    }
+    // --- End Getters ---
 }
