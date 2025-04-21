@@ -7,8 +7,8 @@
     "baseData": "/assets/base.json",
     "waveDataPath": "/assets/waves/waves.json",
     "defencesPath": "/assets/defences.json",
-    "difficulty": 600,
-    "currencyScale": 0.005,
+    "difficulty": 185,
+    "currencyScale": 0.002,
     "canvas": {
       "width": 1024,
       "height": 1024

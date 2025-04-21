@@ -85,5 +85,34 @@
     "effects": {
       "flashDuration": 100
     }
+  },
+  {
+    "id": "super_tank",
+    "name": "Super Tank",
+    "description": "Faster and stronger spider variant",
+    "sprite": {
+      "path": "./assets/images/spider-blue.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 400
+    },
+    "display": {
+      "scale": 0.8,
+      "anchorX": 0.5,
+      "anchorY": 0.6
+    },
+    "stats": {
+      "hp": 1500,
+      "speed": 90,
+      "attackRate": 1500,
+      "attackStrength": 15,
+      "attackRange": 100,
+      "bounty": 150
+    },
+    "effects": {
+      "flashDuration": 100
+    }
   }
 ]

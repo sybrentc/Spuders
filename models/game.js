@@ -35,6 +35,11 @@ export default class Game {
         this.priceManager = null; // Initialize as null
         this.difficulty = null;
         this.currencyScale = null;
+        // Path metrics - loaded from path-stats.json
+        this.totalPathLength = null;
+        this.segmentLengths = [];
+        this.cumulativeDistances = [];
+        this.extendedPathData = []; // Add storage for path waypoints
     }
     
     // --- ADD methods for placement preview --- 
@@ -96,10 +101,8 @@ export default class Game {
             }
             this.enemyManager = new EnemyManager(
                 enemyDataPath,
-                this.pathDataPath,
-                this.pathStatsPath, // <-- ADDED Argument
                 this.base,
-                this // <-- Pass the Game instance instead of currencyScale
+                this // <-- Pass the Game instance
             );
             await this.enemyManager.load(); 
             
@@ -284,6 +287,28 @@ export default class Game {
             if (this.levelData.pathData) {
                  this.pathDataPath = this.levelData.pathData; 
                  console.log(`Game: Found path data file path: ${this.pathDataPath}`);
+                 // --- Load path coordinates directly --- 
+                 try {
+                     const pathResponse = await fetch(this.pathDataPath);
+                     if (!pathResponse.ok) throw new Error(`HTTP ${pathResponse.status} loading path data`);
+                     const pathCsv = await pathResponse.text();
+                     const lines = pathCsv.trim().split('\n');
+                     this.extendedPathData = lines.map(line => {
+                         const [x, y] = line.split(',').map(Number);
+                         if (isNaN(x) || isNaN(y)) {
+                             throw new Error(`Invalid data in path CSV line: ${line}`);
+                         }
+                         return { x, y };
+                     });
+                     if (this.extendedPathData.length < 2) {
+                         throw new Error('Path requires at least two waypoints.');
+                     }
+                     console.log(`Game: Loaded ${this.extendedPathData.length} path waypoints.`);
+                 } catch (pathError) {
+                     console.error(`Game: Failed to load or parse path data from ${this.pathDataPath}:`, pathError);
+                     throw pathError; // Re-throw to stop initialization
+                 }
+                 // ----------------------------------
             } else {
                  console.warn(`No pathData found in level ${levelId} configuration.`);
                  this.pathDataPath = null;
@@ -302,6 +327,23 @@ export default class Game {
             if (this.levelData.pathStatsPath) {
                  this.pathStatsPath = this.levelData.pathStatsPath;
                  console.log(`Game: Found path stats data file path: ${this.pathStatsPath}`);
+                 // --- Load path stats directly --- 
+                 try {
+                     const statsResponse = await fetch(this.pathStatsPath);
+                     if (!statsResponse.ok) throw new Error(`HTTP ${statsResponse.status} loading path stats`);
+                     const statsData = await statsResponse.json();
+                     if (typeof statsData.totalPathLength !== 'number' || !Array.isArray(statsData.segmentLengths) || !Array.isArray(statsData.cumulativeDistances)) {
+                         throw new Error('Invalid format in path stats file');
+                     }
+                     this.totalPathLength = statsData.totalPathLength;
+                     this.segmentLengths = statsData.segmentLengths;
+                     this.cumulativeDistances = statsData.cumulativeDistances;
+                     console.log(`Game: Loaded path stats - Total Length: ${this.totalPathLength.toFixed(2)}`);
+                 } catch (statsError) {
+                     console.error(`Game: Failed to load or parse path stats from ${this.pathStatsPath}:`, statsError);
+                     throw statsError; // Re-throw to stop initialization
+                 }
+                 // ------------------------------
             } else {
                  console.warn(`No pathStatsPath found in level ${levelId} configuration.`);
                  this.pathStatsPath = null;
@@ -458,37 +500,6 @@ export default class Game {
             }
         });
 
-        // --- Draw Path (REMOVED) ---
-        
-        // --- REMOVED: Target Death Point (Red Dot) & Group Arrival Times (Blue Dots) ---
-        // const avgDeathDist = this.waveManager.getLastAverageDeathDistance();
-        // if (avgDeathDist !== null && avgDeathDist > 0) {
-        //     const deathPoint = this.enemyManager.getPointAtDistance(avgDeathDist);
-        //     if (deathPoint) {
-        //         // Draw Red Dot
-        //         ...
-        //         // Draw Blue Dots for Group CoM Arrival Times
-        //         const groupMetrics = this.waveManager.getActiveWaveGroupMetrics();
-        //         if (groupMetrics && groupMetrics.length > 0) {
-        //             ...
-        //         }
-        //     }
-        // }
-        // --- END REMOVED ---
-
-        // --- REMOVED: Last Death Test Markers (Orange Recalculated, Yellow Original) ---
-        // const lastDeath = this.enemyManager.getLastDeathInfo();
-        // if (lastDeath && lastDeath.distance !== null) {
-        //     const recalculatedPoint = this.enemyManager.getPointAtDistance(lastDeath.distance);
-        //     if (recalculatedPoint) {
-        //         // Draw Orange marker at recalculated position
-        //         ...
-        //         // Draw Yellow X marker at original death position
-        //         ...
-        //     }
-        // }
-        // --- END REMOVED ---
-
         // 5. Render OVERLAY effects / UI previews last
         if (this.placementPreview) {
             this.renderPlacementPreview(this.fgCtx);
@@ -529,4 +540,67 @@ export default class Game {
          return this.currencyScale;
     }
     // --- End Getters ---
+
+    // --- Path Metric Getters --- 
+    getTotalPathLength() {
+        return this.totalPathLength;
+    }
+
+    getSegmentLengths() {
+        return this.segmentLengths;
+    }
+
+    getCumulativeDistances() {
+        return this.cumulativeDistances;
+    }
+    // --- End Path Metric Getters ---
+
+    // --- Path Coordinate Getter ---
+    getExtendedPathData() {
+        return this.extendedPathData;
+    }
+    // --- End Path Coordinate Getter ---
+}
+
+// --- Standalone Path Utility Function --- 
+// (Moved from EnemyManager, adapted to use 'this' for game data)
+function getPointAtDistance(targetDistance) {
+    // Use 'this' which will be bound to the Game instance
+    const pathData = this.getExtendedPathData(); // NEW way - get path from Game
+    const cumulativeDistances = this.getCumulativeDistances();
+    const segmentLengths = this.getSegmentLengths();
+
+    if (!pathData || pathData.length === 0 || !cumulativeDistances || !segmentLengths) {
+        console.warn(`getPointAtDistance: Called when path data or metrics not loaded.`);
+        return null;
+    }
+    if (targetDistance < 0) {
+        console.warn(`getPointAtDistance: Called with invalid targetDistance (${targetDistance}).`);
+        return null; 
+    }
+    if (targetDistance === 0) return { ...pathData[0] };
+
+    let targetSegmentIndex = -1;
+    for (let i = 0; i < cumulativeDistances.length; i++) {
+        if (targetDistance <= cumulativeDistances[i]) {
+            targetSegmentIndex = i;
+            break;
+        }
+    }
+
+    if (targetSegmentIndex === -1) {
+        return { ...pathData[pathData.length - 1] }; // Return copy of end point
+    }
+
+    const p1 = pathData[targetSegmentIndex];
+    const p2 = pathData[targetSegmentIndex + 1];
+    const distanceToStartOfSegment = (targetSegmentIndex === 0) ? 0 : cumulativeDistances[targetSegmentIndex - 1];
+    const distanceIntoSegment = targetDistance - distanceToStartOfSegment;
+    const segmentLength = segmentLengths[targetSegmentIndex];
+
+    const factor = (segmentLength > 1e-6) ? (distanceIntoSegment / segmentLength) : 0;
+
+    const x = p1.x + (p2.x - p1.x) * factor;
+    const y = p1.y + (p2.y - p1.y) * factor;
+    return { x, y };
 }

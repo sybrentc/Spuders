@@ -358,9 +358,10 @@ async function main() {
 
         // --- Part 3: Calculate Average Path Coverage --- 
         const coverageResults = [];
-        console.log("Starting average coverage calculation...");
+        console.log("Starting coverage calculation (finding OPTIMUM fraction)..."); // Log updated
         for (const testRange of RANGES_TO_TEST) {
-            let totalCoveredLengthSum = 0;
+            // let totalCoveredLengthSum = 0; // REMOVED average calculation variable
+            let maxCoveredLengthForRange = 0; // ADDED variable to track maximum
             for (let i = 0; i < NUM_PATH_SAMPLES; i++) {
                 const sampleDistance = (i / (NUM_PATH_SAMPLES - 1)) * totalPathLength;
                 const defenderPos = getPointAtDistance(extendedPathData, cumulativeDistances, segmentLengths, sampleDistance);
@@ -374,11 +375,13 @@ async function main() {
                     const p2 = extendedPathData[j + 1];
                     coveredLengthForThisDefender += calculateSegmentIntersectionLength(p1, p2, defenderPos, testRange);
                 }
-                totalCoveredLengthSum += coveredLengthForThisDefender;
+                // totalCoveredLengthSum += coveredLengthForThisDefender; // REMOVED sum accumulation
+                maxCoveredLengthForRange = Math.max(maxCoveredLengthForRange, coveredLengthForThisDefender); // UPDATE: track maximum
             }
-            const averageCoveredLength = totalCoveredLengthSum / NUM_PATH_SAMPLES;
-            const averageCoverageFraction = averageCoveredLength / totalPathLength;
-            coverageResults.push([testRange, averageCoverageFraction]);
+            // const averageCoveredLength = totalCoveredLengthSum / NUM_PATH_SAMPLES; // REMOVED average calculation
+            // const averageCoverageFraction = averageCoveredLength / totalPathLength; // REMOVED average calculation
+            const optimumCoverageFraction = maxCoveredLengthForRange / totalPathLength; // CALCULATE optimum fraction
+            coverageResults.push([testRange, optimumCoverageFraction]); // STORE optimum fraction
             if (testRange % 100 === 0) {
                  console.log(`  ... completed calculation for range ${testRange}`);
             }

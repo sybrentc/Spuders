@@ -9,15 +9,9 @@ function distanceBetween(point1, point2) {
 
 export default class EnemyManager {
     // Note: pathDataPath parameter now expects the path to the PRE-COMPUTED extended path CSV
-    constructor(enemyDataPath, pathDataPath, pathStatsPath, base, game) {
+    constructor(enemyDataPath, base, game) {
         if (!enemyDataPath) {
             throw new Error("EnemyManager requires an enemyDataPath.");
-        }
-        if (!pathDataPath) {
-             throw new Error("EnemyManager requires a pathDataPath (to the extended path CSV).");
-        }
-        if (!pathStatsPath) {
-             throw new Error("EnemyManager requires a pathStatsPath.");
         }
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
@@ -26,8 +20,6 @@ export default class EnemyManager {
              throw new Error("EnemyManager requires a valid Game instance.");
         }
         this.enemyDataPath = enemyDataPath; 
-        this.pathDataPath = pathDataPath; // Store the path to the extended path CSV
-        this.pathStatsPath = pathStatsPath; // Store the path to the stats file
         this.base = base;                   
         this.game = game; // Store game instance
 
@@ -35,63 +27,12 @@ export default class EnemyManager {
         this.enemySprites = {};     
         this.activeEnemies = [];    
         this.isLoaded = false;      
-
-        // --- Path Metrics (will be loaded from path-stats.json) ---
-        this.extendedPathData = [];
-        this.totalPathLength = null; // Added property for pre-calculated length
-        this.segmentLengths = [];    // Will be loaded
-        this.cumulativeDistances = []; // Will be loaded
-        // ----------------------------------------------------
         
         // --- Data for Average Death Distance Calculation ---
         this.currentWaveDeathDistances = []; 
         this.lastDeathInfo = { distance: null, originalX: null, originalY: null }; 
         // -------------------------------------------------
     }
-
-    // --- Helper to load CSV Path Data ---
-    async _loadCsvPath(filePath) {
-        try {
-            const response = await fetch(filePath);
-            if (!response.ok) {
-                 throw new Error(`HTTP error! status: ${response.status} loading ${filePath}`);
-            }
-            const data = await response.text();
-            const lines = data.trim().split('\n');
-            return lines.map(line => {
-                const [x, y] = line.split(',').map(Number);
-                if (isNaN(x) || isNaN(y)) {
-                    console.warn(`Invalid data in CSV line: "${line}" from ${filePath}. Skipping.`);
-                    return null; // Return null for invalid lines
-                }
-                return { x, y };
-            }).filter(p => p !== null); // Filter out invalid entries
-        } catch (error) {
-            console.error(`Error loading CSV path from ${filePath}:`, error);
-            throw error; // Re-throw after logging
-        }
-    }
-    // --- End Helper ---
-
-    // --- Helper to load JSON Stats Data ---
-     async _loadJsonStats(filePath) {
-         try {
-             const response = await fetch(filePath);
-             if (!response.ok) {
-                  throw new Error(`HTTP error! status: ${response.status} loading ${filePath}`);
-             }
-             const stats = await response.json();
-             // Basic validation
-             if (typeof stats.totalPathLength !== 'number' || !Array.isArray(stats.segmentLengths) || !Array.isArray(stats.cumulativeDistances)) {
-                 throw new Error(`Invalid format in path stats file: ${filePath}`);
-             }
-             return stats;
-         } catch (error) {
-             console.error(`Error loading path stats from ${filePath}:`, error);
-             throw error; // Re-throw after logging
-         }
-     }
-    // --- End Helper ---
 
     // Method to load initial data
     async load() {
@@ -117,28 +58,14 @@ export default class EnemyManager {
             });
             await Promise.all(spritePromises); // Wait for all sprites to load (or fail)
 
-            // 2. Load Pre-computed Extended Path Data
-            console.log(`EnemyManager: Loading pre-computed extended path from ${this.pathDataPath}`);
-            this.extendedPathData = await this._loadCsvPath(this.pathDataPath);
-            if (!this.extendedPathData || this.extendedPathData.length < 2) {
-                 throw new Error(`Failed to load a valid extended path (needs >= 2 points) from ${this.pathDataPath}`);
+            // --- Check if Game has loaded path data (optional sanity check) --- 
+            if (this.game && this.game.getExtendedPathData().length === 0) {
+                console.warn("EnemyManager Load: Game instance does not seem to have loaded path coordinate data yet.");
             }
-             console.log(`EnemyManager: Loaded ${this.extendedPathData.length} waypoints for the extended path.`);
-
-            // 3. Load Pre-computed Path Statistics
-            console.log(`EnemyManager: Loading pre-computed path stats from ${this.pathStatsPath}`);
-            const pathStats = await this._loadJsonStats(this.pathStatsPath);
-            this.totalPathLength = pathStats.totalPathLength;
-            this.segmentLengths = pathStats.segmentLengths;
-            this.cumulativeDistances = pathStats.cumulativeDistances;
-             if (this.segmentLengths.length !== this.extendedPathData.length - 1) {
-                 console.warn(`EnemyManager: Mismatch between loaded segment lengths (${this.segmentLengths.length}) and path waypoints (${this.extendedPathData.length}).`);
-                 // Decide if this is fatal or just a warning
-             }
-             console.log(`EnemyManager: Loaded path stats - Total Length: ${this.totalPathLength.toFixed(2)}`);
+            // -----------------------------------------------------------------
 
             this.isLoaded = true;
-            console.log('EnemyManager: All enemy types, extended path, and path stats loaded.');
+            console.log('EnemyManager: All enemy types loaded. Path data/stats loaded by Game.'); // Updated log
             return true;
         } catch (error) {
             console.error('EnemyManager: Error during loading:', error);
@@ -179,11 +106,11 @@ export default class EnemyManager {
 
         const rawBounty = alpha * hp * speed;
         const finalBounty = Math.max(0, rawBounty); // Ensure non-negative
-        return finalBounty;
+        return Math.round(finalBounty); // Round to nearest integer
     }
 
     // Factory method to create enemies
-    createEnemy(enemyTypeId) { // Removed startIndex parameter
+    async createEnemy(enemyTypeId) { // Make async to handle awaiting sprite promise
         if (!this.isLoaded) {
             console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Manager not loaded yet.`);
             return null;
@@ -193,20 +120,40 @@ export default class EnemyManager {
             return null;
         }
         const enemyDef = this.enemyTypes[enemyTypeId];
-        const sprite = this.enemySprites[enemyTypeId];
+        let spriteOrPromise = this.enemySprites[enemyTypeId];
+
+        // --- Handle potential sprite loading promise --- 
+        let sprite;
+        if (spriteOrPromise instanceof Promise) {
+            console.log(`EnemyManager: Waiting for sprite promise for ${enemyTypeId}...`);
+            try {
+                sprite = await spriteOrPromise;
+                // Store the resolved sprite for next time
+                this.enemySprites[enemyTypeId] = sprite; 
+            } catch (error) {
+                 console.error(`EnemyManager: Error resolving sprite promise for ${enemyTypeId}:`, error);
+                 return null; // Cannot create enemy if sprite failed
+            }
+        } else {
+            sprite = spriteOrPromise; // It was already loaded or null
+        }
+        // --------------------------------------------- 
+
         if (!sprite) {
-            console.error(`EnemyManager: Sprite for enemy type ${enemyTypeId} not loaded`);
+            console.error(`EnemyManager: Sprite for enemy type ${enemyTypeId} not loaded or failed to load`);
             return null;
         }
-         if (!this.extendedPathData || this.extendedPathData.length === 0) {
-            console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing.`);
-            return null;
-        }
+         // Get path data from game
+         const extendedPathData = this.game.getExtendedPathData();
+         if (!extendedPathData || extendedPathData.length === 0) {
+             console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing from game instance.`);
+             return null;
+         }
 
         const enemy = new Enemy({ 
             id: enemyTypeId,
             name: enemyDef.name,
-            extendedPath: this.extendedPathData, 
+            extendedPath: extendedPathData, // Use path from game
             sprite: sprite,
             base: this.base, // Pass base for bounty calculation
             frameWidth: enemyDef.sprite.frameWidth,
@@ -247,15 +194,24 @@ export default class EnemyManager {
                 const targetIndex = enemy.targetWaypointIndex;
                 const finalX = enemy.x;
                 const finalY = enemy.y;
-                if (targetIndex > 0 && targetIndex <= this.extendedPathData.length) { 
-                    const prevIndex = targetIndex - 1;
-                    const p1 = this.extendedPathData[prevIndex]; 
-                    const cumulativeDistanceToP1 = (prevIndex === 0) ? 0 : (this.cumulativeDistances[prevIndex - 1] || 0);
-                    const distanceOnSegment = distanceBetween(p1, { x: finalX, y: finalY }); 
-                    totalDistance = cumulativeDistanceToP1 + distanceOnSegment;
+                // Get path data from game
+                const extendedPathData = this.game.getExtendedPathData();
+                if (targetIndex > 0 && targetIndex <= extendedPathData.length) { 
+                    // Get metrics from Game instance
+                    const cumulativeDistances = this.game.getCumulativeDistances();
+                    if (!cumulativeDistances || cumulativeDistances.length === 0) {
+                        console.error("Death Calc: Cannot get cumulative distances from game.");
+                        totalDistance = 0;
+                    } else {
+                        const prevIndex = targetIndex - 1;
+                        const p1 = extendedPathData[prevIndex]; // Use path from game
+                        const cumulativeDistanceToP1 = (prevIndex === 0) ? 0 : (cumulativeDistances[prevIndex - 1] || 0);
+                        const distanceOnSegment = distanceBetween(p1, { x: finalX, y: finalY }); 
+                        totalDistance = cumulativeDistanceToP1 + distanceOnSegment;
+                    }
                 } else { 
-                    if (this.extendedPathData && this.extendedPathData.length > 0) {
-                        const p1 = this.extendedPathData[0]; 
+                    if (extendedPathData && extendedPathData.length > 0) {
+                        const p1 = extendedPathData[0]; // Use path from game
                         totalDistance = distanceBetween(p1, { x: finalX, y: finalY }); 
                     } else {
                          totalDistance = 0; 
@@ -295,28 +251,58 @@ export default class EnemyManager {
         // Create a map for efficient lookup of new definitions by ID
         const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
 
-        // 1. Update Blueprints (this.enemyTypes)
+        // --- Process ALL incoming definitions --- 
         newDefinitionsMap.forEach((newDef, enemyId) => {
-            // Only update existing blueprints, don't add new ones via tuning
-            if (this.enemyTypes.hasOwnProperty(enemyId)) {
-                // Note: This doesn't reload sprites, only definition data.
-                // A full reload might be needed if sprite paths change, but that's complex.
-                this.enemyTypes[enemyId] = { ...this.enemyTypes[enemyId], ...newDef }; // Merge updates
+            const existingDef = this.enemyTypes[enemyId];
+
+            if (existingDef) {
+                // --- Update Existing Enemy --- 
+                // Merge definition updates (shallow merge, consider deep merge if needed)
+                this.enemyTypes[enemyId] = { ...existingDef, ...newDef }; 
+                
+                // Check if sprite path changed
+                const oldSpritePath = existingDef.sprite?.path;
+                const newSpritePath = newDef.sprite?.path;
+
+                if (newSpritePath && newSpritePath !== oldSpritePath) {
+                    console.log(`EnemyManager: Sprite path changed for ${enemyId}. Reloading sprite from ${newSpritePath}`);
+                    // Start loading new sprite, store the promise
+                    // Overwrite existing sprite or promise
+                    this.enemySprites[enemyId] = this.loadSprite(newSpritePath).catch(err => {
+                        console.error(`EnemyManager: Failed to reload sprite for ${enemyId} from ${newSpritePath}:`, err);
+                        return null; // Store null on failure to prevent repeated attempts
+                    });
+                }
                 // console.log(`EnemyManager: Updated blueprint for ${enemyId}`);
             } else {
-                console.warn(`EnemyManager: TuningManager update contained unknown enemyId: ${enemyId}. Ignoring.`);
+                // --- Add New Enemy --- 
+                console.log(`EnemyManager: Adding new enemy type: ${enemyId}`);
+                this.enemyTypes[enemyId] = newDef; // Add the new definition
+
+                // Load sprite for the new enemy, store the promise
+                const newSpritePath = newDef.sprite?.path;
+                if (newSpritePath) {
+                    this.enemySprites[enemyId] = this.loadSprite(newSpritePath).catch(err => {
+                        console.error(`EnemyManager: Failed to load sprite for new enemy ${enemyId} from ${newSpritePath}:`, err);
+                        return null; // Store null on failure
+                    });
+                } else {
+                    console.warn(`EnemyManager: New enemy type ${enemyId} has no sprite path defined.`);
+                    this.enemySprites[enemyId] = null; // Ensure it's explicitly null
+                }
             }
         });
 
-        // 2. Update Active Enemy Instances
+        // --- Update Active Enemy Instances (using the updated blueprints) --- 
         this.activeEnemies.forEach(enemy => {
-            const updatedDef = newDefinitionsMap.get(enemy.id);
+            const updatedDef = this.enemyTypes[enemy.id]; // Get potentially updated definition
             if (updatedDef) {
                 // Call the enemy's own update method
                 enemy.applyUpdate(updatedDef);
                  // console.log(`EnemyManager: Applied update to active enemy ${enemy.id}`);
             }
         });
+        // ----------------------------------------------------------------
     }
 
     // Helper to expose the data path 
@@ -338,15 +324,6 @@ export default class EnemyManager {
         return this.enemyTypes;
     }
     
-    // Method to get the calculated extended path data
-    getExtendedPath() {
-        if (!this.isLoaded) {
-            console.warn("EnemyManager: getExtendedPath called before path was generated.");
-            return [];
-        }
-        return this.extendedPathData;
-    }
-
     // Method to calculate average death distance (uses EXTENDED path distances now)
     calculateAverageDeathDistance() {
         if (this.currentWaveDeathDistances.length === 0) {
@@ -370,35 +347,11 @@ export default class EnemyManager {
      * Calculates the (x, y) coordinates at a specific distance along the EXTENDED path.
      */
     getPointAtDistance(targetDistance) {
-        if (targetDistance < 0 || !this.cumulativeDistances || this.cumulativeDistances.length === 0 || !this.segmentLengths || this.segmentLengths.length === 0) {
-            console.warn(`getPointAtDistance: Called with invalid targetDistance (${targetDistance}) or path metrics not loaded.`);
-            return null; 
+        // DELEGATE to Game instance's method
+        if (!this.game || typeof this.game.getPointAtDistance !== 'function') {
+            console.error("EnemyManager: Cannot call getPointAtDistance, game instance or method missing.");
+            return null;
         }
-        let targetSegmentIndex = -1;
-        for (let i = 0; i < this.cumulativeDistances.length; i++) {
-            if (targetDistance <= this.cumulativeDistances[i]) {
-                targetSegmentIndex = i;
-                break;
-            }
-        }
-        if (targetSegmentIndex === -1) {
-             if(this.extendedPathData && this.extendedPathData.length > 0) {
-                 const lastPoint = this.extendedPathData[this.extendedPathData.length - 1];
-                 return { ...lastPoint }; // Return copy of end point
-             } else {
-                 return null; 
-             }
-        }
-        // Use EXTENDED path data and loaded metrics
-        const p1 = this.extendedPathData[targetSegmentIndex]; 
-        const p2 = this.extendedPathData[targetSegmentIndex + 1]; 
-        const distanceToStartOfSegment = (targetSegmentIndex === 0) ? 0 : this.cumulativeDistances[targetSegmentIndex - 1];
-        const distanceIntoSegment = targetDistance - distanceToStartOfSegment;
-        const segmentLength = this.segmentLengths[targetSegmentIndex]; // Use loaded metric
-        // Avoid division by zero for zero-length segments
-        const factor = (segmentLength > 1e-6) ? (distanceIntoSegment / segmentLength) : 0;
-        const x = p1.x + (p2.x - p1.x) * factor;
-        const y = p1.y + (p2.y - p1.y) * factor;
-        return { x, y };
+        return this.game.getPointAtDistance(targetDistance);
     }
 }

@@ -151,6 +151,15 @@ class PriceManager {
             let sumOfEnemyEarningRates = 0;
             let validEnemyCount = 0;
 
+            // --- Get Total Path Length ONCE before the loop --- 
+            const totalPathLength = this.game.getTotalPathLength();
+            if (totalPathLength === null || totalPathLength <= 0) {
+                 console.error(`PriceManager: Invalid totalPathLength (${totalPathLength}) from Game instance. Cannot calculate dynamic costs.`);
+                 costs[defenceId] = Infinity;
+                 continue; // Skip this defence if path length is invalid
+            }
+            // ------------------------------------------------
+
             for (const enemyId in enemyDefinitions) {
                 const enemy = enemyDefinitions[enemyId];
                  if (!enemy || !enemy.stats || !enemy.stats.speed || enemy.stats.speed <= 0 || !enemy.stats.hp || enemy.stats.hp <= 0) {
@@ -179,7 +188,11 @@ class PriceManager {
                 const f_e = this.coverageLookup[lookupRange] || 0; // Default to 0 if lookup fails
 
                 // --- Calculate f_k (Kill Completion Factor) --- 
-                const timeInRangeSec = range / speed; // Use original range
+                // const timeInRangeSec = range / speed; // OLD calculation
+                // REFINED calculation using actual path length in range:
+                const pathLengthInRange = totalPathLength * f_e;
+                const timeInRangeSec = (speed > 1e-6) ? (pathLengthInRange / speed) : 0; // Avoid division by zero
+                
                 const f_k = Math.min(timeInRangeSec / timeToKillSec, 1.0);
 
                 // --- Calculate and Accumulate --- 
