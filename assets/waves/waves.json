@@ -2,11 +2,12 @@
   "initialDelayMs": 3000,
   "delayBetweenWavesMs": 5000,
   "delayBetweenEnemiesMs": 1000,
-  "delayBetweenEnemiesVarianceMs": 250,
+  "delayBetweenEnemiesVarianceMs": 500,
   "startingDifficulty": 25000,
   "difficultyIncreaseFactor": 1.5,
   "waveGeneration": {
       "difficultyTolerance": 0.10,
-      "maxSelectionAttempts": 200
+      "maxSelectionAttempts": 200,
+      "maxPrepopulationPerType": 25
   }
 }
