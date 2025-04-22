@@ -97,9 +97,9 @@
 <p style="text-align: center; font-size: 0.9em;">Figure 1: Path coverage fraction vs. defender range.</p>
 
 <p>The graph shows a few different regimes. The first regime starts at a range equal to the size of the exclusion zone, i.e., the distance from the path within which no defenders may be placed. Any defender with a range of that size or less could not achieve overlap with the path. To first-order approximation, the overlap grows linearly with range in the first regime. This regime is indicated on the map below by red dots. In this regime, defenders need to be placed in 'hot spots', corresponding to parts of the path with high radii of curvature. Note that our path has a complex winding part and a straight part, we can refer to these as the knot and the string. The second regime occurs when the range gets large enough that we no longer need to concern ourselves with the complex winding part of the path, since the entire knot falls within range. This marks the start of the second regime, indicated by blue dots on the map below. Here, the optimal defender positions are not in hot spots but seem to follow a centre of mass approach, capturing the knot in all cases while expanding range to capture more additional string as well. The second regime transitions into the third regime around the range corresponding to the theoretical minimum radius of a freely placed circle which covers our path entirely. The third regime corresponds to a full coverage of the entire path. The following map shows the calculated optimal defender positions for range values up to 500 pixels. Larger ranges have wider error bars on their optimal positions and are therefore less informative.</p>
-<div id="mapContainer" style="position: relative; width: 800px; height: 800px; margin: 2em auto; border: 1px solid #ccc;">
+<div id="mapContainer" style="position: relative; width: 600px; height: 600px; margin: 2em auto; border: 1px solid #ccc;">
     <img id="mapImage" src="../assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
-    <canvas id="optimumPositionsCanvas" width="800" height="800" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+    <canvas id="optimumPositionsCanvas" width="600" height="600" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
 </div>
 <p style="text-align: center; font-size: 0.9em;">Figure 2: Optimal defender placement positions. Red dots are below a threshold range; blue dots above it. The blue circle indicates the smallest defender range in the second regime, centred on its optimum position. Note that the blue circle covers the complex turns of the path almost entirely.</p>
 <!-- End Map Visualization Section -->
@@ -376,8 +376,8 @@
       // Define original (data) and display dimensions
       const originalWidth = 1024;
       const originalHeight = 1024;
-      const displayWidth = 800;
-      const displayHeight = 800;
+      const displayWidth = 600;
+      const displayHeight = 600;
 
       // Set canvas size explicitly
       mapCanvas.width = displayWidth;
