@@ -5,6 +5,7 @@ import Base from './base.js'; // Import the Base class
 import DefenceManager from '../defenceManager.js'; // <-- ADD Import
 import Enemy from './enemy.js'; // <--- ADD Enemy import
 import PriceManager from '../priceManager.js'; // Import PriceManager
+import { minDistanceToPath } from '../utils/geometryUtils.js'; // <-- ADD Import
 
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
@@ -30,7 +31,7 @@ export default class Game {
         this.defenceManager = null; // <-- ADD defenceManager property
         this.lastTimestamp = 0;
         this._initPromise = this.initialize();
-        this.placementPreview = null; // {x, y} position or null
+        this.placementPreview = null; // {x, y, isValid} object or null
         this.updateListeners = []; // Array to hold update listener callbacks
         this.priceManager = null; // Initialize as null
         this.difficulty = null;
@@ -44,7 +45,30 @@ export default class Game {
     
     // --- ADD methods for placement preview --- 
     setPlacementPreview(position) {
-        this.placementPreview = position;
+        if (!position) {
+            this.placementPreview = null;
+            return;
+        }
+        
+        // Check if path data and config are available
+        const path = this.extendedPathData; 
+        const exclusionRadius = this.levelData?.pathExclusionRadius;
+
+        if (path && path.length >= 2 && typeof exclusionRadius === 'number') { // Ensure path has at least 2 points
+            const distance = minDistanceToPath(position, path); // Use path variable
+            const isValid = distance >= exclusionRadius;
+            this.placementPreview = { ...position, isValid };
+        } else {
+            // If path or config not ready, assume invalid or hide preview
+             if (!path || path.length < 2) {
+                  console.warn("setPlacementPreview: Path data not available or incomplete.");
+             }
+             if (typeof exclusionRadius !== 'number') {
+                 console.warn(`setPlacementPreview: pathExclusionRadius (${exclusionRadius}) not available or not a number in level data.`);
+             }
+             this.placementPreview = { ...position, isValid: false }; 
+            // Or set to null: this.placementPreview = null;
+        }
     }
 
     getPlacementPreview() {
@@ -514,9 +538,16 @@ export default class Game {
     renderPlacementPreview(ctx) {
         if (!this.placementPreview) return;
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Semi-transparent red
+        
+        // Choose color based on validity
+        if (this.placementPreview.isValid) {
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.5)'; // Semi-transparent green
+        } else {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Semi-transparent red
+        }
+        
         // Simple square for now, size could be based on defence type later
-        const previewSize = 40;
+        const previewSize = 40; 
         ctx.fillRect(
             this.placementPreview.x - previewSize / 2, 
             this.placementPreview.y - previewSize / 2, 

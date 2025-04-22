@@ -110,21 +110,29 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Canvas Click Listener
     gameCanvas.addEventListener('click', (event) => {
-        if (!isPlacingDefence || !selectedDefenceType || !placementPreviewPos) return;
-        
-        // Tell DefenceManager to place the defence
-        if (game.defenceManager) {
-            game.defenceManager.placeDefence(selectedDefenceType, placementPreviewPos);
-            // TODO: Check return value for success (e.g., enough money)
+        // Check placement state AND validity from the game model
+        const currentPreview = game.getPlacementPreview(); 
+        if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) {
+           // If not placing, no type selected, or preview doesn't exist or is invalid, do nothing
+           // console.log("Placement attempt ignored: Invalid state or location."); // Optional debug log
+           return;
         }
 
-        // Clear selection state
+        // If we reach here, placement is attempted on a valid spot
+        
+        // Tell DefenceManager to place the defence (it now trusts the position is valid)
+        if (game.defenceManager) {
+            // Pass the known valid position from the preview object
+            game.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
+        }
+
+        // Clear selection state (only if placement was attempted, successful or not)
         const selectedButton = document.querySelector(`.defence-button[data-defence-id="${selectedDefenceType}"]`);
         if (selectedButton) selectedButton.classList.remove('selected');
         
         selectedDefenceType = null;
         isPlacingDefence = false;
-        placementPreviewPos = null;
+        placementPreviewPos = null; // Clear the controller's cached position
         // Update game state to remove preview
         game.setPlacementPreview(null);
     });

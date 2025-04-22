@@ -8,7 +8,8 @@
     "waveDataPath": "/assets/waves/waves.json",
     "defencesPath": "/assets/defences.json",
     "difficulty": 185,
-    "currencyScale": 0.002,
+    "currencyScale": 0.003,
+    "pathExclusionRadius": 35.0,
     "canvas": {
       "width": 1024,
       "height": 1024
