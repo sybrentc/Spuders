@@ -3,8 +3,8 @@
     "id": "laser_tower",
     "name": "Magic tower",
     "stats": {
-      "attackRate": 30000,
-      "attackStrength": 100,
+      "attackRate": 15000,
+      "attackStrength": 70,
       "attackRange": 500
     },
     "sprite": {
@@ -141,8 +141,8 @@
     "id": "mega_chungus",
     "name": "Mega Chungus",
     "stats": {
-      "attackRate": 100,
-      "attackStrength": 70,
+      "attackRate": 500,
+      "attackStrength": 110,
       "attackRange": 300
     },
     "sprite": {
