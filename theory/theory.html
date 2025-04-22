@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Break-Even Beta Derivation</title>
+    <title>Tower defence theory</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Latin+Modern+Roman&display=swap" rel="stylesheet">
@@ -30,27 +30,36 @@
     <a href="mailto:s.tencate@outlook.com" style="color: inherit; text-decoration: none;">s.tencate@outlook.com</a>
 </p>
 
-<p>I'm working on a tower defence game and want to try something cool. Specifically, I was looking into a way of calculating the prices of different types of defender units. The idea is to get an algorithmically calculated price for each defender, rather than having to manually tune their prices.</p>
+<h2>Wave generation</h2>
+
+<p>We generate waves of enemies according to an increasing difficulty score. The difficulty score \(W_n\) of a given wave \(n\) is given by the initial difficulty \(W_0\) multiplied by a difficulty increase factor \(f\) raised to the power of the wave number \(n\):</p>
+\[ W_n = W_0 f^n \tag{1} \]
+
+<p>This gives the total difficulty for a given wave such that we get waves of exponentially increasing difficulty. To now turn this into a selection of enemies for the wave, we assign each enemy type \(i\) a difficulty score \(w_i\). We assert that an enemy is more difficult to defeat the greater its speed \(s_i\) and health \(h_i\). Since the difficulty has an arbitrary scale, we simply assign the per-enemy difficulty score for type \(i\) as \(w_i = h_i s_i\). The total difficulty score of the wave is the sum of the difficulty scores of all the enemy types in the wave.</p>
+
+\[ \sum_{i=1}^{N} (h_i s_i) = W_0 f^n \tag{2} \]
+
+<p>We then select the enemy types for the wave such that the sum of the difficulty scores of the selected enemy types equals the total difficulty score of the wave. We make the selection by assigning each enemy type an equal probability of spawning, and then iterate by adding and removing enemies until we get within a tolerance of the target wave difficulty.</p>
 
 <h2>Defender valuation</h2>
 
-<p>To achieve this, I took an idea from business valuation. For a business, we might look at their yearly profit, multiply that by a factor such as 15, and the result would be a valuation of the business. That's what you might expect to pay for the business if you wanted to buy it.</p>
+<p>It would be good to have algorithmically determined defender prices, which reflect their usefulness against enemies.To achieve this, we can take an idea from business valuation. For a business, we might look at their yearly profit, multiply that by a factor such as 15, and the result would be a valuation of the business. That's what you might expect to pay for the business if you wanted to buy it.</p>
 
 <p>In terms of the tower defence game, then, I know that the defenders will earn money by killing enemies. That's because the enemies have a bounty which gets added to your funds when they die. So, the idea is to set the defender's cost, \(C\), proportional to its expected earning rate, \(R\), using a tunable pre-factor, \(\alpha\).</p>
 
-\[ C = \alpha R \tag{1} \]
+\[ C = \alpha R \tag{3} \]
 
 <p>Now, to calculate the expected earning power of a given defender, we start simply with the case of a single defender of a given type versus a single enemy of a given type. Once we have that, then we can use an expectation value across all enemy types to get the expected earning power of that defender.</p>
 
 <p>So, say we have a single defender versus a single enemy. We can then set up a probability chain similar to the Drake equation to find the earning rate \(R\) for this specific pairing. We start with the ideal earning rate, \(R^*\), which assumes the defender has the enemy in range until it kills the enemy and obtains the bounty. We then multiply this ideal rate by the probability that the enemy is in range, \(P(\text{in range})\), and by the probability that the kill completes while the enemy is still in range, \(P(\text{kill completes})\).</p>
 
-\[ R = R^* P(\text{in range}) P(\text{kill completes}) \tag{2} \]
+\[ R = R^* P(\text{in range}) P(\text{kill completes}) \tag{4} \]
 
 <p>The ideal earning rate, \(R^*\), is simply the enemy bounty, \(B\), divided by the time it takes the defender to kill the enemy, \(T_k\). While the bounty \(B\) can be set manually, it can also be algorithmically determined based on enemy properties, for example, making it proportional (via a constant \(\beta\)) to the enemy's speed \(s\) and health \(h\). The time to kill, \(T_k\), depends on the enemy health \(h\), the defender's damage per hit \(D\), and the defender's attack rate \(r\). Specifically, we need the number of hits required, which is the health divided by damage, rounded up to the nearest integer (ceiling function), divided by the attack rate. This ideal earning rate assumes an enemy is in range of the defender and that it stays in range until the kill completes.</p>
 
-\[ R^* = \frac{B}{T_k} \tag{3} \]
-\[ B = \beta s h \tag{4} \]
-\[ T_k = \left\lceil \frac{h}{D} \right\rceil / r \tag{5} \]
+\[ R^* = \frac{B}{T_k} \tag{5} \]
+\[ B = \beta s h \tag{6} \]
+\[ T_k = \left\lceil \frac{h}{D} \right\rceil / r \tag{7} \]
 
 <p>To calculate P(in range), we simply ask what the probability is that an enemy, placed at random along its path of attack, is in range of the defender. Since the enemy traverses the path at uniform speed, this simplifies to asking what fraction of the path is in range of the defender. Of course, we don't know where the defender is going to be placed, but the player will place it somewhere along the path. We thus need to consider all positions along the path, for each position obtain the path length in range of the defender, and average the results. The path length in range is obtained by substituting the parametrised line equation for that segment into the circle equation for that defender position and solving it using the quadratic formula. This is carried out in a pre-calculation step and stored as a look-up table. For our given path shape, the result looks as follows</p>
 
@@ -62,16 +71,16 @@
 
 <p>Next, we need to calculate \(P(\text{kill completes})\). This probability accounts for the fact that an enemy moves through the range, so will only stay in range for a limited time, \(T_r\). If the time in range is shorter than the time to kill \(T_k\), then the defender cannot complete the kill. However, the defender can reduce the enemy health by a percentage. We can choose to consider that health reduction a probability to complete the kill, since we can choose to view a 100% chance of a 50% health reduction as mathematically equivalent to a 50% chance of a 100% health reduction. The time in range can be expressed in terms of the total path length \(L\).</p>
 
-\[ P(\text{kill completes}) = \min\left( \frac{T_r}{T_k}, 1 \right) \tag{6} \]
-\[ T_r = P(\text{in range}) \frac{L}{s} \tag{7} \]
+\[ P(\text{kill completes}) = \min\left( \frac{T_r}{T_k}, 1 \right) \tag{8} \]
+\[ T_r = P(\text{in range}) \frac{L}{s} \tag{9} \]
 
 <p>Now, as mentioned in the above, this gives the earning rate of a single defender type against a single enemy type.</p>
 
-\[ C = \alpha B P(\text{in range}) \frac{r}{\left\lceil \frac{h}{D} \right\rceil} \min\left( \frac{P(\text{in range}) L r}{s \left\lceil \frac{h}{D} \right\rceil}, 1 \right) \tag{8} \]
+\[ C = \alpha B P(\text{in range}) \frac{r}{\left\lceil \frac{h}{D} \right\rceil} \min\left( \frac{P(\text{in range}) L r}{s \left\lceil \frac{h}{D} \right\rceil}, 1 \right) \tag{10} \]
 
 <p>We can then take the expectation value for the cost of this defender type by multiplying the cost \(C_j\) (calculated using Eq. 8 for each enemy type \(j\) with its specific health \(h_j\) and speed \(s_j\)) by the probability \(P(j)\) of spawning that enemy type, and summing over all \(N\) enemy types. Assuming equal probability \(P(j)=1/N\) for all types, and using the equation for the per-enemy bounty \(B\), this yields the expected cost \(\mathbb{E}[C]\):</p>
 
-\[ \mathbb{E}[C] = \frac{\alpha \beta P(\text{in range}) r}{N} \sum_{j=1}^{N} \left[ \frac{s_j h_j}{\lceil h_j/D \rceil} \min\left( \frac{P(\text{in range}) L r}{s_j \lceil h_j/D \rceil}, 1 \right) \right] \tag{9} \]
+\[ \mathbb{E}[C] = \frac{\alpha \beta P(\text{in range}) r}{N} \sum_{j=1}^{N} \left[ \frac{s_j h_j}{\lceil h_j/D \rceil} \min\left( \frac{P(\text{in range}) L r}{s_j \lceil h_j/D \rceil}, 1 \right) \right] \tag{11} \]
 
 <p>The result provides a way of automatically setting the defender cost based on the path shape, the defender properties (range, damage per hit, attack rate), and the enemy properties (health, speed). The tower-defence economy can be tuned via the alpha pre-factor, which is a proxy of gameplay difficulty. Set alpha to zero and the game becomes trivially easy to win as all defenders are practically free to purchase. Set alpha very high and the game becomes impossible to win, as enemy bounties cannot support the sustained investment in defences required to keep up with enemy waves of increasing difficulty. The beta pre-factor offers a way to scale the unit of currency but has no impact on game mechanics.</p>
 
