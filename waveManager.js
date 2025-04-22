@@ -178,100 +178,111 @@ export default class WaveManager {
             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
         }
 
-        // --- Initial Calculation & Filtering --- 
-        let selectedEnemies = [];
-        let currentDifficulty = 0;
+        // --- Step 1: Sort available types by cost (low to high) ---
+        availableEnemyCosts.sort((a, b) => a.cost - b.cost);
 
-        // Calculate potential counts for ALL types initially (for exclusion check)
-        const initialPotentialCounts = this._calculatePotentialCounts(targetDifficulty, availableEnemyCosts);
-
-        // Get the threshold from config
+        // --- Config Values ---
         let maxPrepopulationPerType = this.waveConfig.waveGeneration?.maxPrepopulationPerType;
         if (typeof maxPrepopulationPerType !== 'number' || maxPrepopulationPerType < 0) {
-            if (maxPrepopulationPerType !== undefined) { 
-                 console.warn(`WaveManager: Invalid value for waveGeneration.maxPrepopulationPerType (${maxPrepopulationPerType}). Disabling threshold.`);
-            }
-            maxPrepopulationPerType = Infinity; 
+            maxPrepopulationPerType = Infinity; // Disable if invalid
         } else {
              console.log(`WaveManager: Pre-population threshold per type: ${maxPrepopulationPerType}`);
         }
-        
-        // Identify types exceeding threshold using the initial calculation
+        let minEnemyTypes = this.waveConfig.waveGeneration?.minEnemyTypes;
+        if (typeof minEnemyTypes !== 'number' || minEnemyTypes < 1) {
+             minEnemyTypes = 1; // Default to at least 1 if invalid
+        } else {
+            console.log(`WaveManager: Minimum required enemy types: ${minEnemyTypes}`);
+        }
+        // Ensure minEnemyTypes is not larger than the actual number available
+        minEnemyTypes = Math.min(minEnemyTypes, availableEnemyCosts.length);
+
+        // --- Step 2: Initial Calculation (based on *all* types) ---
+        const initialPotentialCounts = this._calculatePotentialCounts(targetDifficulty, availableEnemyCosts);
+
+        // --- Step 3: Conditional Exclusion (Low to High, Safeguarding Top N) ---
         const enemyTypesToExclude = new Set();
-        initialPotentialCounts.forEach((numPotential, id) => {
-             if (numPotential > maxPrepopulationPerType) {
-                 console.log(`WaveManager: Excluding type ${id} from wave (potential ${numPotential} > threshold ${maxPrepopulationPerType})`);
-                 enemyTypesToExclude.add(id);
-             }
-        });
-        
-        // Create the list of eligible types for this wave
-        const eligibleEnemyCosts = availableEnemyCosts.filter(enemyType => !enemyTypesToExclude.has(enemyType.id));
-        
-        if (eligibleEnemyCosts.length === 0) {
-            console.warn(`WaveManager: All available enemy types were excluded by the threshold or none were available. Cannot generate wave.`);
+        const totalTypes = availableEnemyCosts.length;
+        // Iterate up to the point where excluding more would drop below minEnemyTypes
+        const maxIndexToConsiderExclusion = totalTypes - minEnemyTypes;
+
+        for (let i = 0; i < maxIndexToConsiderExclusion; i++) {
+            const enemyType = availableEnemyCosts[i];
+            const potentialCount = initialPotentialCounts.get(enemyType.id) || 0;
+            if (potentialCount > maxPrepopulationPerType) {
+                console.log(`WaveManager: Excluding low-cost type ${enemyType.id} (potential ${potentialCount} > threshold ${maxPrepopulationPerType}).`);
+                enemyTypesToExclude.add(enemyType.id);
+            } else {
+                // console.log(`WaveManager: Keeping low-cost type ${enemyType.id} (potential ${potentialCount} <= threshold ${maxPrepopulationPerType}).`);
+            }
+        }
+         console.log(`WaveManager: Kept the top ${minEnemyTypes} highest-cost types regardless of threshold.`);
+
+        // --- Step 4: Create Whitelist & Recalculate Required Numbers ---
+        const enemyWhitelist = availableEnemyCosts.filter(enemyType => !enemyTypesToExclude.has(enemyType.id));
+
+        if (enemyWhitelist.length === 0) {
+            console.error(`WaveManager: Whitelist is empty after exclusion (minTypes=${minEnemyTypes}). Cannot generate wave.`);
             this.activeWaveState = { groups: [] };
             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
         }
-        // --- End Filtering ---
+        console.log(`WaveManager: Whitelist contains ${enemyWhitelist.length} enemy types.`);
 
-        // --- Calculate final counts for pre-population using ONLY eligible types ---
-        const prepopulationCounts = this._calculatePotentialCounts(targetDifficulty, eligibleEnemyCosts);
-        // console.log(`WaveManager: Calculated pre-population counts for ${eligibleEnemyCosts.length} eligible types.`);
+        const finalRequiredCounts = this._calculatePotentialCounts(targetDifficulty, enemyWhitelist);
 
-        // --- Pre-populate using eligible types and their calculated counts ---
-        eligibleEnemyCosts.forEach(enemyType => {
-            // Get the calculated number for this specific type from the map
-            const numToAdd = prepopulationCounts.get(enemyType.id) || 0; 
-
-            // Add the enemy if count is positive and finite (handles 0-cost enemies)
+        // --- Step 5: Direct Pre-population (Using Whitelist and Final Counts) ---
+        let selectedEnemies = [];
+        let currentDifficulty = 0;
+        enemyWhitelist.forEach(enemyType => {
+            const numToAdd = finalRequiredCounts.get(enemyType.id) || 0;
             if (numToAdd > 0 && isFinite(numToAdd)) {
                  for (let i = 0; i < numToAdd; i++) {
-                     selectedEnemies.push(enemyType); // Add the {id, cost} object
+                     selectedEnemies.push(enemyType); // Add {id, cost}
                      currentDifficulty += enemyType.cost;
                  }
             }
         });
-        console.log(`WaveManager: Pre-populated with ${selectedEnemies.length} enemies (using eligible types), difficulty: ${currentDifficulty.toFixed(0)}`);
-        // --- End Pre-population ---
+        console.log(`WaveManager: Pre-populated with ${selectedEnemies.length} enemies from whitelist, difficulty: ${currentDifficulty.toFixed(0)}`);
 
+        // --- Step 6: Refinement Loop (Using Whitelist for additions) ---
         const maxAttempts = this.waveConfig.waveGeneration?.maxSelectionAttempts || 200;
         const tolerance = this.waveConfig.waveGeneration?.difficultyTolerance || 0.10;
         let attempts = 0;
-        // --- Refinement Loop (Uses eligibleEnemyCosts for additions) ---
         while (attempts < maxAttempts) {
             attempts++;
             const diff = targetDifficulty - currentDifficulty;
             const relativeDiff = targetDifficulty > 0 ? Math.abs(diff) / targetDifficulty : 0;
-            if (relativeDiff <= tolerance && currentDifficulty > 0) break;
+            // Allow breaking if difficulty is zero only if the target is also zero or less
+            if (relativeDiff <= tolerance && (currentDifficulty > 0 || targetDifficulty <= 0)) break;
             
             if (diff > 0 || selectedEnemies.length === 0) {
-                // Add random enemy *from the eligible list*
-                 if (eligibleEnemyCosts.length === 0) {
-                      console.warn("WaveManager: Refinement Add - No eligible enemies left to add.");
-                      break; // Cannot add if list is empty
+                // Add random enemy *from the whitelist*
+                 if (enemyWhitelist.length === 0) {
+                      console.warn("WaveManager: Refinement Add - Whitelist is empty. Cannot add.");
+                      break; 
                  }
-                const randomIndex = Math.floor(Math.random() * eligibleEnemyCosts.length);
-                const enemyToAdd = eligibleEnemyCosts[randomIndex];
+                const randomIndex = Math.floor(Math.random() * enemyWhitelist.length);
+                const enemyToAdd = enemyWhitelist[randomIndex];
                 selectedEnemies.push(enemyToAdd);
                 currentDifficulty += enemyToAdd.cost;
             } else {
                 // Remove random enemy (from the currently selected list)
                  if (selectedEnemies.length === 0) {
                      console.warn("WaveManager: Refinement Remove - selectedEnemies is already empty.");
-                     break; // Cannot remove if list is empty
+                     break; 
                  }
                 const randomIndex = Math.floor(Math.random() * selectedEnemies.length);
                 currentDifficulty -= selectedEnemies[randomIndex].cost;
                 selectedEnemies.splice(randomIndex, 1);
             }
         }
-        if (attempts >= maxAttempts) { console.warn(`WaveManager: Reached max selection attempts...`); }
-        // --- End Selection ---
+        if (attempts >= maxAttempts) { console.warn(`WaveManager: Reached max selection attempts (${maxAttempts}) during refinement.`); }
+        console.log(`WaveManager: Final difficulty after refinement: ${currentDifficulty.toFixed(0)} (${selectedEnemies.length} enemies)`);
+        // --- End Selection Refinement ---
 
-        if (selectedEnemies.length === 0) {
-             console.log(`WaveManager: Wave ${this.currentWaveNumber} finished (0 enemies selected). Starting delay for next wave.`);
-             this.activeWaveState = { groups: [] }; // Ensure state is cleared
+        if (selectedEnemies.length === 0 && targetDifficulty > 0) {
+             console.warn(`WaveManager: Wave ${this.currentWaveNumber} resulted in 0 enemies despite target difficulty > 0. Check costs/config. Starting delay.`);
+             this.activeWaveState = { groups: [] };
              this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
              return;
         }

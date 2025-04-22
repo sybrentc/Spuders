@@ -8,6 +8,7 @@
   "waveGeneration": {
       "difficultyTolerance": 0.10,
       "maxSelectionAttempts": 200,
-      "maxPrepopulationPerType": 25
+      "maxPrepopulationPerType": 25,
+      "minEnemyTypes": 2
   }
 }
