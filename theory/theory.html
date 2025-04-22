@@ -30,7 +30,7 @@
     <a href="mailto:s.tencate@outlook.com" style="color: inherit; text-decoration: none;">s.tencate@outlook.com</a>
 </p>
 
-<h2>Wave generation</h2>
+<h2>Wave composition</h2>
 
 <p>We generate waves of enemies according to an increasing difficulty score. The difficulty score \(W_n\) of a given wave \(n\) is given by the initial difficulty \(W_0\) multiplied by a difficulty increase factor \(f\) raised to the power of the wave number \(n\):</p>
 \[ W_n = W_0 f^n \tag{1} \]
@@ -45,6 +45,8 @@
 \[ K_i = \left\lceil \frac{W_n / N}{w_i} \right\rceil \tag{3} \]
 <p>If the number \(K_i\) exceeds a threshold number, \(K_{max}\), then we exclude that enemy type from the wave. This ensures that harder waves are not overwhelmed by weak enemies. After excluding enemies, we recalculate partial difficulty and enemy numbers based on the remaining types. This prepopulates the wave. We then check whether we are over or above the target difficulty and add or remove enemies until we are within tolerance.</p>
 
+<h2>Wave release</h2>
+
 <p>We then time the release of enemies such that we achieve maximum density at the average death coordinate of the previous wave, \(d\). This is a proxy of the location along the path where the player has its strongest defences. To give the next wave a better chance of breaking through, we calculate release times for enemies of each type \(i\) so that the center of mass of each group arrives at \(d\) simultaneously. Let \(K_i\) be the number of enemies of type \(i\) in the wave and \(\Delta t\) be the average time between spawning enemies within a group. The time offset \(t_{o, i}\) for enemies of type \(i\) is the time it takes for the centre of mass of that train of enemies to be 'spawned'.</p>
 \[ t_{o, i} = \frac{(K_i - 1) \Delta t}{2} \tag{4} \]
 <p>The total time for the center of mass of type \(i\) to arrive at the target distance \(d\), if spawning started at \(t=0\), is the sum of its travel time \((d/s_i)\) and its offset time \(t_{o, i}\):</p>
@@ -54,9 +56,7 @@
 
 <h2>Defender valuation</h2>
 
-<p>It would be good to have algorithmically determined defender prices, which reflect their usefulness against enemies.To achieve this, we can take an idea from business valuation. For a business, we might look at their yearly profit, multiply that by a factor such as 15, and the result would be a valuation of the business. That's what you might expect to pay for the business if you wanted to buy it.</p>
-
-<p>In terms of the tower defence game, then, I know that the defenders will earn money by killing enemies. That's because the enemies have a bounty which gets added to your funds when they die. So, the idea is to set the defender's cost, \(C\), proportional to its expected earning rate, \(R\), using a tunable pre-factor, \(\alpha\).</p>
+<p>We price defenders based on their expected earning rate. This gives algorithmically determined defender prices, which reflect their usefulness against enemies. Defenders will earn bounty by killing enemies. So, we set the defender's cost, \(C\), proportional to its expected earning rate, \(R\), using a tunable pre-factor, \(\alpha\).</p>
 
 \[ C = \alpha R \tag{7} \]
 
@@ -86,6 +86,23 @@
 \[ \mathbb{E}[C] = \frac{\alpha \beta P(\text{in range}) r}{N} \sum_{j=1}^{N} \left[ \frac{s_j h_j}{\lceil h_j/D \rceil} \min\left( \frac{P(\text{in range}) L r}{s_j \lceil h_j/D \rceil}, 1 \right) \right] \tag{15} \]
 
 <p>The result provides a way of automatically setting the defender cost based on the path shape, the defender properties (range, damage per hit, attack rate), and the enemy properties (health, speed). The tower-defence economy can be tuned via the alpha pre-factor, which is a proxy of gameplay difficulty. Set alpha to zero and the game becomes trivially easy to win as all defenders are practically free to purchase. Set alpha very high and the game becomes impossible to win, as enemy bounties cannot support the sustained investment in defences required to keep up with enemy waves of increasing difficulty. The beta pre-factor offers a way to scale the unit of currency but has no impact on game mechanics.</p>
+
+<h2>Path coverage</h2>
+
+<p>To calculate P(in range), we simply ask what the probability is that an enemy, placed at random along its path of attack, is in range of the defender. Since the enemy traverses the path at uniform speed, this simplifies to asking what fraction of the path is in range of the defender. Of course, we don't know where the defender is going to be placed, but the player will place it somewhere along the path. We first sample a number of positions on the path, for each position obtaining the path length in range of the defender. The path length in range is obtained by substituting the parametrised line equation for that segment into the circle equation for that defender position and solving it using the quadratic formula. The on-path location which maximises in-range path length is then used as a starting point for a gradient descent to explore whether a more optimal position may be found off-path. This is carried out in a pre-calculation step and stored as a look-up table. For our given path shape, the result looks as follows</p>
+
+<div style="max-width: 600px; margin: 2em auto;">
+    <div id="pathCoveragePlot"></div> <!-- Plotly targets divs -->
+</div>
+<p style="text-align: center; font-size: 0.9em;">Figure 1: Path coverage fraction vs. defender range.</p>
+
+<p>The graph shows a few different regimes. The first regime starts at a range equal to the size of the exclusion zone, i.e., the distance from the path within which no defenders may be placed. Any defender with a range of that size or less could not achieve overlap with the path. To first-order approximation, the overlap grows linearly with range in the first regime. This regime is indicated on the map below by red dots. In this regime, defenders need to be placed in 'hot spots', corresponding to parts of the path with high radii of curvature. Note that our path has a complex winding part and a straight part, we can refer to these as the knot and the string. The second regime occurs when the range gets large enough that we no longer need to concern ourselves with the complex winding part of the path, since the entire knot falls within range. This marks the start of the second regime, indicated by blue dots on the map below. Here, the optimal defender positions are not in hot spots but seem to follow a centre of mass approach, capturing the knot in all cases while expanding range to capture more additional string as well. The second regime transitions into the third regime around the range corresponding to the theoretical minimum radius of a freely placed circle which covers our path entirely. The third regime corresponds to a full coverage of the entire path. The following map shows the calculated optimal defender positions for range values up to 500 pixels. Larger ranges have wider error bars on their optimal positions and are therefore less informative.</p>
+<div id="mapContainer" style="position: relative; width: 800px; height: 800px; margin: 2em auto; border: 1px solid #ccc;">
+    <img id="mapImage" src="../assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
+    <canvas id="optimumPositionsCanvas" width="800" height="800" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+</div>
+<p style="text-align: center; font-size: 0.9em;">Figure 2: Optimal defender placement positions. Red dots are below a threshold range; blue dots above it. The blue circle indicates the smallest defender range in the second regime, centred on its optimum position. Note that the blue circle covers the complex turns of the path almost entirely.</p>
+<!-- End Map Visualization Section -->
 
 <h2>Break-even condition</h2>
 
