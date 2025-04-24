@@ -143,6 +143,20 @@
 </div>
 <p style="text-align: center; font-size: 0.9em;">Figure 3: Ratio of earning rate to bounty rate versus wave number.</p>
 
+<p>Fig. 3 demonstrates that break-even conditions cannot be maintained indefinitely. Specifically, we find that \(g_n\) grows exponentially when we evalute eqt. 21in the large-n limit. This demonstrates that, for \(f>1\) and a finite number of enemy types, released in single file at regular intervals, we will inevitably enter a runaway win condition.</p>
+
+\[ \lim_{n\to\infty} g_n = \lim_{n\to\infty} \frac{T_n}{T_0} \tag{24} \]
+
+\[
+\begin{aligned}
+\lim_{n\to\infty} T_n &= \lim_{n\to\infty} \left( \max_{i} K_i(n) \Delta t \right) \\
+&= \lim_{n\to\infty} \left( \frac{W_1 \Delta t}{N w_{min}} f^{n-1} \right)
+\end{aligned}
+\tag{25}
+\]
+
+<p>If we were to retain break-even conditions indefinitely, we would need to ensure that \(R_n\) remains balanced with \(b_n\). The earning rate can be prevented from dominating by limiting defender placement options and/or increasing relative defender costs and/or actively destroying defences. The bounty rate can be increased by reducing \(T_n\) (bunching up enemies) and/or issuing multiple waves in parallel (using more than one pathway) and/or by having new enemy types of greater bounty.</p>
+
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
   const plotDiv = document.getElementById('pathCoveragePlot');
@@ -510,7 +524,7 @@
     }
     const T0 = L / s_min;
 
-    // --- Calculate T1 and Theoretical B0 for g1=1 --- 
+    // --- Calculate T1 and Theoretical B0 for g1=1 ---
     const T1 = calculateTheoreticalTn(1, W1, f, enemyStats, L, dt_seconds, waveParams);
     let B0_theoretical;
     if (T1 > 0 && f > 1 && beta > 0 && W1 > 0) { 
@@ -627,6 +641,10 @@
         gn_theoretical_g1_equals_1.push(gn_g1_equals_1);
     }
 
+    // Calculate Asymptotic g_n = A * f^(n-1) with A adjusted
+    const A_asymptotic = 0.002 * (288.68 / 255.67);
+    const gn_asymptotic = waves.map(n => A_asymptotic * Math.pow(f, n - 1));
+
     // Create Plotly traces
     const trace_simulated = {
       x: waves,
@@ -644,7 +662,7 @@
       y: gn_theoretical_main, // Use B0 from file
       mode: 'lines',
       type: 'scatter',
-      name: 'Theoretical g<sub>n</sub> (larger starting funds)',
+      name: 'Theoretical g<sub>n</sub> (Actual B<sub>0</sub>)', // Adjusted name slightly
       line: { color: 'black', width: 2, dash: 'solid' },
       cliponaxis: false
     };
@@ -654,10 +672,29 @@
       y: gn_theoretical_g1_equals_1, // Use calculated B0
       mode: 'lines',
       type: 'scatter',
-      name: 'Theoretical g<sub>n</sub> (break-even starting funds, i.e., g<sub>1</sub>=1)',
-      line: { color: 'black', width: 2, dash: 'dash' }, // Dashed line
+      name: 'Theoretical g<sub>n</sub> (g<sub>1</sub>=1 B<sub>0</sub>)', // Adjusted name slightly
+      line: { color: 'black', width: 2, dash: 'dash' }, 
       cliponaxis: false
     };
+
+    const trace_asymptotic = {
+        x: waves,
+        y: gn_asymptotic,
+        mode: 'lines',
+        type: 'scatter',
+        name: `Asymptotic g<sub>n</sub>`,
+        line: { color: 'black', width: 1.5, dash: 'dot' }, // Dotted line
+        cliponaxis: false
+    };
+
+    // Find overall max y-value for setting range (excluding NaN/Infinity)
+    const allYValues = [
+        ...ratios_simulated,
+        ...gn_theoretical_main,
+        ...gn_theoretical_g1_equals_1,
+        ...gn_asymptotic
+    ].filter(y => y !== null && Number.isFinite(y) && y > 0);
+    const maxYValue = allYValues.length > 0 ? Math.max(...allYValues) : 1000; // Fallback max
 
     // Define Plotly layout
     const layout = {
@@ -675,9 +712,9 @@
         mirror: true
       },
       yaxis: {
-        title: 'Balance Ratio (g<sub>n</sub>)', // Updated label
+        title: 'Balance Ratio (g<sub>n</sub>)', 
         type: 'log',
-        autorange: true,
+        range: [Math.log10(0.5), Math.log10(maxYValue * 1.1)], // Set range [log10(min), log10(max)]
         titlefont: { family: "'Latin Modern Roman', serif" },
         tickfont: { family: "'Latin Modern Roman', serif" },
         showline: true,
@@ -697,8 +734,8 @@
       layer: 'below traces'
     };
 
-    // Render the plot with all three traces
-    Plotly.newPlot(endgamePlotDiv, [trace_simulated, trace_theoretical, trace_theoretical_g1_equals_1], layout);
+    // Render the plot with all four traces
+    Plotly.newPlot(endgamePlotDiv, [trace_simulated, trace_theoretical, trace_theoretical_g1_equals_1, trace_asymptotic], layout);
   })
   .catch(error => {
     console.error('Error fetching data or rendering endgame plot:', error);
