@@ -3,9 +3,9 @@
     "id": "laser_tower",
     "name": "Magic tower",
     "stats": {
-      "attackRate": 15000,
-      "attackStrength": 70,
-      "attackRange": 500
+      "attackRate": 740,
+      "attackStrength": 45,
+      "attackRange": 110
     },
     "sprite": {
       "path": "./assets/images/laser.png",
@@ -48,7 +48,7 @@
     "name": "Platypus with a gun",
     "stats": {
       "attackRate": 300,
-      "attackStrength": 10,
+      "attackStrength": 11,
       "attackRange": 150
     },
     "sprite": {

@@ -26,18 +26,19 @@
 <h1>Tower-defence theory</h1>
 
 <p style="text-align: center; font-size: 0.9em; margin-top: 0.5em; margin-bottom: 1.5em;">
-    Dr. S. ten Cate<sup>*</sup>, H. Guo, M. B. ten Cate, S. ten Cate<br>
+    Dr. S. ten Cate<sup>*</sup>, Dr. H. Guo, M. B. ten Cate, S. ten Cate<br>
     <sup>*</sup>Corresponding author: <a href="mailto:s.tencate@outlook.com" style="color: inherit; text-decoration: none;">s.tencate@outlook.com</a>
 </p>
 
 <h2>Wave composition</h2>
 
-<p>We generate waves of enemies according to an increasing difficulty score. The difficulty score \(W_n\) of a given wave \(n\) is given by the initial difficulty \(W_0\) multiplied by a difficulty increase factor \(f\) raised to the power of the wave number \(n\):</p>
-\[ W_n = W_0 f^n \tag{1} \]
+<p>We generate waves of enemies according to an increasing difficulty score. The difficulty score \(W_n\) of a given wave \(n\) is given by the geometric series:</p>
+
+\[ W_n = W_1 f^{n-1} \tag{1} \]
 
 <p>This gives the total difficulty for a given wave such that we get waves of exponentially increasing difficulty. To now turn this into a selection of enemies for the wave, we assign each enemy type \(i\) a difficulty score \(w_i\). We assert that an enemy is more difficult to defeat the greater its speed \(s_i\) and health \(h_i\). Since the difficulty has an arbitrary scale, we simply assign the per-enemy difficulty score for type \(i\) as \(w_i = h_i s_i\). The total difficulty score of the wave is the sum of the difficulty scores of all the enemy types in the wave.</p>
 
-\[ \sum_{i=1}^{N} (h_i s_i) = W_0 f^n \tag{2} \]
+\[ \sum_{i=1}^{N} (h_i s_i) = W_1 f^{n-1} \tag{2} \]
 
 <p>We then select the enemy types for the wave such that the sum of the difficulty scores of the selected enemy types equals the total difficulty score of the wave.</p>
 
@@ -106,14 +107,41 @@
 
 <h2>Break-even condition</h2>
 
-<p>We have the pre-factor \(\alpha\) which sets gameplay difficulty by linking defender cost to earning rate. We can now calculate the theoretical break-even point \(\alpha_0\) at which the resources generated from completing wave \(n\) exactly pay for the required additional defence investment needed to survive the next wave, \(n+1\).</p>
+<p>The tower defence game at its core involves an ever-escalating balance between stronger waves and stronger defences. The game is balanced, i.e., at break-even condition, when the total defender earning rate equals the rate at which the wave provides bounty, If the latter dominates, the enemies cannot be cleared before they reach the base and we spiral toward defeat. If the former dominates, then the game enters a runaway win condition. To quantify game balance, we introduce the ratio \(g_n\) of earning rate to bounty rate for wave \(n\)</p>
 
-<p>Let \(T\) represent the time window available for clearing enemies as they traverse the path and before they reach the base. We define this timescale \(T\) as being constant from wave to wave. If an earning rate of \(R_n\) was sufficient to just clear the enemies within time \(T\), then, since each wave grows in difficulty by a factor \(f\), in order to clear the next wave requires an earning rate scaled by \(f\) as well, i.e., \( R_{n+1} = f R_n \), and to buy this additional earning rate costs</p>
-\[ \Delta C = \alpha (f - 1) R_n \tag{16} \]
-<p>Since we are operating at break-even condition, we have cleared wave \(n\) in exactly time \(T\), meaning that the total bounty of the wave is set equal to \(R_n T\). This makes the break-even value for \(\alpha_0\)</p>
-\[ \alpha_0 = \frac{T}{f - 1} \tag{18} \]
+\[ g_n = \frac{R_n}{b_n}. \tag{16} \]
 
-<p>To obtain a value for \(\alpha_0\), we take \(T\) to be the time during which enemies in a wave are available for killing and the last enemy has not yet reached the base, i.e. \(T \approx L / s_{min}\).</p>
+<p>The earning rate \(R_n\) is that which the player could achieve if all available funds were invested by the start of wave \(n\), and is obtained using the cost equation (7). The funds in question are the initial funds, \(B_0\), plus the sum of bounties collected from all preceding waves. The bounty rate \(b_n\) in turn is defined as the total bounty \(B_n\) offered by wave \(n\) divided by the effective duration \(T_n\) over which it is available for harvesting, i.e., \(b_n = B_n / T_n\). This yields</p>
+
+\[ g_n = \frac{T_n}{\alpha B_n} \left(B_0 + \sum_{j=1}^{n-1} B_j\right). \tag{17} \]
+
+<p>From its definition (eqt. 7), the pre-factor \(\alpha\) sets gameplay difficulty by linking defender cost to earning rate (the latter a proxy of killing rate). We can calculate the theoretical break-even point \(\alpha_0\) at which the resources generated from completing wave \(n\) exactly pay for the required additional defence investment needed to survive the next wave, \(n+1\). Let \(T_0\) represent the time window available for clearing enemies as they traverse the path and before they reach the base. For the purpose of this derivation, we define this characteristic time window as being constant from wave to wave. If an earning rate of \(R_n\) was sufficient to just clear the enemies within the time window, then, since each wave grows in difficulty by a factor \(f\), in order to clear the next wave requires an earning rate scaled by \(f\) as well, i.e., \( R_{n+1} = f R_n \), and to buy this additional earning rate costs</p>
+\[ \Delta C = \alpha (f - 1) R_n \tag{18} \]
+<p>Since we are operating at break-even condition, we have cleared wave \(n\) in exactly time \(T_0\), meaning that the total bounty of the wave is set equal to \(R_n T_0\). This makes the break-even value for \(\alpha_0\)</p>
+
+\[ \alpha_0 = \frac{T_0}{f - 1} \tag{19} \]
+    
+<p>Substituting this into eqt. 17, we get</p>
+
+\[ g_n = \frac{T_n(f-1)}{T_0B_n} \left(B_0 + \sum_{j=1}^{n-1} B_j\right). \tag{20} \]
+
+<p>Since the sum of the bounty terms \(B_n\) is a finite sum of a geometric series (cf. eqt. 1), this simplifies to the following expression for the ratio \(g_n\) in terms of the initial funds \(B_0\), the wave starting difficulty \(W_1\), the difficulty increase factor \(f\), the actual wave duration \(T_n\), the prefactor \(\beta\), and the break-even time window \(T_0\)</p>
+
+\[ g_n = \frac{T_n}{T_0} \left[ 1 + \frac{(f-1) \left(\frac{B_0}{\beta W_1}\right) - 1}{f^{n-1}} \right]. \tag{21} \]
+
+<p>We can approximate \(T_0\) as \(L / s_{min}\). Regarding the wave duration \(T_n\), this is the time interval from the moment the first enemy of wave \(n\) spawns until the very last enemy of that wave completes the path of length \(L\). The duration depends on the coordinated spawning of eqts. 4-6, which calculates a start time \(t_{s,i}\) for each enemy group \(i\) (containing \(K_i\) enemies of speed \(s_i\)) such that at least one group starts at \(t=0\). This results in</p>
+\[ T_n = \max_{i} \left( t_{s,i} + (K_i - 1) \Delta t + \frac{L}{s_i} \right). \tag{22} \]
+
+<p>We can calculate the starting funds \(B_0\) required to commence at break-even conditions by setting \(g_1 = 1\) in eqt. 21. In practice, the starting funds will be set somewhat above this minimum to account for the fact that defenders have discrete prices and the player cannot perfectly convert all of their funds into defensive power at every wave.</p>
+
+\[ B_0 = \frac{T_0 \beta W_1}{T_1 (f-1)} \tag{23} \]
+
+<p>The following figure shows the theoretical ratio \(g_n\) as defined by the above equations compared to a numerical simulation of the game mechanics. Deviations at low wave numbers are due to the game dealing with integer numbers of enemies, whereas the theoretical ratio is a continuum expression.</p>
+
+<div style="max-width: 600px; margin: 2em auto;">
+    <div id="endgameRatioPlot"></div> <!-- Plotly targets divs -->
+</div>
+<p style="text-align: center; font-size: 0.9em;">Figure 3: Ratio of earning rate to bounty rate versus wave number.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
@@ -424,6 +452,268 @@
       console.log(`Finished drawing optimal positions. Threshold: ${rangeThreshold}px`);
   }
   // --------------------------------
+
+  // --- Script for Endgame Ratio Plot ---
+  const endgamePlotDiv = document.getElementById('endgameRatioPlot');
+  const analysisDataPath = '../assets/waves/analysis-results.json';
+  const baseDataPath = '../assets/base.json';
+  const level1DataPath = '../assets/level1.json';
+  const waveParamsPath = '../assets/waves/waves.json';
+  const pathStatsPath = '../assets/paths/path-stats.json';
+
+  // Function to fetch a JSON file
+  function fetchJson(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+
+  // Fetch all necessary data in parallel
+  Promise.all([
+    fetchJson(analysisDataPath), // Existing analysis results
+    fetchJson(baseDataPath),
+    fetchJson(level1DataPath),
+    fetchJson(waveParamsPath),
+    fetchJson(pathStatsPath)
+  ])
+  .then(async ([analysisResults, baseData, level1Data, waveParams, pathStats]) => {
+    // We need enemy data too, path is in level1Data
+    const enemyDataPath = `../${level1Data.enemyData}`;
+    const enemiesData = await fetchJson(enemyDataPath);
+
+    // Extract parameters for theoretical calculation
+    const B0 = baseData.stats.money;
+    const beta = level1Data.currencyScale;
+    const W1 = waveParams.startingDifficulty;
+    const f = waveParams.difficultyIncreaseFactor;
+    const L = pathStats.totalPathLength;
+    const dt_ms = waveParams.delayBetweenEnemiesMs;
+    const dt_seconds = dt_ms / 1000.0;
+
+    const enemies = enemiesData; // Directly use the fetched array
+    if (!Array.isArray(enemies) || enemies.length === 0) {
+      throw new Error('No enemy data found or in unexpected format.');
+    }
+    
+    const enemyStats = enemies.map(e => ({ 
+      speed: e.stats.speed, 
+      hp: e.stats.hp, 
+      w: e.stats.speed * e.stats.hp // Precalculate difficulty w_i
+    }));
+    const N = enemyStats.length;
+    const s_min = Math.min(...enemyStats.map(e => e.speed));
+    if (s_min <= 0) {
+        throw new Error('Slowest enemy speed must be positive.');
+    }
+    const T0 = L / s_min;
+
+    // --- Calculate T1 and Theoretical B0 for g1=1 --- 
+    const T1 = calculateTheoreticalTn(1, W1, f, enemyStats, L, dt_seconds, waveParams);
+    let B0_theoretical;
+    if (T1 > 0 && f > 1 && beta > 0 && W1 > 0) { 
+        B0_theoretical = (T0 * beta * W1) / (T1 * (f - 1));
+        console.log(`Calculated theoretical B0 for g1=1: ${B0_theoretical.toFixed(2)}`);
+    } else {
+        console.warn(`Cannot calculate theoretical B0: T0=${T0}, T1=${T1}, f=${f}, beta=${beta}, W1=${W1}. Using original B0.`);
+        B0_theoretical = baseData.stats.money; // Fallback if calculation failed
+    }
+    // ------------------------------------ 
+
+    // --- Use B0 from the file for the main theoretical line --- 
+    const B0_from_file = baseData.stats.money; // Use original B0 reading
+    const B0_to_use_main = B0_from_file; // Use the B0 from the file for the solid theoretical line
+    console.log("Using B0 from file for solid line:", B0_to_use_main); 
+    // ------------------------------------ 
+
+    // --- Function to calculate theoretical Tn ---
+    // Incorporates enemy exclusion logic based on maxPrepopulationPerType and minEnemyTypes
+    function calculateTheoreticalTn(n, W1, f, enemyStats, L, dt_seconds, waveParams) {
+        const Wn = W1 * Math.pow(f, n - 1);
+        const N = enemyStats.length;
+        const K_max = waveParams.waveGeneration.maxPrepopulationPerType;
+        const min_strongest_types = waveParams.waveGeneration.minEnemyTypes;
+
+        if (N === 0) return 0; // No enemies, duration is 0
+
+        // 1. Initial Ki calculation & Sort enemies by difficulty (ascending)
+        const enemiesWithInitialK = enemyStats.map((stats, index) => ({
+            ...stats,
+            originalIndex: index, // Keep track if needed
+            K_initial: stats.w > 0 ? (Wn / N) / stats.w : Infinity // Avoid division by zero
+        })).sort((a, b) => a.w - b.w);
+
+        // 2. Identify whitelist (exclude weak enemies with K_initial > K_max)
+        let whitelist = [...enemiesWithInitialK]; // Start with all
+        const numToRemove = Math.max(0, N - min_strongest_types);
+        let excludedCount = 0;
+
+        // Iterate only through those eligible for removal
+        for (let i = 0; i < numToRemove; i++) {
+            if (enemiesWithInitialK[i].K_initial > K_max) {
+                // Mark for exclusion (safer than modifying array while iterating)
+                enemiesWithInitialK[i].exclude = true;
+                excludedCount++;
+            }
+        }
+        whitelist = enemiesWithInitialK.filter(e => !e.exclude);
+        
+        const N_wl = whitelist.length;
+        if (N_wl === 0) return 0; // All enemies excluded?
+        
+        // 3. Recalculate K for whitelisted enemies based on redistributed difficulty
+        const finalEnemyCalcs = whitelist.map(stats => {
+             const K_final = stats.w > 0 ? (Wn / N_wl) / stats.w : 0;
+             const Ki_eff = Math.max(0, K_final); // Effective number for timing
+             const travel_time = L / stats.speed;
+             // Spawn offset: time for COM of Ki_eff enemies to be spawned
+             const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+             // COM arrival time at d = L/2 (approximation)
+             const t_com = (L / 2) / stats.speed + t_offset;
+             return { Ki_eff, speed: stats.speed, t_com, travel_time };
+        });
+
+        // 4. Calculate Tn using final enemy calculations
+        let t_com_max = 0;
+        finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+        let Tn = 0;
+        for (const calc of finalEnemyCalcs) {
+            const t_start = t_com_max - calc.t_com;
+            // Time last enemy finishes path = start_spawn + spawn_duration + travel_time
+            const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+            const t_finish_last = t_start + spawn_duration + calc.travel_time;
+            Tn = Math.max(Tn, t_finish_last);
+        }
+        
+        return Tn;
+    }
+    // --- End Function --- 
+
+    // Calculate theoretical g_n values for BOTH B0 scenarios
+    const waves = analysisResults.map(d => d.wave);
+    const ratios_simulated = analysisResults.map(d => d.ratio);
+    const gn_theoretical_main = []; // For solid line (B0 from file)
+    const gn_theoretical_g1_equals_1 = []; // For dashed line (calculated B0)
+
+    for (const n of waves) {
+        const Tn = calculateTheoreticalTn(n, W1, f, enemyStats, L, dt_seconds, waveParams);
+        if (T0 <= 0 || Tn <= 0 || beta <= 0 || W1 <= 0) { 
+             console.warn(`Skipping g_n calculation for wave ${n} due to non-positive T0=${T0}, Tn=${Tn}, beta=${beta}, or W1=${W1}`);
+             gn_theoretical_main.push(NaN);
+             gn_theoretical_g1_equals_1.push(NaN);
+             continue;
+        } 
+        const denominator = Math.pow(f, n - 1);
+        if (denominator === 0) {
+             console.warn(`Skipping g_n calculation for wave ${n} due to zero denominator`);
+             gn_theoretical_main.push(NaN);
+             gn_theoretical_g1_equals_1.push(NaN);
+             continue;
+        }
+
+        // Calculate g_n using B0 from file (for solid line)
+        const term1_main = (f - 1) * (B0_to_use_main / (beta * W1)); 
+        const numerator_main = term1_main - 1;
+        const gn_main = (Tn / T0) * (1 + numerator_main / denominator);
+        gn_theoretical_main.push(gn_main);
+
+        // Calculate g_n using theoretical B0 (for dashed line)
+        const term1_g1_equals_1 = (f - 1) * (B0_theoretical / (beta * W1)); 
+        const numerator_g1_equals_1 = term1_g1_equals_1 - 1;
+        const gn_g1_equals_1 = (Tn / T0) * (1 + numerator_g1_equals_1 / denominator);
+        gn_theoretical_g1_equals_1.push(gn_g1_equals_1);
+    }
+
+    // Create Plotly traces
+    const trace_simulated = {
+      x: waves,
+      y: ratios_simulated,
+      mode: 'markers',
+      type: 'scatter',
+      name: 'Simulated g<sub>n</sub>',
+      line: { color: 'rgb(219, 64, 82)' },
+      marker: { size: 8 },
+      cliponaxis: false
+    };
+
+    const trace_theoretical = {
+      x: waves,
+      y: gn_theoretical_main, // Use B0 from file
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Theoretical g<sub>n</sub> (larger starting funds)',
+      line: { color: 'black', width: 2, dash: 'solid' },
+      cliponaxis: false
+    };
+
+    const trace_theoretical_g1_equals_1 = {
+      x: waves,
+      y: gn_theoretical_g1_equals_1, // Use calculated B0
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Theoretical g<sub>n</sub> (break-even starting funds, i.e., g<sub>1</sub>=1)',
+      line: { color: 'black', width: 2, dash: 'dash' }, // Dashed line
+      cliponaxis: false
+    };
+
+    // Define Plotly layout
+    const layout = {
+      height: 500, // Explicitly set height
+      font: { family: "'Latin Modern Roman', serif", size: 14 },
+      xaxis: {
+        title: 'Wave Number (n)',
+        range: [0, Math.max(...waves) + 1],
+        dtick: 5,
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true,
+        linecolor: 'black',
+        linewidth: 1,
+        mirror: true
+      },
+      yaxis: {
+        title: 'Balance Ratio (g<sub>n</sub>)', // Updated label
+        type: 'log',
+        autorange: true,
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true,
+        linecolor: 'black',
+        linewidth: 1,
+        mirror: true
+      },
+      margin: { l: 70, r: 20, t: 30, b: 50, pad: 0 },
+      showlegend: true, // Show legend
+      legend: { 
+          font: { family: "'Latin Modern Roman', serif" }, 
+          x: 0.05, 
+          y: 0.95, 
+          xanchor: 'left', 
+          yanchor: 'top' 
+      },
+      layer: 'below traces'
+    };
+
+    // Render the plot with all three traces
+    Plotly.newPlot(endgamePlotDiv, [trace_simulated, trace_theoretical, trace_theoretical_g1_equals_1], layout);
+  })
+  .catch(error => {
+    console.error('Error fetching data or rendering endgame plot:', error);
+    if (endgamePlotDiv) {
+      let errorMsgElement = endgamePlotDiv.querySelector('.chart-error-msg');
+      if (!errorMsgElement) {
+        errorMsgElement = document.createElement('p');
+        errorMsgElement.style.color = 'red';
+        errorMsgElement.classList.add('chart-error-msg');
+        endgamePlotDiv.appendChild(errorMsgElement);
+      }
+      errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+    }
+  });
+  // --- End Endgame Ratio Plot ---
 
 </script>
 
