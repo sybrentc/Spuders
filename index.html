@@ -2,7 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <base href="/Spuders/">
+    <!-- Dynamically add base tag based on environment -->
+    <script>
+      (() => {
+        const isLocalDev = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && 
+                           window.location.port === '5500';
+        
+        if (!isLocalDev) {
+          console.log('Not local dev environment, adding base tag.');
+          const baseTag = document.createElement('base');
+          baseTag.href = '/Spuders/'; // Set your GitHub Pages base path here
+          // Insert as the first element in head to ensure it's processed early
+          if (document.head.firstChild) {
+            document.head.insertBefore(baseTag, document.head.firstChild);
+          } else {
+            document.head.appendChild(baseTag);
+          }
+        } else {
+           console.log('Local dev environment (port 5500) detected, skipping base tag.');
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spuders</title>
     <link rel="stylesheet" href="style.css">

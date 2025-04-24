@@ -39,6 +39,17 @@ export default class TuningManager {
             // Optionally, still set isRunning = true if that makes sense for your game state
         }
 
+        // --- Environment Check --- 
+        const isLocalDev = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && 
+                           window.location.port === '5500';
+
+        if (!isLocalDev) {
+            console.log("TuningManager: Not in local dev environment (port 5500). Periodic updates disabled.");
+            this.isRunning = false; // Ensure it's marked as not running the interval
+            return; // Don't start the interval
+        }
+        // ------------------------
+
         console.log(`TuningManager: Starting periodic updates every ${this.updateIntervalMs}ms.`);
         this.isRunning = true;
         // Use an arrow function to maintain 'this' context inside setInterval
