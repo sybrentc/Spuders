@@ -211,11 +211,16 @@ class PriceManager {
             // --------------------------------------------------
         }
 
-        // Round costs to nearest 50
+        // Round costs based on value
         for (const id in costs) {
-            if (costs[id] !== Infinity && !isNaN(costs[id])) { 
-                // Round to nearest 50
-                costs[id] = Math.round(costs[id] / 50) * 50;
+            if (costs[id] !== Infinity && !isNaN(costs[id])) {
+                if (costs[id] < 500) {
+                    // Round to nearest 10 for prices below 500
+                    costs[id] = Math.round(costs[id] / 10) * 10;
+                } else {
+                    // Round to nearest 50 for prices 500 and above
+                    costs[id] = Math.round(costs[id] / 50) * 50;
+                }
             } else if (isNaN(costs[id])) {
                  console.warn(`PriceManager: Calculated cost for ${id} resulted in NaN. Setting to Infinity.`);
                  costs[id] = Infinity;
