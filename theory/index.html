@@ -140,7 +140,7 @@
 
 <h2>Runaway win condition</h2>
 
-<p>The following figure shows the theoretical ratio \(g_n\) as defined by the above equations compared to a numerical simulation of the game mechanics, with \(f=1.5\). Deviations at low wave numbers are due to the game dealing with integer numbers of enemies, whereas the theoretical ratio is a continuum expression.</p>
+<p>The following figure shows the theoretical ratio \(g_n\) as defined by the above equations compared to a numerical simulation of the game mechanics, with \(f=1.5\). Note that in this section, the theoretical lines are calculated using the enemy whitelisting algorithm as discussed in the section on wave composition. Deviations at low wave numbers are due to the game dealing with integer numbers of enemies, whereas the theoretical ratio is a continuum expression.</p>
 
 <div class="plot-container">
     <div id="endgameRatioPlot"></div>
@@ -154,15 +154,15 @@
 \[
 \begin{aligned}
 \lim_{n\to\infty} T_n &= \lim_{n\to\infty} \left( \max_{i} K_i(n) \Delta t \right) \\
-&\sim \frac{W_1 \Delta t}{N w_{min}} f^{n-1}.\tag{25}
+&\sim \Delta t\frac{W_1}{N w_{min}} f^{n-1}.\tag{25}
 \end{aligned}
 \]
 
 <p>The wave number \(n^*\) at which the runaway win condition onset occurs can be obtained by setting the asymptote of eqt. 25 equal to 1 and solving for \(n\), which gives</p>
 
-\[ n^* = 1 + \ln \left( \frac{T_0 N w_{min}}{(W_1 \Delta t)} \right)\bigg/\ln f \tag{26} \]
+\[ n^* = 1 + \ln \left( T_0\frac{ N w_{min}}{W_1}\frac{1}{\Delta t} \right)\bigg/\ln f \tag{26} \]
 
-<p>Eqts. 25 and 26 indicate that reducing \(f\) serves to delay and weaken the runaway win condition. This behaviour is shown in Fig. 4.</p>
+<p>Eqts. 25 and 26 indicate that we can both delay and weaken the runaway win condition by reducing \(f\), and/or decreasing the enemy spacing \(\Delta t\) and/or increasing the number of enemy types \(N\) and/or decreasing the number of enemies in the first wave, for which \(W_1/w_{min}\) is a proxy. The impact of reducing the difficulty increase factor \(f\) is shown in Fig. 4.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
