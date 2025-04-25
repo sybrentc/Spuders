@@ -135,7 +135,8 @@ export default class Game {
                 this.waveManager = new WaveManager(
                     this.waveDataPath, // Pass the path
                     this.enemyManager, // Pass the EnemyManager instance
-                    this.enemyManager.createEnemy.bind(this.enemyManager)
+                    this.enemyManager.createEnemy.bind(this.enemyManager),
+                    this.totalPathLength // <-- ADD Pass the loaded path length
                 );
                 await this.waveManager.load(); // Load wave data within the manager
             } else {
