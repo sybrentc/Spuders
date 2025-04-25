@@ -7,6 +7,7 @@ const WAVE_CONFIG_PATH = path.join(__dirname, 'waves.json');
 const BASE_DATA_PATH = path.join(__dirname, '../base.json');
 const LEVEL1_DATA_PATH = path.join(__dirname, '../level1.json'); // Contains pathStatsPath and difficulty (alpha)
 const OUTPUT_PATH = path.join(__dirname, 'analysis-results.json');
+const PARAMS_OUTPUT_PATH = path.join(__dirname, 'analysis-params.json'); // New path for saved params
 const MAX_WAVE = 30; // How many waves to simulate
 
 // Global storage for loaded data
@@ -59,10 +60,59 @@ async function loadData() {
         if (baseStats.money === undefined && levelConfig.overrideStartingMoney === undefined) throw new Error("Missing money in base stats and no override provided.");
         if (Object.keys(enemyDefinitions).length === 0) throw new Error("No enemy definitions loaded.");
 
+        // --- Save parameters after successful load ---
+        await saveAnalysisParameters();
+        // ------------------------------------------
+
         return true;
     } catch (error) {
         console.error("Error loading data:", error);
         return false;
+    }
+}
+
+/**
+ * Saves the parameters used for the analysis to a JSON file.
+ */
+async function saveAnalysisParameters() {
+    console.log(`Saving analysis parameters to ${PARAMS_OUTPUT_PATH}...`);
+    try {
+        const enemies = Object.values(enemyDefinitions);
+        if (!Array.isArray(enemies) || enemies.length === 0) throw new Error('No enemy definitions available for saving.');
+
+        const enemyStats = enemies.map(e => ({
+            id: e.id,
+            speed: e.stats.speed,
+            hp: e.stats.hp,
+            w: (e.stats.speed || 0) * (e.stats.hp || 0)
+        })).filter(e => e.speed > 0 && e.hp > 0);
+
+        if (enemyStats.length === 0) throw new Error('No enemies with valid speed and hp found for saving parameters.');
+
+        const L = pathStats.totalPathLength;
+        const s_min = Math.min(...enemyStats.map(e => e.speed));
+        if (s_min <= 0) throw new Error('Minimum enemy speed must be positive for saving parameters.');
+        const T0 = L / s_min;
+
+        const parameters = {
+            B0: baseStats.money || 0, // Use the base starting money
+            beta: levelConfig.currencyScale,
+            W1: waveConfig.startingDifficulty,
+            f: waveConfig.difficultyIncreaseFactor,
+            alpha: levelConfig.difficulty,
+            L: L,
+            dt_seconds: (waveConfig.delayBetweenEnemiesMs || 500) / 1000.0,
+            waveGenConfig: waveConfig.waveGeneration || {},
+            enemyStats: enemyStats,
+            T0: T0
+        };
+
+        await fs.writeFile(PARAMS_OUTPUT_PATH, JSON.stringify(parameters, null, 2));
+        console.log("Analysis parameters saved successfully.");
+    } catch (error) {
+        console.error("Error saving analysis parameters:", error);
+        // Decide if this should halt execution or just warn
+        // throw error; // Optional: re-throw to stop analysis if params can't be saved
     }
 }
 
