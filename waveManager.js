@@ -4,8 +4,9 @@ export default class WaveManager {
      * @param {string} waveDataPath - Path to the wave configuration JSON file (e.g., assets/waves/waves.json).
      * @param {EnemyManager} enemyManager - Instance of the EnemyManager to access current enemy data.
      * @param {function} createEnemyCallback - Function (e.g., enemyManager.createEnemy) to call for spawning.
+     * @param {number} totalPathLength - The total length of the enemy path.
      */
-    constructor(waveDataPath, enemyManager, createEnemyCallback) {
+    constructor(waveDataPath, enemyManager, createEnemyCallback, totalPathLength) {
         if (!waveDataPath) {
             throw new Error("WaveManager requires a waveDataPath.");
         }
@@ -15,10 +16,14 @@ export default class WaveManager {
         if (typeof createEnemyCallback !== 'function') {
             throw new Error("WaveManager requires a valid createEnemyCallback function.");
         }
+        if (typeof totalPathLength !== 'number' || totalPathLength <= 0) {
+            throw new Error(`WaveManager requires a valid positive totalPathLength (received: ${totalPathLength}).`);
+        }
 
         this.waveDataPath = waveDataPath;
         this.enemyManager = enemyManager;
         this.createEnemy = createEnemyCallback;
+        this.totalPathLength = totalPathLength; // Store the path length
 
         // Internal state
         this.waveConfig = null;          // Holds loaded wave parameters (initialDelayMs, etc.)
@@ -151,6 +156,18 @@ export default class WaveManager {
         this.timeUntilNextWave = 0; // Clear inter-wave timer
 
         // --- Target Point & Fallback ---
+        // For Wave 1, initialize the target distance to L/2 if not already set
+        if (this.currentWaveNumber === 1 && this.lastAverageDeathDistance === null) {
+            // Use the stored totalPathLength
+            if (this.totalPathLength > 0) {
+                this.lastAverageDeathDistance = this.totalPathLength / 2;
+                console.log(`WaveManager: Initializing target distance for Wave 1 to L/2 = ${this.lastAverageDeathDistance.toFixed(0)}px`);
+            } else {
+                // This case should ideally not happen due to constructor check, but good to have a warning.
+                console.warn("WaveManager: totalPathLength is not valid. Cannot initialize Wave 1 target distance.");
+            }
+        }
+
         const targetDistance = this.lastAverageDeathDistance;
         let useCoordinatedSpawn = targetDistance !== null && targetDistance > 0;
         if (!useCoordinatedSpawn) {
@@ -382,9 +399,6 @@ export default class WaveManager {
             maxTotalTime = 0; // For sequential fallback
         }
         
-        // REMOVED: Redundant log for averageInterEnemyDelay variable
-
-        let sequentialStartTimeOffset = 0; // For non-coordinated fallback
         const finalGroupsState = calculatedGroupInfo.map((group, index) => {
             let finalStartTime = 0;
             
@@ -393,21 +407,9 @@ export default class WaveManager {
             // ----------------------------->
 
             if (useCoordinatedSpawn) {
-                // 3. Calculate start time relative to the latest arrival
                 finalStartTime = isFinite(group.totalTime) ? (maxTotalTime - group.totalTime) : 0;
                 // Keep final start time log for now
                 console.log(`    -> Coordinated Final Start (based on latest arrival): +${finalStartTime.toFixed(0)}ms`);
-            } else {
-                // Non-coordinated fallback: Stack groups sequentially
-                if (index > 0) {
-                     const prevGroup = calculatedGroupInfo[index-1];
-                     const averageInterEnemyDelay = this.waveConfig.delayBetweenEnemiesMs || 500;
-                     const prevDurationEstimate = (prevGroup.count > 1) ? ((prevGroup.count - 1) * averageInterEnemyDelay) : 0;
-                     sequentialStartTimeOffset += prevDurationEstimate + averageInterEnemyDelay; // Add full delay
-                     finalStartTime = sequentialStartTimeOffset;
-                }
-                // Keep final start time log for now
-                 console.log(`    -> Sequential Fallback Final Start: +${finalStartTime.toFixed(0)}ms`);
             }
 
             finalStartTime = Math.max(0, finalStartTime);
