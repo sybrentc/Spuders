@@ -210,11 +210,14 @@
 </div>
 <p class="figure-caption">Figure 5: Evolution of required fractional damage rate (d<sub>n</sub>) vs. wave number (n), assuming d<sub>0</sub>=0.</p>
 
-<p>We can obtain the expected, average behaviour for \(R_n\) by first obtaining a solution to the ODE of eqt. 28, describing the intra-wave evolution of the earning rate \(R_n\) in the presence of depreciation as shown in eqt. 33 below. For the case that \(w+d_n=0\), we complement this with eqt. 34 derived from eqt. 28 to avoid potential divsion by zero.</p>
+<p>We can obtain the expected average behaviour for \(R_n\) by first obtaining a solution to the ODE of eqt. 28, describing the intra-wave evolution of the earning rate \(R_n\) in the presence of depreciation. This yields a general solution for \(w+d_n > 0\) and a specific linear solution for the edge case \(w+d_n = 0\):</p>
 
-\[ R_n(t) = \frac{b_n}{\alpha_0(w+d_n)} + \left( R_{\text{start}, n} - \frac{b_n}{\alpha_0(w+d_n)} \right) e^{-(w+d_n)t}. \tag{33} \]
-
-\[ R_n(t) = R_{\text{start}, n} + \left( \frac{b_n}{\alpha_0} \right) t. \tag{34} \]
+\[ R_n(t) = 
+\begin{cases} 
+  \frac{b_n}{\alpha_0(w+d_n)} + \left( R_{\text{start}, n} - \frac{b_n}{\alpha_0(w+d_n)} \right) e^{-(w+d_n)t} & \text{if } w+d_n > 0 \\ 
+  R_{\text{start}, n} + \left( \frac{b_n}{\alpha_0} \right) t & \text{if } w+d_n = 0 
+\end{cases} 
+\tag{33} \]
 
 <p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition.</p>
 
