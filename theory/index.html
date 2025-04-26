@@ -182,19 +182,22 @@
   
 <p>The growth of the bounty rate \(b_n\) can be boosted by increasing enemy density on screen, in an effort to keep \(T_n\) near \(T_0\). While enemy density can be increased within the confines of a single path of travel, this can only be done for so long without enemies starting to significantly overlap in space, leading to confusing gameplay. Sustainably increasing enemy density must therefore be achieved by relaxing the constraint of a single path of travel. The most robust option for this is to allow enemies to approach the base from any direction as long as their path of travel has a certain minimum length. One option would be enemies that travel over land but are not bound to the path. This is somewhat complicated because the map has obstacles to travel and further may not be desirable from a gameplay perspective since it removes the strategic placement aspect. Another option is to have enemies that travel by air and can be shot down by anti-air defences. Effectively, this would amount to running two tower-defence games simultaneously: one on the ground and one in the air. This therefore seems a somewhat artificial solution.</p>
 
-<p>The growth of the earning rate \(R_n\) can be deboosted by inflating \(\alpha\), which serves to make defenders more expensive, and/or by reducing the overall effectiveness of existing defences. While inflating \(\alpha\) is relatively straightforward, it reduces the fun of the game. Either the bounty per kill remains the same and the defender prices tend to infinity, or the prices remain fixed and the bounty per kill tends to zero. Neither of these is satisfactory from a gameplay perspective. Reducing the overall effectiveness of existing defences, on the other hand, is a more interesting option. This could be achieved by defenders using up their health as they fire, their health bar indicating the amount of wear they have accumulated and causing them to be destroyed once their health reaches zero. Additionally or alternatively, the enemies could attack defences until they are destroyed. Either way, this would place an obligation on the player to invest funds in maintaining their defences, just to maintain their current level of earning power.</p>
+<p>The growth of the earning rate \(R_n\) can be deboosted by inflating \(\alpha\), which serves to make defenders more expensive, and/or by reducing the overall effectiveness of existing defences. While inflating \(\alpha\) is relatively straightforward, it reduces the fun of the game. Either the bounty per kill remains the same and the defender prices tend to infinity, or the prices remain fixed and the bounty per kill tends to zero. Neither of these is satisfactory from a gameplay perspective. Depreciating the overall effectiveness of existing defences, on the other hand, is a more interesting option. This could be achieved by defenders using up their health as they fire, their health bar indicating the amount of wear they have accumulated and causing them to be destroyed once their health reaches zero. Additionally or alternatively, the enemies could attack defences until they are destroyed. Either way, this would place an obligation on the player to invest funds in maintaining their defences, just to maintain their current level of earning power.</p>
 
-<p>To maintain break-even conditions, in accordance with eqt. 16, we want to verify for each wave that</p>
+<p>We start by expressing the rate of change for \(R_n\) in terms of the fractional depreciation rates for wear \(w\) and additional damage \(d_n\) as follows. Note that wear is caused by defenders attacking enemies and therefore scales in the aggregate in dependence on the bounty rate. At break-even, the earning rate equals the bounty rate such that we can express depreciation due to wear as a product of fractional wear and earning rate.</p>
 
-\[ \Delta R \equiv R_n - b_n = 0. \tag{28} \]
+\[ \frac{dR_n}{dt} = \frac{b_n}{\alpha}-(w+d_n)R_n. \tag{28} \]
 
-<p>We can achieve this balance by reducing \(R_n\) by an amount \(d_nR_n\). The earning rate at the start of wave \(n+1\) is then the surviving rate from wave \(n\) plus the new rate purchased with the bounty collected during wave \(n\), i.e.,</p>
+<p>The average rate at which \(R\) must change during wave \(n\) (duration \(T_n\)) to bridge the gap between \(R_n\) and \(R_{n+1}\), can be expressed as follows by recognising that break-even conditions require the earning rate to balance the bounty rate</p>
+\[ \frac{dR_n}{dt} = \frac{b_{n+1}-b_n}{T_n}. \tag{29} \]
 
-\[ R_{n+1} = R_n(1 - d_n) + \frac{B_n}{\alpha}. \tag{29} \]
+<p>We can now equate the RHS of eqts. 28 and 29 and solve for \(d\). In the game, we want to have a constant \(\alpha\) (difficulty factor involved in pricing the defenders) and constant \(w\), such that the base fractional wear on earning rate is constant over time. Recognising that the bounty rate scales with \(f\) and introducing a duration growth factor \(\gamma_n = T_{n+1}/T_n\), we arrive at the required fractional damage rate \(d_n\) for wave \(n\):</p>
 
-<p>Enforcing break-even conditions at wave \(n+1\) results in the following earning rate reduction during wave \(n\)</p>
-\[ d_n = 1 + \frac{B_n}{\alpha R_n} - \frac{b_{n+1}}{R_n}. \tag{30} \]
+\[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
 
+<p>For large wave numbers, \(\gamma_n\) tends to \(f\) and the fractional damage rate settles on its limiting value</p>
+
+\[ \lim_{n\to\infty} d_n = \frac{1}{\alpha} - w. \tag{31} \]
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
