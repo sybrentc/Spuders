@@ -9,6 +9,7 @@
     "defencesPath": "assets/defences.json",
     "difficulty": 185,
     "currencyScale": 0.0035,
+    "wear": 1e-4,
     "pathExclusionRadius": 35.0,
     "canvas": {
       "width": 1024,

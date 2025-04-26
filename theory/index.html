@@ -184,6 +184,8 @@
 
 <p>The growth of the earning rate \(R_n\) can be deboosted by inflating \(\alpha\), which serves to make defenders more expensive, and/or by reducing the overall effectiveness of existing defences. While inflating \(\alpha\) is relatively straightforward, it reduces the fun of the game. Either the bounty per kill remains the same and the defender prices tend to infinity, or the prices remain fixed and the bounty per kill tends to zero. Neither of these is satisfactory from a gameplay perspective. Depreciating the overall effectiveness of existing defences, on the other hand, is a more interesting option. This could be achieved by defenders using up their health as they fire, their health bar indicating the amount of wear they have accumulated and causing them to be destroyed once their health reaches zero. Additionally or alternatively, the enemies could attack defences until they are destroyed. Either way, this would place an obligation on the player to invest funds in maintaining their defences, just to maintain their current level of earning power.</p>
 
+<h2>Defender depreciation</h2>
+
 <p>We start by expressing the rate of change for \(R_n\) in terms of the fractional depreciation rates for wear \(w\) and additional damage \(d_n\) as follows. Note that wear is caused by defenders attacking enemies and therefore scales in the aggregate in dependence on the bounty rate. At break-even, the earning rate equals the bounty rate such that we can express depreciation due to wear as a product of fractional wear and earning rate.</p>
 
 \[ \frac{dR_n}{dt} = \frac{b_n}{\alpha}-(w+d_n)R_n. \tag{28} \]
@@ -195,9 +197,32 @@
 
 \[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
 
-<p>For large wave numbers, \(\gamma_n\) tends to \(f\) and the fractional damage rate settles on its limiting value</p>
+<p>For small wave numbers, we assume a constant wave duration \(T_n = T_{n+1} = T_0\), as in the above derivation of \(\alpha_0\), Under this assumption, eqt. 30 indicates that \(d_n\) is a constant in this regime, which we will call \(d_0\). We are free to choose \(d_0\) as we see fit and use this to set the initial fractional damage rate to zero. This results in the simplified expressions</p>
 
-\[ \lim_{n\to\infty} d_n = \frac{1}{\alpha} - w. \tag{31} \]
+\[ \alpha_0 = \frac{1}{\frac{f - 1}{T_0} + w}. \tag{31} \]
+
+\[ d_n = \frac{f - 1}{T_0} + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{32} \]
+
+<p>Substituting eqt. 31 into eqt. 28, setting non-depreciation conditions (\(w=d=0\)), and solving the resulting ODE with break-even conditions (\(T_n=T_{n+1}=T_0\)) yields the inter-wave equation \(R_{n+1}=fR_n\) used in the preceding section. This indicates theoretical consistency of generalised equation 28 within our overall framework.</p>
+
+<div class="plot-container">
+  <div id="dnEvolutionPlot"></div>
+</div>
+<p class="figure-caption">Figure 5: Evolution of required fractional damage rate (d<sub>n</sub>) vs. wave number (n), assuming d<sub>0</sub>=0.</p>
+
+<p>We can simplify numerical calculations by first obtaining a solution to the ODE of eqt. 28, describing the intra-wave evolution of the earning rate \(R_n\) in the presence of depreciation as shown in eqt. 33 below. To avoid potential divsion by zero, we complement this with eqt. 34 derived from eqt. 28 for the case that \(w+d_n=0\).</p>
+
+\[ R_n(t) = \frac{b_n}{\alpha_0(w+d_n)} + \left( R_{\text{start}, n} - \frac{b_n}{\alpha_0(w+d_n)} \right) e^{-(w+d_n)t}. \tag{33} \]
+
+\[ R_n(t) = R_{\text{start}, n} + \left( \frac{b_n}{\alpha_0} \right) t. \tag{34} \]
+
+<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition.</p>
+
+<div class="plot-container">
+  <div id="depreciationComparisonPlot"></div>
+</div>
+<p class="figure-caption">Figure 6: Comparison of balance ratio (g<sub>n</sub>) vs. wave number (n) with and without the effects of depreciation. Note that in both cases, we are evaluating the ratio at the start of each wave.</p>
+
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
@@ -721,7 +746,7 @@
       height: 500, // Explicitly set height
       font: { family: "'Latin Modern Roman', serif", size: 14 },
       xaxis: {
-        title: 'Wave Number (n)',
+        title: 'Wave number (n)',
         range: [0, Math.max(...waves) + 1],
         dtick: 5,
         titlefont: { family: "'Latin Modern Roman', serif" },
@@ -1150,6 +1175,481 @@
       console.error("Error calculating theoretical parameters:", error);
     }
   });
+</script>
+
+<!-- Script for dn vs n plot -->
+<script>
+  const dnPlotDiv = document.getElementById('dnEvolutionPlot');
+  const analysisParamsPath_dn = '../assets/waves/analysis-params.json';
+  const maxWaveN_dn = 25; // Max wave number to plot
+
+  // --- Function to fetch JSON ---
+  function fetchJson_dn(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+
+  // --- Ported calculateTheoreticalTn function (from Fig 4 plot) ---
+  // Calculates wave duration in seconds
+  function calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig) {
+      const Wn = W1 * Math.pow(f, n - 1);
+      const N = enemyStats.length;
+      const K_max = waveGenConfig.maxPrepopulationPerType ?? Infinity;
+      let min_strongest_types = waveGenConfig.minEnemyTypes ?? 1;
+      min_strongest_types = Math.max(1, Math.min(min_strongest_types, N));
+
+      if (N === 0) return 0;
+
+      // 1. Initial Ki calculation & Sort enemies by difficulty (ascending: w = cost)
+      const enemiesWithInitialK = enemyStats.map((stats) => ({
+          ...stats,
+          K_initial: stats.w > 0 ? (Wn / N) / stats.w : Infinity
+      })).sort((a, b) => a.w - b.w);
+
+      // 2. Identify whitelist (exclude weak enemies with K_initial > K_max)
+      const typesToExclude = new Set();
+      const totalTypes = enemiesWithInitialK.length;
+      const maxIndexToConsiderExclusion = totalTypes > min_strongest_types ? totalTypes - min_strongest_types : 0;
+
+      for (let i = 0; i < maxIndexToConsiderExclusion; i++) {
+          const enemyType = enemiesWithInitialK[i];
+          const potentialCount = enemyType.K_initial || 0;
+          // Exclude if count exceeds K_max (and K_max is finite)
+          if (isFinite(K_max) && potentialCount > K_max) {
+              typesToExclude.add(enemyType.id);
+          }
+      }
+
+      let enemyWhitelist = enemiesWithInitialK.filter(enemyType => !typesToExclude.has(enemyType.id));
+
+      // Fallback: If exclusion removed too many, keep the strongest ones
+      if (enemyWhitelist.length < min_strongest_types && totalTypes >= min_strongest_types) {
+           // console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist too small (${enemyWhitelist.length}), falling back to ${min_strongest_types} strongest types.`);
+           enemyWhitelist = enemiesWithInitialK.slice(-min_strongest_types);
+      }
+
+      const N_wl = enemyWhitelist.length;
+      if (N_wl === 0) {
+          // console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist is empty even after fallback.`);
+          return 0; // Cannot proceed if no enemies selected
+      }
+
+      // 3. Recalculate K for whitelisted enemies based on redistributed difficulty
+      const finalEnemyCalcs = enemyWhitelist.map(stats => {
+           // Use ceiling for K calculation as per Eq. 3
+           const K_final = stats.w > 0 ? Math.ceil((Wn / N_wl) / stats.w) : 0;
+           const Ki_eff = Math.max(0, K_final); // Effective number for timing
+           const travel_time_d = (L / 2) / stats.speed; // Travel time to midpoint (d=L/2)
+           const travel_time_L = L / stats.speed;       // Travel time for full path L
+           // Spawn offset: time for COM of Ki_eff enemies to be 'spawned' (Eq. 4)
+           const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+           // COM arrival time at d = L/2 (Eq. 5, adapted for d=L/2)
+           const t_com = travel_time_d + t_offset;
+           return { Ki_eff, speed: stats.speed, t_com, travel_time_L };
+      });
+
+      // 4. Calculate spawn start times (Eq. 6) and overall duration Tn (Eq. 22)
+      let t_com_max = 0;
+      finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+      let Tn = 0;
+      for (const calc of finalEnemyCalcs) {
+          const t_start = t_com_max - calc.t_com; // Spawn start time for this group
+          // Time last enemy finishes path = start_spawn + spawn_duration + travel_time_L
+          const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+          const t_finish_last = t_start + spawn_duration + calc.travel_time_L;
+          Tn = Math.max(Tn, t_finish_last);
+      }
+
+      return Tn; // Return duration in seconds
+  }
+  // --- End Ported Function ---
+
+  // Fetch parameters and calculate dn
+  fetchJson_dn(analysisParamsPath_dn)
+  .then(analysisParams => {
+      const { f, T0, W1, L, dt_seconds, enemyStats, waveGenConfig } = analysisParams;
+      console.log("Using parameters from analysis-params.json for dn plot:", analysisParams);
+
+      // Validate parameters
+      if (f === undefined || T0 === undefined || W1 === undefined || L === undefined || dt_seconds === undefined || !Array.isArray(enemyStats) || enemyStats.length === 0 || !waveGenConfig) {
+          throw new Error('Missing required parameters in analysis-params.json for dn plot');
+      }
+      if (T0 <= 0) {
+          throw new Error('T0 must be positive for dn calculation.');
+      }
+
+      const waveNumbers = Array.from({length: maxWaveN_dn}, (_, i) => i + 1);
+      const T_values = {}; // Store calculated Tn values
+      const dn_values = [];
+
+      // Pre-calculate Tn for n=1 to maxN+1
+      console.log("Calculating Tn values...");
+      for (let n = 1; n <= maxWaveN_dn + 1; n++) {
+          T_values[n] = calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+      }
+      console.log("Finished calculating Tn values.");
+
+      // Calculate dn for n=1 to maxN
+      console.log("Calculating dn values...");
+      const logistic_values = [];
+      const n0 = 13.5; // Specified midpoint
+      const k = 0.55; // Chosen steepness parameter
+      const L_logistic = (f - 1) / T0; // Upper asymptote
+      console.log(`Logistic params: L=${L_logistic}, n0=${n0}, k=${k}`);
+
+      for (const n of waveNumbers) {
+          const Tn = T_values[n];
+          const Tn_plus_1 = T_values[n + 1];
+          let dn = NaN; // Default to NaN
+
+          if (Tn > 0 && Tn_plus_1 !== undefined) {
+              const gamma_n = Tn_plus_1 / Tn;
+              if (gamma_n > 0) { // Avoid division by zero if f=0 or gamma_n=0
+                  const term1 = L_logistic; // Use calculated L
+                  const term2_factor = 1 / Tn;
+                  const term2_bracket = 1 - (f / gamma_n);
+                  dn = term1 + term2_factor * term2_bracket;
+              } else {
+                   console.warn(`Cannot calculate dn for n=${n}: gamma_n (${gamma_n.toFixed(3)}) is not positive.`);
+              }
+          } else {
+              console.warn(`Cannot calculate dn for n=${n}: Tn (${Tn?.toFixed(3)}) is not positive or Tn+1 is undefined.`);
+          }
+          dn_values.push(dn);
+
+          // Calculate logistic function value for this n
+          const logistic_val = L_logistic / (1 + Math.exp(-k * (n - n0)));
+          logistic_values.push(logistic_val);
+      }
+      console.log("Finished calculating dn and logistic values.");
+
+      // Create Plotly trace for dn
+      const trace_dn = {
+          x: waveNumbers,
+          y: dn_values,
+          mode: 'markers',
+          type: 'scatter',
+          name: 'd<sub>n</sub>',
+          marker: { size: 8, color: 'rgb(255, 127, 14)' }, // Orange markers, increased size to 8
+          cliponaxis: false
+      };
+
+      // Create Plotly trace for logistic function
+      const trace_logistic = {
+          x: waveNumbers,
+          y: logistic_values,
+          mode: 'lines',
+          type: 'scatter',
+          name: `Logistic (n₀=${n0}, k=${k})`,
+          line: { color: 'black', width: 1.5 }
+      };
+
+      // Create Plotly layout
+      const layout_dn = {
+          height: 500,
+          font: { family: "'Latin Modern Roman', serif", size: 14 },
+          xaxis: {
+              title: 'Wave number (n)',
+              range: [0, maxWaveN_dn + 1],
+              dtick: 5,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true, linecolor: 'black', linewidth: 1, mirror: true
+          },
+          yaxis: {
+              title: 'Fractional damage rate (d<sub>n</sub>)',
+              autorange: true,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true, linecolor: 'black', linewidth: 1, mirror: true,
+              zeroline: true, zerolinecolor: 'grey', zerolinewidth: 1
+          },
+          margin: { l: 80, r: 20, t: 30, b: 50, pad: 0 },
+          showlegend: true,
+          legend: { 
+              font: { family: "'Latin Modern Roman', serif" }, 
+              x: 0.05, y: 0.95, 
+              xanchor: 'left', yanchor: 'top' 
+          },
+          layer: 'below traces'
+      };
+
+      // Render the plot with both traces
+      Plotly.newPlot(dnPlotDiv, [trace_dn, trace_logistic], layout_dn);
+      console.log("dn vs n plot rendered with logistic overlay.");
+
+  })
+  .catch(error => {
+      console.error('Error fetching data or rendering dn plot:', error);
+      if (dnPlotDiv) {
+        let errorMsgElement = dnPlotDiv.querySelector('.chart-error-msg');
+        if (!errorMsgElement) {
+            errorMsgElement = document.createElement('p');
+            errorMsgElement.style.color = 'red';
+            errorMsgElement.classList.add('chart-error-msg');
+            dnPlotDiv.appendChild(errorMsgElement);
+        }
+        errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+      }
+  });
+
+</script>
+
+
+
+<!-- Script for Depreciation Comparison Plot -->
+<script>
+  const depreciationPlotDiv = document.getElementById('depreciationComparisonPlot');
+  const originalResultsPath = '../assets/waves/analysis-results.json';
+  const dtREndResultsPath = '../assets/waves/analysis-depreciation-results.json'; // Renamed output file
+  const paramsPath = '../assets/waves/analysis-params.json'; // Need params for analytical line
+
+  // --- Function to fetch JSON ---
+  function fetchJson_depr(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        console.warn(`HTTP error fetching ${path}! status: ${response.status}`);
+        return null; // Indicate failure
+      }
+      return response.json();
+    }).catch(error => {
+        console.error(`Fetch error for ${path}:`, error);
+        return null;
+    });
+  }
+
+  // Fetch only the two required results files
+  Promise.all([
+     fetchJson_depr(originalResultsPath),
+     fetchJson_depr(dtREndResultsPath),
+     fetchJson_depr(paramsPath) // Fetch params
+  ])
+  .then(([originalResults, dtREndResults, params]) => {
+    const plotData = [];
+    let maxWave = 0;
+    let maxYValue = 0.1;
+    let minYValue = 100; 
+    // Declare arrays for analytical lines here
+    let analyticalWavesX = [];
+    let analyticalRatioSmooth = []; // For R_start/b_n with Full Depr
+    let originalTheoretical_gn = []; // For original gn
+    // const maxWaveAnalytical = 500; // <<< REMOVED - Revert to maxWave from sim
+
+    if (!params) {
+        throw new Error("Could not load analysis parameters for analytical calculation.");
+    }
+    const { f, T0, alpha: original_alpha, B0, W1, beta, L, dt_seconds, enemyStats, waveGenConfig, wear: wear_from_params } = params; // Extract wear
+    // const wear_w = 0.0005; // REMOVED - Use wear_from_params
+    // Validate wear from params
+    if (wear_from_params === undefined || wear_from_params < 0) {
+        throw new Error("Missing or invalid 'wear' parameter in analysis-params.json");
+    }
+    const calculated_alpha_0 = 1 / ( ((f - 1) / T0) + wear_from_params ); // Use wear_from_params
+
+    // Function to add trace and update bounds (expects x, y arrays)
+    function addTrace(x_data, y_data, name, color, mode = 'markers', lineStyle = {}) {
+        if (!x_data || !y_data || x_data.length === 0 || y_data.length === 0 || x_data.length !== y_data.length) {
+            console.warn(`Skipping trace ${name}: Invalid or mismatched data. X: ${x_data?.length}, Y: ${y_data?.length}`);
+            return;
+        }
+        // Update maxWave based on the maximum x value in this trace
+        maxWave = Math.max(maxWave, ...x_data);
+        
+        const finiteRatios = y_data.filter(y => isFinite(y) && y !== null);
+        if (finiteRatios.length > 0) {
+            maxYValue = Math.max(maxYValue, ...finiteRatios);
+            const positiveFiniteRatios = finiteRatios.filter(y => y > 1e-6); 
+            if (positiveFiniteRatios.length > 0) {
+                 minYValue = Math.min(minYValue, ...positiveFiniteRatios); 
+            }
+        }
+        plotData.push({
+            x: x_data,
+            y: y_data,
+            mode: mode,
+            type: 'scatter',
+            name: name,
+            marker: { color: color, size: (mode.includes('markers') ? 8 : undefined) }, 
+            line: (mode.includes('lines') ? { color: color, width: 1.5, ...lineStyle } : undefined),
+            cliponaxis: false
+        });
+    }
+
+    // Process simulation results first to set the display range up to n=30 (or whatever sim max was)
+    let simMaxWave = 0;
+    if (originalResults) {
+        simMaxWave = Math.max(simMaxWave, ...originalResults.map(d => d.wave));
+        addTrace(originalResults.map(d => d.wave), originalResults.map(d => d.ratio), 'Simulation (no depreciation)', 'rgb(219, 64, 82)');
+    }
+    if (dtREndResults) {
+        simMaxWave = Math.max(simMaxWave, ...dtREndResults.map(d => d.wave));
+        addTrace(dtREndResults.map(d => d.wave), dtREndResults.map(d => d.ratio), 'Simulation (full depreciation)', 'rgb(0, 150, 150)', 'markers');
+    }
+    maxWave = simMaxWave; // Keep maxWave based on simulation for initial range
+
+    // --- Calculate Both Analytical Lines AFTER determining maxWave ---
+    if (maxWave > 0 && typeof calculateTheoreticalTn_dn === 'function') { // Use maxWave here
+        // --- Setup for R_start/b_n line (Solid Black) - WITH FULL DEPRECIATION --- 
+        // const wear_w = 0.0005; // REMOVED - Use wear_from_params
+        const alpha_0_depr = 1 / (((f - 1) / T0) + wear_from_params); // Use wear_from_params
+        let R_start_analytical_solid = B0 / alpha_0_depr; // R(0) for wave 1 using depr alpha0
+        analyticalRatioSmooth = []; // Reset array
+        console.log(`Calculating SOLID line WITH DEPRECIATION (w=${wear_from_params}, alpha_0=${alpha_0_depr.toFixed(4)})`); // Use wear_from_params
+        // --- End Setup ---
+
+        // --- Setup for Original gn line (Dashed Black) --- 
+        // Uses B0 from params, no alpha needed for formula, no w/dn involved
+        originalTheoretical_gn = []; // Reset array
+        console.log(`Calculating DASHED line with B0=${B0}`);
+        // --- End Setup ---
+
+        let analytical_T_values = {}; // Temporary storage for Tn
+        
+        console.log("Calculating theoretical Tn and analytical lines...");
+
+        // Pre-calculate theoretical T_n values needed up to maxWave+1
+        for (let n = 1; n <= maxWave + 1; n++) { // Use maxWave
+            analytical_T_values[n] = calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+        }
+
+        // Calculate analytical lines wave by wave up to maxWave
+        for (let n = 1; n <= maxWave; n++) { // Use maxWave
+            analyticalWavesX.push(n); // Add wave number for x-axis
+
+            const T_n = analytical_T_values[n];
+            const T_n_plus_1 = analytical_T_values[n + 1];
+            const W_n = W1 * Math.pow(f, n - 1);
+            const B_n_theory = W_n * beta; 
+            const b_n_theory = (T_n > 0) ? B_n_theory / T_n : 0; 
+
+            // --- Calculation for R_start/b_n (Solid Black Line with FULL DEPRECIATION) --- 
+            // Calculate dn for this wave (using Eq. 32)
+            let d_n = 0; // Default to zero if calculation fails
+            const dn_term1 = (f - 1) / T0; // Base term from alpha0 definition
+            if (T_n > 0 && T_n_plus_1 !== undefined) {
+                const gamma_n = T_n_plus_1 / T_n;
+                if (gamma_n > 0) { 
+                    const dn_term2_bracket = 1 - (f / gamma_n);
+                    d_n = dn_term1 + (1 / T_n) * dn_term2_bracket;
+                } else {
+                    console.warn(`Cannot calculate dn for n=${n}: gamma_n (${gamma_n.toFixed(3)}) is not positive.`);
+                    d_n = dn_term1; // Fallback? Or keep 0?
+                }
+            } else {
+                 console.warn(`Cannot calculate dn for n=${n}: Tn (${T_n?.toFixed(3)}) is not positive or Tn+1 is undefined.`);
+                 d_n = dn_term1; // Fallback
+            }
+
+            // Calculate the ratio using R_start_n BEFORE calculating R_end_n
+            let g_analytical_smooth = 0;
+            if (b_n_theory > 0) { 
+                g_analytical_smooth = R_start_analytical_solid / b_n_theory; // Use R_start_n here
+            } else if (R_start_analytical_solid === 0 && B_n_theory === 0) { 
+                g_analytical_smooth = 1; // Break-even if both are zero
+            } else if (b_n_theory <= 0 && R_start_analytical_solid > 0) { 
+                g_analytical_smooth = Infinity; // Infinite ratio if start R > 0 but bounty rate is zero
+            }
+            analyticalRatioSmooth.push(isFinite(g_analytical_smooth) ? g_analytical_smooth : (g_analytical_smooth > 0 ? 1e9 : -1e9));
+
+            // Now calculate R_end_n using the FULL ODE solution (Eq. 33)
+            let R_end_n_analytical_solid = R_start_analytical_solid; 
+            const total_loss_rate = wear_from_params + d_n; // Use wear_from_params
+            if (b_n_theory > 0 && T_n > 0) { 
+                if (Math.abs(total_loss_rate) < 1e-9) { // Handle near-zero loss rate (previous case)
+                    const A_gain = b_n_theory / alpha_0_depr; 
+                    R_end_n_analytical_solid = R_start_analytical_solid + A_gain * T_n;
+                } else { // Use Eq. 33
+                    const steady_state_R = b_n_theory / (alpha_0_depr * total_loss_rate);
+                    R_end_n_analytical_solid = steady_state_R + (R_start_analytical_solid - steady_state_R) * Math.exp(-total_loss_rate * T_n);
+                }
+            }
+            R_end_n_analytical_solid = Math.max(0, R_end_n_analytical_solid); // Ensure non-negative
+            
+            // Update R_start for next iteration
+            R_start_analytical_solid = R_end_n_analytical_solid; 
+            // --- End R_start/b_n Calculation (Full Depr) --- 
+
+            // --- Calculation for Original gn (No Depr - Dashed Black Line) --- 
+            let gn_original_theory = NaN;
+            if (T0 > 0 && T_n > 0 && beta > 0 && W1 > 0) {
+                const denominator_term = Math.pow(f, n - 1);
+                if (denominator_term > 0) {
+                    const term1 = (f - 1) * (B0 / (beta * W1));
+                    const numerator = term1 - 1;
+                    gn_original_theory = (T_n / T0) * (1 + numerator / denominator_term);
+                }
+            }
+            originalTheoretical_gn.push(isFinite(gn_original_theory) ? gn_original_theory : (gn_original_theory > 0 ? 1e9 : -1e9));
+             // --- End Original gn Calculation --- 
+        }
+        console.log("Finished calculating analytical lines.")
+    } else {
+        console.error("Could not calculate analytical lines - maxWave not determined or helper function missing.");
+    }
+    // --- End Analytical Calculations --- 
+
+    addTrace(analyticalWavesX, originalTheoretical_gn, 'Theory (no depreciation)', 'black', 'lines', { dash: 'dash' });
+    addTrace(analyticalWavesX, analyticalRatioSmooth, 'Theory (full depreciation)', 'black', 'lines'); 
+
+
+    if (plotData.length === 0) {
+        throw new Error("Could not load any results data for Fig 6.");
+    }
+    minYValue = Math.max(0.05, minYValue); 
+
+    // Define Plotly layout
+    const layout_depr = {
+      height: 500,
+      font: { family: "'Latin Modern Roman', serif", size: 14 },
+      xaxis: {
+        title: 'Wave number (n)',
+        range: [0, maxWave + 1], // Revert range to maxWave
+        dtick: 5, // Revert tick spacing
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true, linecolor: 'black', linewidth: 1, mirror: true
+      },
+      yaxis: {
+        title: 'Balance Ratio', // Simplified title further
+        type: 'log',
+        range: [Math.log10(minYValue * 0.8), Math.log10(maxYValue * 1.2)], // Replicated dynamic range from Fig 3
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true, linecolor: 'black', linewidth: 1, mirror: true,
+        shapes: [{
+            type: 'line',
+            x0: 0,
+            y0: 1,
+            x1: maxWave + 1, // Use maxWave here
+            y1: 1,
+            line: {
+                color: 'grey',
+                width: 1,
+                dash: 'dash'
+            }
+        }]
+      },
+      margin: { l: 80, r: 20, t: 30, b: 50, pad: 0 }, 
+      showlegend: true,
+      legend: { 
+          font: { family: "'Latin Modern Roman', serif", size: 12 }, // Adjusted font size 
+          x: 0.05, y: 0.98, 
+          xanchor: 'left', yanchor: 'top' 
+      },
+      layer: 'below traces'
+    };
+
+    // Render the plot
+    Plotly.newPlot(depreciationPlotDiv, plotData, layout_depr);
+    console.log("Added analytical comparison line to plot.");
+
+  })
+
 </script>
 
 </body>
