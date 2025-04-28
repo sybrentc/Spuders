@@ -206,6 +206,14 @@ export default class DefenceManager extends EventTarget {
 
             // Dispatch an event to notify listeners (like the UI)
             this.dispatchEvent(new CustomEvent('definitionsUpdated'));
+
+            // --- ADDED: Recalculate wear parameters if definitions changed ---
+            console.log("DefenceManager: Definitions updated, recalculating own wear parameters (k).");
+            // Use a microtask to avoid potential issues if called during initial load?
+            // Or just call directly if calculateWearParameters is robust.
+            // We call it directly for now. Check if await is needed if it becomes async.
+            this.calculateWearParameters(); 
+            // --- END ADDED ---
         } else {
             // //console.log(`DefenceManager: No changes detected in definitions.`);
         }

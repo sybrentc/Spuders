@@ -5,8 +5,9 @@ export default class WaveManager {
      * @param {EnemyManager} enemyManager - Instance of the EnemyManager to access current enemy data.
      * @param {function} createEnemyCallback - Function (e.g., enemyManager.createEnemy) to call for spawning.
      * @param {number} totalPathLength - The total length of the enemy path.
+     * @param {Game} game - The main Game instance.
      */
-    constructor(waveDataPath, enemyManager, createEnemyCallback, totalPathLength) {
+    constructor(waveDataPath, enemyManager, createEnemyCallback, totalPathLength, game) {
         if (!waveDataPath) {
             throw new Error("WaveManager requires a waveDataPath.");
         }
@@ -19,11 +20,15 @@ export default class WaveManager {
         if (typeof totalPathLength !== 'number' || totalPathLength <= 0) {
             throw new Error(`WaveManager requires a valid positive totalPathLength (received: ${totalPathLength}).`);
         }
+        if (!game) {
+            throw new Error("WaveManager requires a Game instance.");
+        }
 
         this.waveDataPath = waveDataPath;
         this.enemyManager = enemyManager;
         this.createEnemy = createEnemyCallback;
         this.totalPathLength = totalPathLength; // Store the path length
+        this.game = game; // Store game instance
 
         // Internal state
         this.waveConfig = null;          // Holds loaded wave parameters (initialDelayMs, etc.)
@@ -100,12 +105,36 @@ export default class WaveManager {
             console.warn("WaveManager: Received empty or invalid data for parameter update. Ignoring.");
             return;
         }
+        // --- ADDED: Check if difficultyIncreaseFactor (f) changed ---
+        const previousF = this.waveConfig?.difficultyIncreaseFactor;
+        const newF = newConfigData.difficultyIncreaseFactor;
+        let fChanged = false;
+        if (typeof newF === 'number' && newF > 1 && newF !== previousF) {
+             fChanged = true;
+             console.log(`WaveManager: difficultyIncreaseFactor (f) changed from ${previousF} to ${newF}.`);
+        }
+        // --- END ADDED ---
+        
         // Simple overwrite for now. Add validation/merging if needed.
         this.waveConfig = newConfigData; 
         // //console.log("WaveManager: Updated Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log updated config
 
+        // --- ADDED: Trigger recalculation if f changed ---
+        if (fChanged && this.game) {
+            this.game.recalculateAlphaFactor();
+        }
+        // --- END ADDED ---
+
         // Potentially adjust ongoing timers if parameters like delayBetweenWavesMs change mid-wait?
         // For simplicity, we'll let the current timer run out based on the old value.
+    }
+
+    /**
+     * Returns the configured difficulty increase factor (f).
+     * @returns {number | undefined} The factor, or undefined if not loaded.
+     */
+    getDifficultyIncreaseFactor() {
+        return this.waveConfig?.difficultyIncreaseFactor;
     }
 
     /**

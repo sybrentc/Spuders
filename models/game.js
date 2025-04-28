@@ -44,6 +44,9 @@ export default class Game {
         this.extendedPathData = []; // Add storage for path waypoints
         this.pathCoverageLookup = []; // <-- ADDED STORAGE
         this.pathCoverageLoaded = false; // <-- ADDED FLAG
+        // --- ADDED: Dynamic difficulty factor ---
+        this.calculatedAlphaFactor = null; // To store the result of Eq. 31
+        // --- END ADDED ---
     }
     
     // --- ADD methods for placement preview --- 
@@ -146,7 +149,8 @@ export default class Game {
                     this.waveDataPath, // Pass the path
                     this.enemyManager, // Pass the EnemyManager instance
                     this.enemyManager.createEnemy.bind(this.enemyManager),
-                    this.totalPathLength // <-- ADD Pass the loaded path length
+                    this.totalPathLength, // <-- Pass the loaded path length
+                    this // <-- ADDED: Pass the Game instance
                 );
                 await this.waveManager.load(); // Load wave data within the manager
             } else {
@@ -226,6 +230,10 @@ export default class Game {
             
             ////console.log('Game initialization complete.');
 
+            // --- ADDED: Calculate initial alpha factor ---
+            this.recalculateAlphaFactor(); // Call after all dependencies are ready
+            // --- END ADDED ---
+
             // Instantiate PriceManager
             if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
                 //console.log("DEBUG: Game Initialize - About to create PriceManager..."); // <-- ADD LOG
@@ -256,18 +264,37 @@ export default class Game {
      */
     applyParameterUpdates(newData) {
         let updated = false;
-        if (typeof newData.difficulty === 'number' && newData.difficulty > 0 && newData.difficulty !== this.difficulty) {
-            ////console.log(`Game: Updating difficulty from ${this.difficulty} to ${newData.difficulty}`);
-            this.difficulty = newData.difficulty;
-            updated = true;
-            // Note: PriceManager will automatically pick this up next time it calculates costs.
-        }
+        // --- REMOVED: Old static difficulty update ---
+        // if (typeof newData.difficulty === 'number' ...)
+
+        // --- Check for currencyScale (β) update --- 
         if (typeof newData.currencyScale === 'number' && newData.currencyScale >= 0 && newData.currencyScale !== this.currencyScale) {
-            ////console.log(`Game: Updating currencyScale from ${this.currencyScale} to ${newData.currencyScale}`);
+            console.log(`Game: Updating currencyScale (β) from ${this.currencyScale} to ${newData.currencyScale}`);
             this.currencyScale = newData.currencyScale;
             updated = true;
             // Note: EnemyManager will automatically pick this up next time it calculates bounty.
         }
+
+        // --- ADDED: Check for wear (w) update --- 
+        if (typeof newData.wear === 'number' && newData.wear >= 0 && newData.wear !== this.levelData?.wear) {
+            console.log(`Game: Updating wear (w) from ${this.levelData?.wear} to ${newData.wear}`);
+            if (this.levelData) { // Ensure levelData exists before trying to update
+                 this.levelData.wear = newData.wear; 
+            }
+            this.recalculateAlphaFactor(); // Recalculate α₀
+            // --- ADDED: Recalculate defender durability (k) ---
+            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded) {
+                console.log("Game: Wear parameter changed, recalculating defender wear parameters (k)...");
+                // No need to await typically, but check if calculateWearParameters becomes async later
+                this.defenceManager.calculateWearParameters(); 
+            } else {
+                console.warn("Game: Cannot recalculate defender wear parameters - DefenceManager or Path Coverage not ready.")
+            }
+            updated = true; 
+            // Note: PriceManager will pick up the new α₀ via getAlphaFactor()
+        }
+        // --- END ADDED ---
+
         // Add more parameter checks here if needed
 
         // if (updated) {
@@ -295,13 +322,9 @@ export default class Game {
             };
             
             // --> Store initial difficulty and currencyScale from levelData
-            if (typeof this.levelData.difficulty === 'number' && this.levelData.difficulty > 0) {
-                 this.difficulty = this.levelData.difficulty;
-                 ////console.log(`Game: Initial difficulty set to ${this.difficulty}`);
-            } else {
-                 console.warn(`Game: Using default difficulty ${this.difficulty}. Invalid or missing value in level data.`);
-                 // No throw, use default
-            }
+            // REMOVED: Static difficulty loading - Now calculated dynamically
+            // if (typeof this.levelData.difficulty === 'number' && this.levelData.difficulty > 0) { ... }
+            
             if (typeof this.levelData.currencyScale === 'number' && this.levelData.currencyScale >= 0) {
                  this.currencyScale = this.levelData.currencyScale;
                  ////console.log(`Game: Initial currencyScale set to ${this.currencyScale}`);
@@ -579,8 +602,12 @@ export default class Game {
     }
 
     // --- Getters for Live Parameters ---
-    getDifficulty() {
-         return this.difficulty;
+    /**
+     * Returns the dynamically calculated alpha factor (α₀).
+     * @returns {number | null} The factor, or null if not calculated.
+     */
+    getAlphaFactor() {
+         return this.calculatedAlphaFactor; // Return the calculated value
     }
 
     getCurrencyScale() {
@@ -644,6 +671,87 @@ export default class Game {
         // Assuming wear is stored in levelData loaded during initialize/loadLevel
         return this.levelData?.wear ?? 0; // Default to 0 if not found
     }
+
+    // --- ADDED: Dynamic Difficulty Factor Calculation ---
+    /**
+     * Calculates the alpha factor (difficulty/cost scaling) based on Eq. 31.
+     * Requires WaveManager, EnemyManager, path stats, and levelData.wear to be loaded.
+     * α₀ = 1 / (((f - 1) / T₀) + w)
+     * where T₀ = L / s_min
+     * @returns {number | null} The calculated factor, or null if calculation fails.
+     * @private
+     */
+    _calculateAlphaFactor() {
+        // 1. Get necessary parameters
+        const f = this.waveManager?.getDifficultyIncreaseFactor();
+        const w = this.getWearParameter(); // Already has default
+        const L = this.getTotalPathLength();
+        const s_min = this.enemyManager?.getMinimumEnemySpeed();
+
+        // 2. Validate parameters
+        if (typeof f !== 'number' || f <= 1) {
+            console.error(`Game._calculateAlphaFactor: Invalid difficulty increase factor (f=${f}). Must be > 1.`);
+            return null;
+        }
+        if (typeof w !== 'number' || w < 0) {
+            console.error(`Game._calculateAlphaFactor: Invalid wear parameter (w=${w}). Must be >= 0.`);
+            // Allow w=0, so don't return null here unless strictly required
+        }
+        if (typeof L !== 'number' || L <= 0) {
+            console.error(`Game._calculateAlphaFactor: Invalid total path length (L=${L}). Must be > 0.`);
+            return null;
+        }
+        if (typeof s_min !== 'number' || s_min <= 0) {
+            console.error(`Game._calculateAlphaFactor: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
+            return null;
+        }
+
+        // 3. Calculate T0
+        const T0 = L / s_min;
+        if (T0 <= 0) {
+             console.error(`Game._calculateAlphaFactor: Calculated T0 (${T0}) is not positive.`);
+             return null;
+        }
+
+        // 4. Calculate Denominator of Eq. 31
+        const term1 = (f - 1) / T0;
+        const denominator = term1 + w;
+
+        // 5. Check denominator and calculate alpha_0
+        if (denominator <= 1e-9) { // Check for zero or very small denominator
+            console.error(`Game._calculateAlphaFactor: Denominator (${denominator}) too small or zero. Cannot calculate factor. Check f, T0, w.`);
+            return null;
+        }
+
+        const alpha_0 = 1 / denominator;
+
+        // Add a check for unreasonably large/small values?
+        if (!isFinite(alpha_0) || alpha_0 < 0) {
+             console.error(`Game._calculateAlphaFactor: Calculation resulted in invalid value (${alpha_0}).`);
+             return null;
+        }
+
+        return alpha_0;
+    }
+
+    /**
+     * Recalculates the dynamic alpha factor and stores it.
+     * Should be called during initialization and when relevant parameters change.
+     */
+    recalculateAlphaFactor() {
+        const newAlphaFactor = this._calculateAlphaFactor();
+        if (newAlphaFactor !== null) {
+            if (this.calculatedAlphaFactor !== newAlphaFactor) {
+                console.log(`Game: Recalculated alpha factor (α₀): ${newAlphaFactor.toFixed(4)} (previously: ${this.calculatedAlphaFactor?.toFixed(4)})`);
+                this.calculatedAlphaFactor = newAlphaFactor;
+                // TODO: Potentially notify PriceManager or other dependents here
+                // For now, PriceManager will pick it up via getAlphaFactor()
+            }
+        } else {
+            console.error("Game: Failed to recalculate alpha factor. Previous value retained.");
+        }
+    }
+    // --- END ADDED ---
 }
 
 // --- Standalone Path Utility Function --- 

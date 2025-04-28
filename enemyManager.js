@@ -248,8 +248,16 @@ export default class EnemyManager {
              return;
         }
 
+        // --- ADDED: Check if min speed changes ---
+        const previousMinSpeed = this.getMinimumEnemySpeed();
+        // --- END ADDED ---
+
         // Create a map for efficient lookup of new definitions by ID
         const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
+
+        // --- Store a copy of old definitions for comparison ---
+        const oldEnemyTypesString = JSON.stringify(this.enemyTypes);
+        // -----------------------------------------------------
 
         // --- Process ALL incoming definitions --- 
         newDefinitionsMap.forEach((newDef, enemyId) => {
@@ -303,6 +311,28 @@ export default class EnemyManager {
             }
         });
         // ----------------------------------------------------------------
+
+        // --- ADDED: Recalculate alpha factor if min speed changed ---
+        const currentMinSpeed = this.getMinimumEnemySpeed();
+        // Check if the speed value actually changed (handle null cases)
+        if (previousMinSpeed !== currentMinSpeed) {
+             console.log(`EnemyManager: Minimum speed changed from ${previousMinSpeed} to ${currentMinSpeed}. Triggering alpha factor recalculation.`);
+             this.game.recalculateAlphaFactor(); // Call game's method
+        }
+        // --- END ADDED ---
+
+        // --- ADDED: Recalculate defender durability ONLY if enemy stats ACTUALLY changed ---
+        const newEnemyTypesString = JSON.stringify(this.enemyTypes);
+        if (oldEnemyTypesString !== newEnemyTypesString) { // Compare before/after strings
+            if (this.game.defenceManager?.isLoaded) {
+                console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
+                // TODO: Check if calculateWearParameters needs await in the future
+                this.game.defenceManager.calculateWearParameters(); 
+            } else {
+                 console.warn("EnemyManager: Cannot trigger defender wear recalculation - DefenceManager not ready.");
+            }
+        }
+        // --- END ADDED ---
     }
 
     // Helper to expose the data path 
@@ -324,6 +354,37 @@ export default class EnemyManager {
         return this.enemyTypes;
     }
     
+    // --- ADDED: Getter for minimum speed ---
+    /**
+     * Calculates and returns the minimum positive speed among all loaded enemy types.
+     * @returns {number | null} The minimum speed, or null if no valid enemies exist.
+     */
+    getMinimumEnemySpeed() {
+        if (!this.isLoaded || Object.keys(this.enemyTypes).length === 0) {
+            //console.warn("EnemyManager: getMinimumEnemySpeed called before loaded or no enemy types defined.");
+            return null;
+        }
+
+        let minSpeed = Infinity;
+        let foundValid = false;
+
+        for (const id in this.enemyTypes) {
+            const enemyDef = this.enemyTypes[id];
+            if (enemyDef?.stats?.speed && enemyDef.stats.speed > 0) {
+                minSpeed = Math.min(minSpeed, enemyDef.stats.speed);
+                foundValid = true;
+            }
+        }
+
+        if (!foundValid) {
+            console.warn("EnemyManager: No enemies with positive speed found.");
+            return null;
+        }
+
+        return minSpeed;
+    }
+    // --- END ADDED ---
+
     // Method to calculate average death distance (uses EXTENDED path distances now)
     calculateAverageDeathDistance() {
         if (this.currentWaveDeathDistances.length === 0) {

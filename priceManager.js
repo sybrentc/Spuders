@@ -50,8 +50,8 @@ class PriceManager {
         if (!defenceManager || !enemyManager || !base) {
             throw new Error("PriceManager requires defenceManager, enemyManager, and base.");
         }
-        // Added check for game instance
-        if (!game || typeof game.getDifficulty !== 'function') { // Check if it looks like a Game instance
+        // Added check for game instance - UPDATED to check for getAlphaFactor
+        if (!game || typeof game.getAlphaFactor !== 'function') { // Check if it looks like a Game instance
             throw new Error("PriceManager requires a valid Game instance.");
         }
         this.defenceManager = defenceManager;
@@ -110,9 +110,19 @@ class PriceManager {
 
         const defenceDefinitions = this.defenceManager.getDefinitions();
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
-        // Use game.getDifficulty() to get the live value
-        const beta = this.game.getDifficulty();
+        // Use game.getAlphaFactor() to get the live calculated value (α₀)
+        const alpha_factor = this.game.getAlphaFactor(); // RENAMED getter and variable
         const costs = {};
+
+        // --- Handle case where alpha factor couldn't be calculated ---
+        if (alpha_factor === null || alpha_factor <= 0) {
+            console.error(`PriceManager: Invalid alpha_factor (${alpha_factor}) from Game. Setting all costs to Infinity.`);
+            for (const defenceId in defenceDefinitions) {
+                costs[defenceId] = Infinity;
+            }
+            return costs;
+        }
+        // ----------------------------------------------------------
 
         // --- Calculate costs for ALL defenders based on definitions ---
         for (const defenceId in defenceDefinitions) {
@@ -210,7 +220,7 @@ class PriceManager {
             // --- Calculate Final Cost --- 
             if (validEnemyCount > 0) {
                 const avgEarningRate = sumOfEnemyEarningRates / validEnemyCount;
-                costs[defenceId] = beta * avgEarningRate;
+                costs[defenceId] = alpha_factor * avgEarningRate; // Use alpha_factor (α₀)
             } else {
                 console.warn(`PriceManager: No valid enemies found to calculate cost for ${defenceId}. Setting cost to Infinity.`);
                 costs[defenceId] = Infinity; // No valid enemies to base cost upon
