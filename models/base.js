@@ -10,24 +10,24 @@ export default class Base {
      * @returns {Promise<Base>} A promise that resolves with the initialized Base instance.
      */
     static async createFromPath(path) {
-        console.log(`Base: Attempting to create from path: ${path}`);
+        //console.log(`Base: Attempting to create from path: ${path}`);
         // 1. Fetch the configuration data
         const response = await fetch(path);
         if (!response.ok) {
             throw new Error(`Base.createFromPath: Failed to fetch base config from ${path}: ${response.statusText}`);
         }
         const config = await response.json();
-        console.log(`Base: Config fetched successfully.`);
+        //console.log(`Base: Config fetched successfully.`);
 
         // 2. Instantiate the base using the fetched config
         // Note: Constructor now primarily validates and assigns properties.
         const baseInstance = new Base(config);
-        console.log(`Base: Instance created from config.`);
+        //console.log(`Base: Instance created from config.`);
 
         // 3. Load necessary assets (like the sprite)
         // This is kept separate from constructor for async operations.
         await baseInstance.loadAssets();
-        console.log(`Base: Assets loaded.`);
+        //console.log(`Base: Assets loaded.`);
         
         // 4. Return the fully initialized instance
         return baseInstance;
@@ -85,7 +85,7 @@ export default class Base {
         try {
             this.spriteSheet = await this.loadSprite(this.spritePath);
             this.isLoaded = true;
-            console.log(`Base: Successfully loaded sprite from ${this.spritePath}`);
+            //console.log(`Base: Successfully loaded sprite from ${this.spritePath}`);
         } catch (error) {
             console.error(`Base: Failed to load assets: ${error}`);
             this.isLoaded = false; // Ensure isLoaded is false on error
@@ -137,7 +137,7 @@ export default class Base {
         // Check if assets are loaded and sprite dimensions are valid
         if (!this.isLoaded || !this.spriteSheet || this.frameWidth <= 0 || this.frameHeight <= 0) {
              // REMOVE DEBUG LOGGING FOR RENDER
-             // console.log('Base Render: Skipping draw due to missing assets or invalid dimensions.');
+             // //console.log('Base Render: Skipping draw due to missing assets or invalid dimensions.');
              return;
         }
 
@@ -153,7 +153,7 @@ export default class Base {
         const drawY = this.y - (drawHeight * this.anchorY);
         
         // REMOVE DEBUG LOGGING FOR DRAW PARAMETERS
-        // console.log(`Base Render Draw: sx=${sourceX}, sy=${sourceY}, sw=${this.frameWidth}, sh=${this.frameHeight}, dx=${drawX}, dy=${drawY}, dw=${drawWidth}, dh=${drawHeight}`);
+        // //console.log(`Base Render Draw: sx=${sourceX}, sy=${sourceY}, sw=${this.frameWidth}, sh=${this.frameHeight}, dx=${drawX}, dy=${drawY}, dw=${drawWidth}, dh=${drawHeight}`);
 
         // Draw the specific frame
         try {
@@ -187,11 +187,11 @@ export default class Base {
             return; // Cannot damage a destroyed base
         }
         this.currentHp -= amount;
-        console.log(`Base took ${amount} damage, HP remaining: ${this.currentHp}/${this.maxHp}`);
+        //console.log(`Base took ${amount} damage, HP remaining: ${this.currentHp}/${this.maxHp}`);
         if (this.currentHp <= 0) {
             this.currentHp = 0;
             this._isDestroyed = true;
-            console.log("Base has been destroyed!");
+            //console.log("Base has been destroyed!");
             this.die(); // Call the die method
         }
     }
@@ -201,7 +201,7 @@ export default class Base {
      */
     die() {
         // TODO: Implement base destruction logic (e.g., remove from game, trigger game over)
-        console.log("Base die() method called.");
+        //console.log("Base die() method called.");
     }
 
     /**
@@ -229,11 +229,11 @@ export default class Base {
     spendFunds(amount) {
         if (this.canAfford(amount)) {
             this.currentFunds -= amount;
-            console.log(`Base spent ${amount}. Funds remaining: ${this.currentFunds}`);
+            //console.log(`Base spent ${amount}. Funds remaining: ${this.currentFunds}`);
             // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
             return true;
         }
-        console.log(`Base cannot afford to spend ${amount}. Funds available: ${this.currentFunds}`);
+        //console.log(`Base cannot afford to spend ${amount}. Funds available: ${this.currentFunds}`);
         return false;
     }
 
@@ -244,7 +244,7 @@ export default class Base {
     addFunds(amount) {
         if (amount > 0) {
             this.currentFunds += amount;
-            console.log(`Base earned ${amount}. Funds remaining: ${this.currentFunds}`);
+            //console.log(`Base earned ${amount}. Funds remaining: ${this.currentFunds}`);
             // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
         }
     }
@@ -264,13 +264,13 @@ export default class Base {
                 // Update both maxHp and the value within this.stats
                 this.stats.hp = newData.stats.hp;
                 this.maxHp = this.stats.hp; 
-                console.log(`Base Max HP updated from ${oldMaxHp} to ${this.maxHp}`);
+                //console.log(`Base Max HP updated from ${oldMaxHp} to ${this.maxHp}`);
                 if (this.currentHp > this.maxHp) {
                     this.currentHp = this.maxHp; // Clamp current HP
                 }
                 if (this.maxHp > 0 && this.currentHp > 0 && this._isDestroyed) {
                     this._isDestroyed = false; // Revive if HP tuned above 0
-                    console.log("Base revived by parameter update.");
+                    //console.log("Base revived by parameter update.");
                 }
                 configChanged = true;
             }
@@ -283,7 +283,7 @@ export default class Base {
                  const newStartingFunds = this.stats.money;
                  const delta = newStartingFunds - oldStartingFunds;
 
-                 console.log(`Base startingFunds updated from ${oldStartingFunds} to ${newStartingFunds} (Delta: ${delta})`);
+                 //console.log(`Base startingFunds updated from ${oldStartingFunds} to ${newStartingFunds} (Delta: ${delta})`);
                  
                  this.startingFunds = newStartingFunds; // Update the stored starting funds value
                  this.currentFunds += delta; // Apply the difference to the actual current funds
@@ -293,7 +293,7 @@ export default class Base {
                     console.warn(`Base currentFunds dropped below zero (${this.currentFunds}) after tuning adjustment. Clamping to 0.`);
                     this.currentFunds = 0;
                  }
-                 console.log(`Base currentFunds adjusted by ${delta}. New currentFunds: ${this.currentFunds}`);
+                 //console.log(`Base currentFunds adjusted by ${delta}. New currentFunds: ${this.currentFunds}`);
                  
                  configChanged = true;
              }
@@ -302,7 +302,7 @@ export default class Base {
              if (newData.stats.costFactor !== undefined && newData.stats.costFactor !== this.stats.costFactor) {
                  const oldFactor = this.stats.costFactor;
                  this.stats.costFactor = newData.stats.costFactor; // Update the value in this.stats
-                 console.log(`Base costFactor updated from ${oldFactor} to ${this.stats.costFactor}`);
+                 //console.log(`Base costFactor updated from ${oldFactor} to ${this.stats.costFactor}`);
                  configChanged = true;
              }
 
@@ -310,7 +310,7 @@ export default class Base {
              if (newData.stats.bountyFactor !== undefined && newData.stats.bountyFactor !== this.stats.bountyFactor) {
                  const oldFactor = this.stats.bountyFactor;
                  this.stats.bountyFactor = newData.stats.bountyFactor; // Update the value in this.stats
-                 console.log(`Base bountyFactor updated from ${oldFactor} to ${this.stats.bountyFactor}`);
+                 //console.log(`Base bountyFactor updated from ${oldFactor} to ${this.stats.bountyFactor}`);
                  configChanged = true;
                  // Note: EnemyManager/PriceManager will pick this up automatically.
              }
@@ -324,12 +324,12 @@ export default class Base {
         // --- Update Position --- 
         if (newData.position) { // Check if position object exists
             if (newData.position.x !== undefined && newData.position.x !== this.x) {
-                console.log(`Base position X updated from ${this.x} to ${newData.position.x}`);
+                //console.log(`Base position X updated from ${this.x} to ${newData.position.x}`);
                 this.x = newData.position.x;
                 configChanged = true;
             }
             if (newData.position.y !== undefined && newData.position.y !== this.y) {
-                console.log(`Base position Y updated from ${this.y} to ${newData.position.y}`);
+                //console.log(`Base position Y updated from ${this.y} to ${newData.position.y}`);
                 this.y = newData.position.y;
                 configChanged = true;
             }
@@ -340,19 +340,19 @@ export default class Base {
             // Use nullish coalescing (??) to handle potential 0 values correctly
             const newAnchorX = newData.display.anchorX ?? this.anchorX;
             if (newAnchorX !== this.anchorX) {
-                console.log(`Base anchorX updated from ${this.anchorX} to ${newAnchorX}`);
+                //console.log(`Base anchorX updated from ${this.anchorX} to ${newAnchorX}`);
                 this.anchorX = newAnchorX;
                 configChanged = true;
             }
             const newAnchorY = newData.display.anchorY ?? this.anchorY;
              if (newAnchorY !== this.anchorY) {
-                console.log(`Base anchorY updated from ${this.anchorY} to ${newAnchorY}`);
+                //console.log(`Base anchorY updated from ${this.anchorY} to ${newAnchorY}`);
                 this.anchorY = newAnchorY;
                 configChanged = true;
             }
             const newScale = newData.display.scale ?? this.scale;
              if (newScale !== this.scale) {
-                console.log(`Base scale updated from ${this.scale} to ${newScale}`);
+                //console.log(`Base scale updated from ${this.scale} to ${newScale}`);
                 this.scale = newScale;
                 configChanged = true;
             }
@@ -362,7 +362,7 @@ export default class Base {
         // This section is now LESS critical as we update this.stats directly,
         // but keep it if other parts rely on this.config
         if (configChanged) {
-             console.log("Base: Updating internal config representation after parameter changes.");
+             //console.log("Base: Updating internal config representation after parameter changes.");
              // Deep merge might be safer, but shallow merge is simpler for now
              this.config = { 
                  ...this.config, 

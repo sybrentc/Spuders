@@ -42,7 +42,7 @@ export default class EnemyManager {
              if (!enemyResponse.ok) throw new Error(`HTTP error! status: ${enemyResponse.status} loading ${this.enemyDataPath}`);
             const enemyDefinitions = await enemyResponse.json();
 
-            console.log(`EnemyManager: Loading ${enemyDefinitions.length} enemy types from ${this.enemyDataPath}`);
+            //console.log(`EnemyManager: Loading ${enemyDefinitions.length} enemy types from ${this.enemyDataPath}`);
 
             // Load sprites and store definitions
             const spritePromises = enemyDefinitions.map(async (enemyDef) => {
@@ -65,7 +65,7 @@ export default class EnemyManager {
             // -----------------------------------------------------------------
 
             this.isLoaded = true;
-            console.log('EnemyManager: All enemy types loaded. Path data/stats loaded by Game.'); // Updated log
+            //console.log('EnemyManager: All enemy types loaded. Path data/stats loaded by Game.'); // Updated log
             return true;
         } catch (error) {
             console.error('EnemyManager: Error during loading:', error);
@@ -125,7 +125,7 @@ export default class EnemyManager {
         // --- Handle potential sprite loading promise --- 
         let sprite;
         if (spriteOrPromise instanceof Promise) {
-            console.log(`EnemyManager: Waiting for sprite promise for ${enemyTypeId}...`);
+            //console.log(`EnemyManager: Waiting for sprite promise for ${enemyTypeId}...`);
             try {
                 sprite = await spriteOrPromise;
                 // Store the resolved sprite for next time
@@ -265,7 +265,7 @@ export default class EnemyManager {
                 const newSpritePath = newDef.sprite?.path;
 
                 if (newSpritePath && newSpritePath !== oldSpritePath) {
-                    console.log(`EnemyManager: Sprite path changed for ${enemyId}. Reloading sprite from ${newSpritePath}`);
+                    //console.log(`EnemyManager: Sprite path changed for ${enemyId}. Reloading sprite from ${newSpritePath}`);
                     // Start loading new sprite, store the promise
                     // Overwrite existing sprite or promise
                     this.enemySprites[enemyId] = this.loadSprite(newSpritePath).catch(err => {
@@ -273,10 +273,10 @@ export default class EnemyManager {
                         return null; // Store null on failure to prevent repeated attempts
                     });
                 }
-                // console.log(`EnemyManager: Updated blueprint for ${enemyId}`);
+                // //console.log(`EnemyManager: Updated blueprint for ${enemyId}`);
             } else {
                 // --- Add New Enemy --- 
-                console.log(`EnemyManager: Adding new enemy type: ${enemyId}`);
+                //console.log(`EnemyManager: Adding new enemy type: ${enemyId}`);
                 this.enemyTypes[enemyId] = newDef; // Add the new definition
 
                 // Load sprite for the new enemy, store the promise
@@ -299,7 +299,7 @@ export default class EnemyManager {
             if (updatedDef) {
                 // Call the enemy's own update method
                 enemy.applyUpdate(updatedDef);
-                 // console.log(`EnemyManager: Applied update to active enemy ${enemy.id}`);
+                 // //console.log(`EnemyManager: Applied update to active enemy ${enemy.id}`);
             }
         });
         // ----------------------------------------------------------------
@@ -327,13 +327,13 @@ export default class EnemyManager {
     // Method to calculate average death distance (uses EXTENDED path distances now)
     calculateAverageDeathDistance() {
         if (this.currentWaveDeathDistances.length === 0) {
-            console.log("EnemyManager: No enemy deaths recorded for the last wave.");
+            //console.log("EnemyManager: No enemy deaths recorded for the last wave.");
             this.currentWaveDeathDistances = [];
             return 0; 
         }
         const sumOfDistances = this.currentWaveDeathDistances.reduce((sum, dist) => sum + dist, 0);
         const averageDistance = sumOfDistances / this.currentWaveDeathDistances.length;
-        console.log(`EnemyManager: Average death distance for last wave: ${averageDistance.toFixed(2)} pixels (based on ${this.currentWaveDeathDistances.length} deaths, EXTENDED path).`);
+        //console.log(`EnemyManager: Average death distance for last wave: ${averageDistance.toFixed(2)} pixels (based on ${this.currentWaveDeathDistances.length} deaths, EXTENDED path).`);
         this.currentWaveDeathDistances = [];
         return averageDistance;
     }

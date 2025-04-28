@@ -23,7 +23,7 @@ export default class TuningManager {
              return;
         }
         this.registeredManagers.push({ manager, dataPath });
-        console.log(`TuningManager: Registered manager for data path: ${dataPath}`);
+        //console.log(`TuningManager: Registered manager for data path: ${dataPath}`);
     }
 
     /**
@@ -44,13 +44,13 @@ export default class TuningManager {
                            window.location.port === '5500';
 
         if (!isLocalDev) {
-            console.log("TuningManager: Not in local dev environment (port 5500). Periodic updates disabled.");
+            //console.log("TuningManager: Not in local dev environment (port 5500). Periodic updates disabled.");
             this.isRunning = false; // Ensure it's marked as not running the interval
             return; // Don't start the interval
         }
         // ------------------------
 
-        console.log(`TuningManager: Starting periodic updates every ${this.updateIntervalMs}ms.`);
+        //console.log(`TuningManager: Starting periodic updates every ${this.updateIntervalMs}ms.`);
         this.isRunning = true;
         // Use an arrow function to maintain 'this' context inside setInterval
         this.intervalId = setInterval(() => this.checkForUpdates(), this.updateIntervalMs);
@@ -63,7 +63,7 @@ export default class TuningManager {
      */
     stop() {
         if (!this.isRunning) return;
-        console.log("TuningManager: Stopping periodic updates.");
+        //console.log("TuningManager: Stopping periodic updates.");
         clearInterval(this.intervalId);
         this.intervalId = null;
         this.isRunning = false;

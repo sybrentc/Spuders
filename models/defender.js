@@ -1,3 +1,5 @@
+import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+
 export default class DefenceEntity {
     constructor(id, definition, position, spriteDefinition) {
         this.id = id; // e.g., 'laser_tower'
@@ -13,6 +15,13 @@ export default class DefenceEntity {
         this.attackRange = definition.stats.attackRange;
         this.attackRate = definition.stats.attackRate; // ms between attacks
         this.attackStrength = definition.stats.attackStrength;
+        
+        // --- Wear properties ---
+        this.wearEnabled = definition.stats.wearEnabled ?? false;
+        this.totalHitsK = this.wearEnabled ? (definition.stats.totalHitsK ?? 1) : 1;
+        this.remainingHits = this.totalHitsK;
+        this.isDestroyed = false;
+        // --- End Wear properties ---
         
         // --- Sprite and Animation Setup --- 
         this.spriteDefinition = spriteDefinition;
@@ -112,11 +121,25 @@ export default class DefenceEntity {
         // Apply direct damage if applicable
         if (this.attackStrength > 0) {
             this.target.hit(this.attackStrength);
+            // --- Deplete Wear --- 
+            if (this.wearEnabled && this.remainingHits > 0) {
+                this.remainingHits--;
+            }
+            // --- End Deplete Wear ---
         }
         return true;
     }
 
     update(timestamp, deltaTime, enemies) {
+        // --- Check for Wear Destruction --- 
+        if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
+            this.isDestroyed = true;
+            console.log(`Defender ${this.id} worn out!`); // Optional log
+            // TODO: Trigger removal logic? (Handled by Manager filter for now)
+            return; // Stop further updates if destroyed by wear
+        }
+        // --- End Check ---
+
         // 1. Find a target if we don't have one (or current one is dead)
         if (!this.target || this.target.isDead) {
             this.findTarget(enemies);
@@ -245,7 +268,13 @@ export default class DefenceEntity {
                 destWidth, destHeight       // Destination width, height (how big to draw it)
             );
 
-            // TODO: Optional: Draw health bar or other indicators
+            // --- Draw Wear/Durability Bar --- 
+            if (this.wearEnabled) {
+                // Reuse the existing health bar logic, treating remaining hits as 'current health'
+                drawHealthBar(ctx, this.remainingHits, this.totalHitsK, drawX, drawY, destWidth, destHeight);
+            }
+            // --- End Draw Wear Bar ---
+
             ctx.restore();
         } else {
             // Fallback rendering if sprite isn't loaded/defined

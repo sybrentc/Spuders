@@ -47,7 +47,7 @@ export default class WaveManager {
         this.waitingForClear = false; // Initialize the new flag
         this.lastAverageDeathDistance = null; // Store the average distance from the last wave
 
-        console.log("WaveManager: Instance created.");
+        //console.log("WaveManager: Instance created.");
     }
 
     /**
@@ -75,8 +75,8 @@ export default class WaveManager {
 
             this.waveConfig = configData;
             this.isLoaded = true;
-            console.log(`WaveManager: Successfully loaded and applied wave config from ${this.waveDataPath}`);
-            // console.log("WaveManager: Initial Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log initial config
+            //console.log(`WaveManager: Successfully loaded and applied wave config from ${this.waveDataPath}`);
+            // //console.log("WaveManager: Initial Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log initial config
             return true;
         } catch (error) {
             console.error(`WaveManager: Error loading wave config from ${this.waveDataPath}:`, error);
@@ -102,7 +102,7 @@ export default class WaveManager {
         }
         // Simple overwrite for now. Add validation/merging if needed.
         this.waveConfig = newConfigData; 
-        // console.log("WaveManager: Updated Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log updated config
+        // //console.log("WaveManager: Updated Config:", JSON.stringify(this.waveConfig, null, 2)); // Optional: Log updated config
 
         // Potentially adjust ongoing timers if parameters like delayBetweenWavesMs change mid-wait?
         // For simplicity, we'll let the current timer run out based on the old value.
@@ -125,7 +125,7 @@ export default class WaveManager {
 
         this.isStarted = true;
         const initialDelay = this.waveConfig.initialDelayMs || 0;
-        console.log(`WaveManager: Starting system. First wave calculation in ${initialDelay / 1000} seconds.`);
+        //console.log(`WaveManager: Starting system. First wave calculation in ${initialDelay / 1000} seconds.`);
 
         // Use timeout for the very first wave delay
         setTimeout(() => {
@@ -151,7 +151,7 @@ export default class WaveManager {
         }
 
         this.currentWaveNumber++;
-        console.log(`WaveManager: Starting calculation for Wave ${this.currentWaveNumber}`);
+        //console.log(`WaveManager: Starting calculation for Wave ${this.currentWaveNumber}`);
         this.waveStartTime = performance.now(); // Record when wave calculation/setup starts
         this.timeUntilNextWave = 0; // Clear inter-wave timer
 
@@ -161,7 +161,7 @@ export default class WaveManager {
             // Use the stored totalPathLength
             if (this.totalPathLength > 0) {
                 this.lastAverageDeathDistance = this.totalPathLength / 2;
-                console.log(`WaveManager: Initializing target distance for Wave 1 to L/2 = ${this.lastAverageDeathDistance.toFixed(0)}px`);
+                //console.log(`WaveManager: Initializing target distance for Wave 1 to L/2 = ${this.lastAverageDeathDistance.toFixed(0)}px`);
             } else {
                 // This case should ideally not happen due to constructor check, but good to have a warning.
                 console.warn("WaveManager: totalPathLength is not valid. Cannot initialize Wave 1 target distance.");
@@ -173,12 +173,12 @@ export default class WaveManager {
         if (!useCoordinatedSpawn) {
             console.warn(`WaveManager: lastAverageDeathDistance (${targetDistance}) is invalid. Reverting to simple speed-sorted spawn for Wave ${this.currentWaveNumber}.`);
         } else {
-            console.log(`WaveManager: Targeting coordinated arrival at distance ${targetDistance.toFixed(0)}px for Wave ${this.currentWaveNumber}.`);
+            //console.log(`WaveManager: Targeting coordinated arrival at distance ${targetDistance.toFixed(0)}px for Wave ${this.currentWaveNumber}.`);
         }
 
         // --- Difficulty & Enemy Selection ---
         const targetDifficulty = this.waveConfig.startingDifficulty * Math.pow(this.waveConfig.difficultyIncreaseFactor, this.currentWaveNumber - 1);
-        console.log(`WaveManager: Target difficulty: ${targetDifficulty.toFixed(0)}`);
+        //console.log(`WaveManager: Target difficulty: ${targetDifficulty.toFixed(0)}`);
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
         const availableEnemyCosts = [];
         const enemyIdsToConsider = Object.keys(enemyDefinitions);
@@ -203,13 +203,13 @@ export default class WaveManager {
         if (typeof maxPrepopulationPerType !== 'number' || maxPrepopulationPerType < 0) {
             maxPrepopulationPerType = Infinity; // Disable if invalid
         } else {
-             console.log(`WaveManager: Pre-population threshold per type: ${maxPrepopulationPerType}`);
+             //console.log(`WaveManager: Pre-population threshold per type: ${maxPrepopulationPerType}`);
         }
         let minEnemyTypes = this.waveConfig.waveGeneration?.minEnemyTypes;
         if (typeof minEnemyTypes !== 'number' || minEnemyTypes < 1) {
              minEnemyTypes = 1; // Default to at least 1 if invalid
         } else {
-            console.log(`WaveManager: Minimum required enemy types: ${minEnemyTypes}`);
+            //console.log(`WaveManager: Minimum required enemy types: ${minEnemyTypes}`);
         }
         // Ensure minEnemyTypes is not larger than the actual number available
         minEnemyTypes = Math.min(minEnemyTypes, availableEnemyCosts.length);
@@ -227,13 +227,13 @@ export default class WaveManager {
             const enemyType = availableEnemyCosts[i];
             const potentialCount = initialPotentialCounts.get(enemyType.id) || 0;
             if (potentialCount > maxPrepopulationPerType) {
-                console.log(`WaveManager: Excluding low-cost type ${enemyType.id} (potential ${potentialCount} > threshold ${maxPrepopulationPerType}).`);
+                //console.log(`WaveManager: Excluding low-cost type ${enemyType.id} (potential ${potentialCount} > threshold ${maxPrepopulationPerType}).`);
                 enemyTypesToExclude.add(enemyType.id);
             } else {
-                // console.log(`WaveManager: Keeping low-cost type ${enemyType.id} (potential ${potentialCount} <= threshold ${maxPrepopulationPerType}).`);
+                // //console.log(`WaveManager: Keeping low-cost type ${enemyType.id} (potential ${potentialCount} <= threshold ${maxPrepopulationPerType}).`);
             }
         }
-         console.log(`WaveManager: Kept the top ${minEnemyTypes} highest-cost types regardless of threshold.`);
+         //console.log(`WaveManager: Kept the top ${minEnemyTypes} highest-cost types regardless of threshold.`);
 
         // --- Step 4: Create Whitelist & Recalculate Required Numbers ---
         const enemyWhitelist = availableEnemyCosts.filter(enemyType => !enemyTypesToExclude.has(enemyType.id));
@@ -243,7 +243,7 @@ export default class WaveManager {
             this.activeWaveState = { groups: [] };
             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
         }
-        console.log(`WaveManager: Whitelist contains ${enemyWhitelist.length} enemy types.`);
+        //console.log(`WaveManager: Whitelist contains ${enemyWhitelist.length} enemy types.`);
 
         const finalRequiredCounts = this._calculatePotentialCounts(targetDifficulty, enemyWhitelist);
 
@@ -259,7 +259,7 @@ export default class WaveManager {
                  }
             }
         });
-        console.log(`WaveManager: Pre-populated with ${selectedEnemies.length} enemies from whitelist, difficulty: ${currentDifficulty.toFixed(0)}`);
+        //console.log(`WaveManager: Pre-populated with ${selectedEnemies.length} enemies from whitelist, difficulty: ${currentDifficulty.toFixed(0)}`);
 
         // --- Step 6: Refinement Loop (Using Whitelist for additions) ---
         const maxAttempts = this.waveConfig.waveGeneration?.maxSelectionAttempts || 200;
@@ -294,7 +294,7 @@ export default class WaveManager {
             }
         }
         if (attempts >= maxAttempts) { console.warn(`WaveManager: Reached max selection attempts (${maxAttempts}) during refinement.`); }
-        console.log(`WaveManager: Final difficulty after refinement: ${currentDifficulty.toFixed(0)} (${selectedEnemies.length} enemies)`);
+        //console.log(`WaveManager: Final difficulty after refinement: ${currentDifficulty.toFixed(0)} (${selectedEnemies.length} enemies)`);
         // --- End Selection Refinement ---
 
         if (selectedEnemies.length === 0 && targetDifficulty > 0) {
@@ -336,7 +336,7 @@ export default class WaveManager {
             overriddenGroupsData.sort((a, b) => a.speed - b.speed);
             // Replace the original sorted data with the override
             sortedGroupsData = overriddenGroupsData;
-            console.log("WaveManager: [DEBUG] Using Overridden groups:", JSON.stringify(sortedGroupsData.map(g=>({speed: g.speed, id: g.enemies[0]})))); // Log simplified view
+            //console.log("WaveManager: [DEBUG] Using Overridden groups:", JSON.stringify(sortedGroupsData.map(g=>({speed: g.speed, id: g.enemies[0]})))); // Log simplified view
         }
         // -----------------------------------------------------------
 
@@ -351,7 +351,7 @@ export default class WaveManager {
             let travelTime = Infinity;
             
             // Log the config value being used for this specific group's calculation
-            // REMOVED: console.log(`  [DEBUG] Group ${index} Offset Calc Check: Using delayBetweenEnemiesMs = ${currentDelayConfig}`);
+            // REMOVED: //console.log(`  [DEBUG] Group ${index} Offset Calc Check: Using delayBetweenEnemiesMs = ${currentDelayConfig}`);
             const currentDelayConfig = this.waveConfig.delayBetweenEnemiesMs || 500;
 
             // Use (count - 1) for offset, reading directly from config (with fallback)
@@ -364,7 +364,7 @@ export default class WaveManager {
                     travelTime = Infinity;
                 } else {
                     // Log inputs before calculation
-                    // REMOVED: console.log(`  [DEBUG] Travel Time Calc: targetDistance = ${targetDistance?.toFixed(2)}, speed = ${speed}`);
+                    // REMOVED: //console.log(`  [DEBUG] Travel Time Calc: targetDistance = ${targetDistance?.toFixed(2)}, speed = ${speed}`);
                     // Calculate time in seconds, then convert to milliseconds
                     travelTime = (targetDistance / speed) * 1000;
                 }
@@ -393,7 +393,7 @@ export default class WaveManager {
                  console.warn("WaveManager: Infinite total time found. Reverting to sequential spawn.");
                  maxTotalTime = 0;
              } else if (calculatedGroupInfo.length > 0){
-                 // REMOVED: console.log(`WaveManager: [DEBUG] Latest CoM arrival time calculated: ${maxTotalTime.toFixed(0)}ms`);
+                 // REMOVED: //console.log(`WaveManager: [DEBUG] Latest CoM arrival time calculated: ${maxTotalTime.toFixed(0)}ms`);
              }
         } else {
             maxTotalTime = 0; // For sequential fallback
@@ -403,13 +403,13 @@ export default class WaveManager {
             let finalStartTime = 0;
             
             // --- Debug Log Group Metrics ---
-            // REMOVED: console.log(`  [DEBUG] Group ${index} (Speed: ${group.speed}, Count: ${group.count}) | OffsetT: ${group.offsetTime.toFixed(0)}, TravelT: ${isFinite(group.travelTime) ? group.travelTime.toFixed(0) : 'Inf'}, TotalT: ${isFinite(group.totalTime) ? group.totalTime.toFixed(0) : 'Inf'}`);
+            // REMOVED: //console.log(`  [DEBUG] Group ${index} (Speed: ${group.speed}, Count: ${group.count}) | OffsetT: ${group.offsetTime.toFixed(0)}, TravelT: ${isFinite(group.travelTime) ? group.travelTime.toFixed(0) : 'Inf'}, TotalT: ${isFinite(group.totalTime) ? group.totalTime.toFixed(0) : 'Inf'}`);
             // ----------------------------->
 
             if (useCoordinatedSpawn) {
                 finalStartTime = isFinite(group.totalTime) ? (maxTotalTime - group.totalTime) : 0;
                 // Keep final start time log for now
-                console.log(`    -> Coordinated Final Start (based on latest arrival): +${finalStartTime.toFixed(0)}ms`);
+                //console.log(`    -> Coordinated Final Start (based on latest arrival): +${finalStartTime.toFixed(0)}ms`);
             }
 
             finalStartTime = Math.max(0, finalStartTime);
@@ -432,7 +432,7 @@ export default class WaveManager {
             calculatedMetrics: calculatedGroupInfo // Store the detailed metrics
         };
         // Keep this summary log
-        console.log(`WaveManager: Wave ${this.currentWaveNumber} configured with ${this.activeWaveState.groups.reduce((sum, g) => sum + g.count, 0)} enemies across ${this.activeWaveState.groups.length} speed groups.`);
+        //console.log(`WaveManager: Wave ${this.currentWaveNumber} configured with ${this.activeWaveState.groups.reduce((sum, g) => sum + g.count, 0)} enemies across ${this.activeWaveState.groups.length} speed groups.`);
     }
 
     /**
@@ -522,11 +522,11 @@ export default class WaveManager {
                     if (group.spawnedCount < group.count) {
                         const nextDelay = this._calculateRandomSpawnDelay();
                         group.nextSpawnTimestamp = timestamp + nextDelay;
-                        console.log(` -> Spawned ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Next in group: ${nextDelay.toFixed(0)}ms`);
+                        //console.log(` -> Spawned ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Next in group: ${nextDelay.toFixed(0)}ms`);
                     } else {
                         // This was the last enemy for this group
                         group.nextSpawnTimestamp = Infinity;
-                         console.log(` -> Spawned LAST ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Group complete.`);
+                         //console.log(` -> Spawned LAST ${enemyTypeId} (Group ${groupIndex}) at ${spawnLogTime}ms. Group complete.`);
                     }
                 }
             }); // End of groups.forEach
@@ -539,7 +539,7 @@ export default class WaveManager {
         if (allGroupsFinishedSpawning && !this.waitingForClear && this.isStarted) {
              const waveHadEnemies = this.activeWaveState.groups && this.activeWaveState.groups.some(g => g.count > 0);
              if (waveHadEnemies) {
-                 console.log(`WaveManager: All group spawning complete for Wave ${this.currentWaveNumber}. Waiting for screen clear.`);
+                 //console.log(`WaveManager: All group spawning complete for Wave ${this.currentWaveNumber}. Waiting for screen clear.`);
                  this.waitingForClear = true; 
              }
         }
@@ -547,7 +547,7 @@ export default class WaveManager {
         // Check if waiting for the screen to clear AFTER all spawning is complete
         if (this.waitingForClear) {
             if (this.enemyManager && typeof this.enemyManager.getActiveEnemies === 'function' && this.enemyManager.getActiveEnemies().length === 0) {
-                console.log(`WaveManager: Screen cleared after Wave ${this.currentWaveNumber} at ${timestamp.toFixed(0)}ms.`);
+                //console.log(`WaveManager: Screen cleared after Wave ${this.currentWaveNumber} at ${timestamp.toFixed(0)}ms.`);
                 // Calculate average death distance for the wave that just cleared
                 if (typeof this.enemyManager.calculateAverageDeathDistance === 'function') {
                     this.lastAverageDeathDistance = this.enemyManager.calculateAverageDeathDistance(); // Log is inside the function
@@ -555,7 +555,7 @@ export default class WaveManager {
                 this.waitingForClear = false; // Stop checking
                 // NOW start the timer for the next wave
                 this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
-                console.log(`WaveManager: Next wave calculation starting in ${this.timeUntilNextWave / 1000} seconds.`);
+                //console.log(`WaveManager: Next wave calculation starting in ${this.timeUntilNextWave / 1000} seconds.`);
                  this.activeWaveState = { groups: [] }; // Clear groups state for the completed wave
             }
         }

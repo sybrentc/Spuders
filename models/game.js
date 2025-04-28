@@ -6,6 +6,7 @@ import DefenceManager from '../defenceManager.js'; // <-- ADD Import
 import Enemy from './enemy.js'; // <--- ADD Enemy import
 import PriceManager from '../priceManager.js'; // Import PriceManager
 import { minDistanceToPath } from '../utils/geometryUtils.js'; // <-- ADD Import
+import { loadCsvLookup } from '../utils/dataLoaders.js'; // <-- IMPORT HELPER
 
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
@@ -41,6 +42,8 @@ export default class Game {
         this.segmentLengths = [];
         this.cumulativeDistances = [];
         this.extendedPathData = []; // Add storage for path waypoints
+        this.pathCoverageLookup = []; // <-- ADDED STORAGE
+        this.pathCoverageLoaded = false; // <-- ADDED FLAG
     }
     
     // --- ADD methods for placement preview --- 
@@ -78,8 +81,15 @@ export default class Game {
 
     async initialize() {
         try {
-            // Load level data (paths for enemies, waves, base)
+            // Load level data FIRST (paths for enemies, waves, base)
             await this.loadLevel(1);
+
+            // *** Load Path Coverage Data AFTER loadLevel sets the path ***
+            if (this.pathCoverageDataPath) {
+                await this.loadPathCoverageData();
+            } else {
+                throw new Error("Game Initialize: pathCoverageDataPath missing, cannot load coverage data.");
+            }
             
             // Create game layers
             this.layers.background = this.createLayer('background-layer', 0);
@@ -98,7 +108,7 @@ export default class Game {
             try {
                 // Call the static method on the Base class
                 this.base = await Base.createFromPath(this.baseDataPath);
-                console.log("Game: Base initialized successfully via static method."); 
+                ////console.log("Game: Base initialized successfully via static method."); 
 
             } catch(baseError) {
                  // Catch errors from createFromPath (fetch, json, constructor, loadAssets)
@@ -152,6 +162,13 @@ export default class Game {
                 await this.defenceManager.loadDefinitions(this.defencesPath); 
             } else {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
+            }
+
+            // *** NOW Calculate Wear Parameters ***
+            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded) { // Depend on pathCoverageLoaded
+                await this.defenceManager.calculateWearParameters(); // <-- CALL IT HERE
+            } else {
+                console.error("Cannot calculate wear parameters - managers not ready.");
             }
             
             // Draw background (Path drawing is now part of render loop)
@@ -207,26 +224,24 @@ export default class Game {
                 console.warn("Game Initialize: WaveManager not loaded or available, cannot start waves.")
             }
             
-            // Now instantiate PriceManager as its dependencies are ready
-            if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
-                // Ensure the pathCoverageDataPath was loaded in loadLevel
-                if (!this.pathCoverageDataPath) {
-                    throw new Error("Game Initialize: pathCoverageDataPath was not loaded correctly from level data.");
-                }
+            ////console.log('Game initialization complete.');
 
+            // Instantiate PriceManager
+            if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
+                //console.log("DEBUG: Game Initialize - About to create PriceManager..."); // <-- ADD LOG
                 this.priceManager = new PriceManager(
                     this.defenceManager,
                     this.enemyManager,
                     this.base,
-                    this.pathCoverageDataPath, // Use the loaded path string
-                    this // <-- Pass the Game instance instead of difficulty
+                    this // <-- Pass the Game instance
                 );
-                await this.priceManager.load();
+                await this.priceManager.load(); // <-- Ensure price manager is loaded (now just marks ready)
+                //console.log("DEBUG: Game Initialize - PriceManager created:", this.priceManager); // <-- ADD LOG
             } else {
-                 throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
+                console.error("Game Initialize: Cannot create PriceManager, required managers not loaded."); // <-- Keep this error
+                throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
             }
 
-            console.log('Game initialization complete.');
             return true;
         } catch (error) {
             console.error('Failed to initialize game:', error);
@@ -242,13 +257,13 @@ export default class Game {
     applyParameterUpdates(newData) {
         let updated = false;
         if (typeof newData.difficulty === 'number' && newData.difficulty > 0 && newData.difficulty !== this.difficulty) {
-            console.log(`Game: Updating difficulty from ${this.difficulty} to ${newData.difficulty}`);
+            ////console.log(`Game: Updating difficulty from ${this.difficulty} to ${newData.difficulty}`);
             this.difficulty = newData.difficulty;
             updated = true;
             // Note: PriceManager will automatically pick this up next time it calculates costs.
         }
         if (typeof newData.currencyScale === 'number' && newData.currencyScale >= 0 && newData.currencyScale !== this.currencyScale) {
-            console.log(`Game: Updating currencyScale from ${this.currencyScale} to ${newData.currencyScale}`);
+            ////console.log(`Game: Updating currencyScale from ${this.currencyScale} to ${newData.currencyScale}`);
             this.currencyScale = newData.currencyScale;
             updated = true;
             // Note: EnemyManager will automatically pick this up next time it calculates bounty.
@@ -282,14 +297,14 @@ export default class Game {
             // --> Store initial difficulty and currencyScale from levelData
             if (typeof this.levelData.difficulty === 'number' && this.levelData.difficulty > 0) {
                  this.difficulty = this.levelData.difficulty;
-                 console.log(`Game: Initial difficulty set to ${this.difficulty}`);
+                 ////console.log(`Game: Initial difficulty set to ${this.difficulty}`);
             } else {
                  console.warn(`Game: Using default difficulty ${this.difficulty}. Invalid or missing value in level data.`);
                  // No throw, use default
             }
             if (typeof this.levelData.currencyScale === 'number' && this.levelData.currencyScale >= 0) {
                  this.currencyScale = this.levelData.currencyScale;
-                 console.log(`Game: Initial currencyScale set to ${this.currencyScale}`);
+                 ////console.log(`Game: Initial currencyScale set to ${this.currencyScale}`);
             } else {
                  console.warn(`Game: Using default currencyScale ${this.currencyScale}. Invalid or missing value in level data.`);
                  // No throw, use default
@@ -311,7 +326,7 @@ export default class Game {
             // Store waypoint data PATH
             if (this.levelData.pathData) {
                  this.pathDataPath = this.levelData.pathData; 
-                 console.log(`Game: Found path data file path: ${this.pathDataPath}`);
+                 ////console.log(`Game: Found path data file path: ${this.pathDataPath}`);
                  // --- Load path coordinates directly --- 
                  try {
                      const pathResponse = await fetch(this.pathDataPath);
@@ -328,7 +343,7 @@ export default class Game {
                      if (this.extendedPathData.length < 2) {
                          throw new Error('Path requires at least two waypoints.');
                      }
-                     console.log(`Game: Loaded ${this.extendedPathData.length} path waypoints.`);
+                     ////console.log(`Game: Loaded ${this.extendedPathData.length} path waypoints.`);
                  } catch (pathError) {
                      console.error(`Game: Failed to load or parse path data from ${this.pathDataPath}:`, pathError);
                      throw pathError; // Re-throw to stop initialization
@@ -342,7 +357,7 @@ export default class Game {
             // Store path coverage data PATH
             if (this.levelData.pathCoverageData) {
                  this.pathCoverageDataPath = this.levelData.pathCoverageData;
-                 console.log(`Game: Found path coverage data file path: ${this.pathCoverageDataPath}`);
+                 ////console.log(`Game: Found path coverage data file path: ${this.pathCoverageDataPath}`);
             } else {
                  console.warn(`No pathCoverageData found in level ${levelId} configuration.`);
                  this.pathCoverageDataPath = null;
@@ -351,7 +366,7 @@ export default class Game {
             // Store path stats data PATH <-- ADDED Block
             if (this.levelData.pathStatsPath) {
                  this.pathStatsPath = this.levelData.pathStatsPath;
-                 console.log(`Game: Found path stats data file path: ${this.pathStatsPath}`);
+                 ////console.log(`Game: Found path stats data file path: ${this.pathStatsPath}`);
                  // --- Load path stats directly --- 
                  try {
                      const statsResponse = await fetch(this.pathStatsPath);
@@ -363,7 +378,7 @@ export default class Game {
                      this.totalPathLength = statsData.totalPathLength;
                      this.segmentLengths = statsData.segmentLengths;
                      this.cumulativeDistances = statsData.cumulativeDistances;
-                     console.log(`Game: Loaded path stats - Total Length: ${this.totalPathLength.toFixed(2)}`);
+                     ////console.log(`Game: Loaded path stats - Total Length: ${this.totalPathLength.toFixed(2)}`);
                  } catch (statsError) {
                      console.error(`Game: Failed to load or parse path stats from ${this.pathStatsPath}:`, statsError);
                      throw statsError; // Re-throw to stop initialization
@@ -378,7 +393,7 @@ export default class Game {
             // Store wave data PATH
             if (this.levelData.waveDataPath) {
                 this.waveDataPath = this.levelData.waveDataPath;
-                console.log(`Game: Found wave data path: ${this.waveDataPath}`);
+                ////console.log(`Game: Found wave data path: ${this.waveDataPath}`);
             } else {
                 console.warn(`No waveDataPath found in level ${levelId} configuration.`);
                 this.waveDataPath = null; // Explicitly set to null if missing
@@ -387,7 +402,7 @@ export default class Game {
             // Store base data PATH
             if (this.levelData.baseData) { // Ensure field name matches level1.json
                 this.baseDataPath = this.levelData.baseData;
-                console.log(`Game: Found base data path: ${this.baseDataPath}`);
+                ////console.log(`Game: Found base data path: ${this.baseDataPath}`);
             } else {
                 console.warn(`No baseData path found in level ${levelId} configuration.`);
                 this.baseDataPath = null;
@@ -396,7 +411,7 @@ export default class Game {
             // Store defences data PATH // <-- ADD this block
             if (this.levelData.defencesPath) {
                 this.defencesPath = this.levelData.defencesPath;
-                console.log(`Game: Found defences data path: ${this.defencesPath}`);
+                ////console.log(`Game: Found defences data path: ${this.defencesPath}`);
             } else {
                 console.warn(`No defencesPath found in level ${levelId} configuration.`);
                 this.defencesPath = null;
@@ -592,6 +607,43 @@ export default class Game {
         return this.extendedPathData;
     }
     // --- End Path Coordinate Getter ---
+
+    // *** ADDED: Method to load coverage data ***
+    async loadPathCoverageData() {
+        if (!this.pathCoverageDataPath) {
+            console.error("Game: Cannot load path coverage, path is not set.");
+            return;
+        }
+        try {
+            this.pathCoverageLookup = await loadCsvLookup(this.pathCoverageDataPath);
+            this.pathCoverageLoaded = true;
+            ////console.log("Game: Path coverage data loaded.");
+        } catch (error) {
+            console.error("Game: Failed to load path coverage data:", error);
+            this.pathCoverageLoaded = false;
+            throw error; // Stop initialization if coverage fails
+        }
+    }
+
+    // Helper method in Game class (or ensure PriceManager provides it)
+    async getPathCoverageLookup() {
+        // This method should wait for coverage data to be loaded
+        if (!this.pathCoverageLoaded) {
+            console.warn("getPathCoverageLookup called before coverage data loaded. Waiting...");
+            // Simple poll/wait 
+            while (!this.pathCoverageLoaded) {
+                await new Promise(resolve => setTimeout(resolve, 50)); // Wait 50ms
+            }
+            ////console.log("Coverage data is now ready for lookup.");
+        }
+        return this.pathCoverageLookup;
+    }
+
+    // Helper method in Game class
+    getWearParameter() {
+        // Assuming wear is stored in levelData loaded during initialize/loadLevel
+        return this.levelData?.wear ?? 0; // Default to 0 if not found
+    }
 }
 
 // --- Standalone Path Utility Function --- 

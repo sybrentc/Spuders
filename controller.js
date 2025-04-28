@@ -26,11 +26,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Function to create/update menu buttons (NOW SORTS BY PRICE)
-    function updateDefenceMenu(definitions) {
-        if (!defenceMenu || !game.priceManager) return;
+    async function updateDefenceMenu(definitions) {
+        // console.log('DEBUG: Entering updateDefenceMenu'); // Optional log
+        // --- Detailed Guard Clause Check ---
+        
 
         defenceMenu.innerHTML = ''; // Clear existing content
-        const calculatedCosts = game.priceManager.calculateAllCosts(); // Get costs once
+        const calculatedCosts = await game.priceManager.calculateAllCosts(); // <-- ADD await
 
         // --- Sort defences by calculated cost --- 
         const sortedDefences = Object.entries(definitions)
@@ -109,7 +111,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Canvas Click Listener
-    gameCanvas.addEventListener('click', (event) => {
+    gameCanvas.addEventListener('click', async (event) => {
         // Check placement state AND validity from the game model
         const currentPreview = game.getPlacementPreview(); 
         if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) {
@@ -123,7 +125,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         // Tell DefenceManager to place the defence (it now trusts the position is valid)
         if (game.defenceManager) {
             // Pass the known valid position from the preview object
-            game.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
+            await game.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
         }
 
         // Clear selection state (only if placement was attempted, successful or not)
@@ -139,11 +141,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Initial population and setup listener for updates
     if (game.defenceManager && game.defenceManager.isLoaded) {
+        // REMOVED: console.log("DEBUG: Controller - Before initial updateDefenceMenu call. game.priceManager is:", game.priceManager);
         updateDefenceMenu(game.defenceManager.getDefinitions());
-        game.defenceManager.addEventListener('definitionsUpdated', () => {
+        game.defenceManager.addEventListener('definitionsUpdated', async () => {
             // Preserve selection if possible when menu updates
             const currentSelectedId = selectedDefenceType;
-            updateDefenceMenu(game.defenceManager.getDefinitions());
+            // --- Update: Added await here ---
+            await updateDefenceMenu(game.defenceManager.getDefinitions());
+            // --- End Update ---
             if (currentSelectedId) {
                 const selectedButton = document.querySelector(`.defence-button[data-defence-id="${currentSelectedId}"]`);
                 if (selectedButton) selectedButton.classList.add('selected');
@@ -154,8 +159,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- UI Update Function (Handles Text and Button States) ---
-    function updateUI() {
-        if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !game.defenceManager || !defenceMenu || !game.priceManager) return;
+    async function updateUI() { // <-- ADD async
+        // REMOVED: console.log('DEBUG: Entering updateUI function');
+        
+        // --- Detailed Guard Clause Check --- 
+        if (!game.base) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.base is missing");*/
+        if (!game.waveManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.waveManager is missing");*/
+        if (!fundsDisplay) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - fundsDisplay element is missing");*/
+        if (!waveInfoDisplay) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - waveInfoDisplay element is missing");*/
+        if (!game.defenceManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.defenceManager is missing");*/
+        if (!defenceMenu) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - defenceMenu element is missing");*/
+        if (!game.priceManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.priceManager is missing");*/
+        // --- End Detailed Check --- 
+
+        // Original Guard Clause (now redundant because of above checks)
+        // if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !defenceManager || !defenceMenu || !priceManager) return;
 
         // --- Update Text Displays ---
         fundsDisplay.textContent = `${game.base.currentFunds}G`; 
@@ -175,7 +193,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         // --- Update Button Affordability AND Price Text ---
         const currentFunds = game.base.currentFunds;
-        const calculatedCosts = game.priceManager.calculateAllCosts(); // Get current costs
+        const calculatedCosts = await game.priceManager.calculateAllCosts(); // <-- ADD await
         const buttons = defenceMenu.querySelectorAll('.defence-button');
 
         buttons.forEach(button => {

@@ -30,7 +30,7 @@ async function loadCsvLookup(filePath) {
                  console.warn(`PriceManager: Skipping invalid line in coverage CSV: "${line}"`);
             }
         });
-        console.log(`PriceManager: Loaded coverage lookup table up to range ${maxRange}`);
+        //console.log(`PriceManager: Loaded coverage lookup table up to range ${maxRange}`);
         return lookup;
     } catch (error) {
         console.error(`PriceManager: Error loading coverage lookup table from ${filePath}:`, error);
@@ -44,12 +44,11 @@ class PriceManager {
      * @param {DefenceManager} defenceManager - Instance of DefenceManager
      * @param {EnemyManager} enemyManager - Instance of EnemyManager
      * @param {Base} base - Instance of Base
-     * @param {string} pathCoverageDataPath - Path to the path-coverage.csv file
      * @param {Game} game - The main Game instance
      */
-    constructor(defenceManager, enemyManager, base, pathCoverageDataPath, game) {
-        if (!defenceManager || !enemyManager || !base || !pathCoverageDataPath) {
-            throw new Error("PriceManager requires defenceManager, enemyManager, base, and pathCoverageDataPath.");
+    constructor(defenceManager, enemyManager, base, game) {
+        if (!defenceManager || !enemyManager || !base) {
+            throw new Error("PriceManager requires defenceManager, enemyManager, and base.");
         }
         // Added check for game instance
         if (!game || typeof game.getDifficulty !== 'function') { // Check if it looks like a Game instance
@@ -58,26 +57,20 @@ class PriceManager {
         this.defenceManager = defenceManager;
         this.enemyManager = enemyManager;
         this.base = base; // Keep base for now, might be needed elsewhere?
-        this.pathCoverageDataPath = pathCoverageDataPath;
         this.game = game; // Store the game instance
         this.isLoaded = false;
-        this.coverageLookup = []; // Initialize lookup table
     }
 
     /**
-     * Loads the pre-computed path coverage data.
+     * Loads necessary data - NOW HANDLED BY GAME
      */
     async load() {
-        try {
-            this.coverageLookup = await loadCsvLookup(this.pathCoverageDataPath);
-            this.isLoaded = true;
-            console.log("PriceManager: Coverage data loaded.");
-        } catch (error) {
-            console.error("PriceManager: Failed to load coverage data.");
-            this.isLoaded = false;
-            // Consider how to handle this - maybe default costs or throw?
-            // For now, calculateAllCosts will check isLoaded.
-        }
+        // REMOVED: Coverage data loading logic is now in Game.js
+        // Consider if this method needs to do anything else, or can be removed.
+        // For now, just mark as loaded (assuming Game handles dependencies).
+        this.isLoaded = true; 
+        //console.log("PriceManager: Load method called (coverage loading handled by Game).");
+        // REMOVED: Error handling related to coverage loading
     }
 
     /**
@@ -90,16 +83,30 @@ class PriceManager {
      *
      * @returns {Object<string, number>} An object mapping defence IDs to their calculated costs.
      */
-    calculateAllCosts() {
-        if (!this.isLoaded) {
-            console.error("PriceManager: Cannot calculate costs, coverage data not loaded.");
-            // Return default high costs or throw?
-            const defaultCosts = {};
-            for (const defenceId in this.defenceManager.getDefinitions()) {
-                defaultCosts[defenceId] = Infinity;
+    async calculateAllCosts() {
+        // REMOVED: Check for this.isLoaded if it was only for coverage
+        // if (!this.isLoaded) { ... }
+
+        // --- Get coverage data from Game instance --- 
+        let coverageLookup;
+        try {
+            // Use the synchronous getter pattern if getPathCoverageLookup ensures data is loaded
+            // If getPathCoverageLookup is async, calculateAllCosts would need to become async too.
+            // Assuming synchronous getter after game initialization:
+            coverageLookup = await this.game.getPathCoverageLookup();
+            if (!coverageLookup || coverageLookup.length === 0) {
+                throw new Error("Coverage lookup table is empty or not available from Game.");
             }
-            return defaultCosts;
+        } catch (error) {
+             console.error("PriceManager: Failed to get coverage lookup table:", error);
+             // Return default high costs or throw?
+            const defaultCostsOnError = {};
+            for (const defenceId in this.defenceManager.getDefinitions()) {
+                defaultCostsOnError[defenceId] = Infinity;
+            }
+            return defaultCostsOnError;
         }
+        // --- End Get coverage data --- 
 
         const defenceDefinitions = this.defenceManager.getDefinitions();
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
@@ -184,8 +191,8 @@ class PriceManager {
                 if (R_star <= 0) continue; // Cannot earn from this enemy
 
                 // --- Calculate f_e (Engagement Factor) --- 
-                const lookupRange = Math.max(1, Math.min(Math.round(range), this.coverageLookup.length - 1));
-                const f_e = this.coverageLookup[lookupRange] || 0; // Default to 0 if lookup fails
+                const lookupRange = Math.max(1, Math.min(Math.round(range), coverageLookup.length - 1));
+                const f_e = coverageLookup[lookupRange] || 0; // Default to 0 if lookup fails
 
                 // --- Calculate f_k (Kill Completion Factor) --- 
                 // const timeInRangeSec = range / speed; // OLD calculation
