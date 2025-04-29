@@ -228,7 +228,7 @@
 
 <h2>Defender wear</h2>
 
-<p>Eqt. 28 gives us the change in earning rate due to wear:</p>
+<p>Eqt. 28 shows that the rate of change in \(R_n\) is a linear superposition of the contributions due to bounty, wear, and destruction. This allows us to isolate the differential contribution due to wear as</p>
 \[ \frac{dR_n}{dt}\bigg|_\text{wear} = - wR_n. \tag{34} \]
 <p>If we let this equation describe a steady-state population consisting entirely of a single type of defender, wherein we have a random distribution of accumulated wear across the population (i.e., different defenders have different amounts of remaining life), then renewal theory enables us to express the average wear rate \(w\) as the inverse of the expected lifetime \(\mathbb{E}[\tau]\) of this defender type</p>
 \[ w = \frac{1}{\mathbb{E}[\tau]}. \tag{35} \]
@@ -239,6 +239,21 @@
 
 <p>Consider a single defender-enemy interaction. We first take as our reference the time the enemy is within range \(T_r\) and calculate what fraction of that time the defender spends firing at the enemy. This can be 1 if the enemy leaves the range before being killed, or can be \(T_k/T_r\lt1\) if the enemy is killed before leaving the range (cf. eqts. 11 and 13). To obtain the duty cycle in terms of game time, we then multiply that fraction by the fraction of total time on path which the enemy spends in range, i.e., \(P(\text{in range})\). We then take the expectation value over all \(N\) enemy types to obtain</p>
 \[ \bar{f} = P(\text{in range}) \frac{1}{N} \sum_{j=1}^{N} \min(1, \frac{T_{k,j}}{T_{r,j}}). \tag{38} \]
+
+<h2>Defender destruction</h2>
+
+<p>Next, we need to find a mechanism for implementing the active destruction of defenders by enemy forces. As in the above consideration for defender wear, we can now isolate the differential contribution due to destruction from eqt. 28 as follows</p>
+
+\[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{39} \]
+
+<p>To implement this required destruction rate using discrete events like airstrikes, we need to determine the cumulative target reduction in earning power that should have occurred by time \(t\) within wave \(n\) due to \(d_n\). This target cumulative loss, denoted \(\Delta R_n(t)\), can be found by integrating the destruction rate over the time the wave has been active, from its start \(t=0\) to the current time \(t\). We use the solution to eqt. 39, \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\), to obtain</p>
+
+\[ \Delta R_n(t) = \int_0^t d_n R_n(t') dt' = \int_0^t d_n R_n(0) e^{-d_n t'} dt'. \tag{40} \]
+
+<p>Solving this integral yields the total target earning power that should have been removed by time \(t\) in wave \(n\)</p>
+
+\[ \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}). \tag{41} \]
+
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
