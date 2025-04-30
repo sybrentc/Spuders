@@ -254,6 +254,26 @@
 
 \[ \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}). \tag{41} \]
 
+<p>At runtime, we accumulate \(\Delta R_n(t)\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run.</p>
+
+<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing \(\Delta R_n(t)\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k(t)/k\), where \(k(t)\) is the number of its total \(k\) attacks a defender has left before it is entirely worn out, i.e., \(C^*(t)=Ck(t)/k\). This yields</p>
+
+\[\Delta R_n(t)=\frac{1}{\alpha}\Delta C^*(t) = \frac{R}{k}\Delta k(t). \tag{42}\]
+
+<p>The above result for a single defender can be generalised to a population by simple summation to yield</p>
+
+\[ \Delta R_n(t) = \sum_{i=1}^{N} \frac{R_i}{k_i}\Delta k_i(t). \tag{43} \]
+
+<p>We can simplify calculation by defining defender health as \(h_i(t) = R_ik_i(t)/k_i\). This yields a direct relationship between defender health and the reduction in earning rate as</p>
+
+\[ \Delta R_n(t) = \sum_{i=1}^{N} \Delta h_i(t). \tag{44} \]
+
+<p>Suppose we have an explosion with an \(A_0/r_i^2\) damage profile. The wipe-out amplitude for exactly destroying a defender of health \(h_i\) at a distance \(r_i\) from the epicentre is</p>
+
+\[ A_{0,i} = h_ir_i^2. \tag{45} \]
+
+<p>A target reduction in earning power \(\Delta R_n(t)\) can be achieved by selecting a location of an epicentre, calculating the wipe-out amplitudes for all defenders from that point, finding the amplitude bracketing range for which the cumulative health damage brackets the target damage, and determining the exact aplitude of explosive needed at that epicentre location to reach the exact target health damage through linear interpolation within that bracketing range.</p>
+
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
