@@ -1,5 +1,69 @@
 import DefenceEntity from './models/defender.js'; // Import the entity class
 
+/**
+ * Compares two definition objects to see if relevant source fields have changed.
+ * @param {object} newDef - The new definition data.
+ * @param {object} currentDef - The currently stored definition data.
+ * @returns {boolean} True if a relevant change is detected, false otherwise.
+ */
+function haveDefsChanged(newDef, currentDef) {
+    if (!currentDef) return true; // It's a new definition
+
+    // Compare simple primitive fields directly
+    const simpleFields = ['name', 'cost']; // Add other simple fields if necessary
+    for (const field of simpleFields) {
+        if (newDef[field] !== undefined && newDef[field] !== currentDef[field]) {
+            // console.log(`DEBUG Def Change [${newDef.id}]: Simple field '${field}': ${currentDef[field]} -> ${newDef[field]}`);
+            return true;
+        }
+    }
+
+    // Compare stats object - field by field
+    const newStats = newDef.stats || {};
+    const currentStats = currentDef.stats || {};
+    const statsFields = ['attackRate', 'attackStrength', 'attackRange']; // Add other relevant base stats
+    // Check fields present in new stats
+    for (const field of statsFields) {
+        if (newStats[field] !== undefined && newStats[field] !== currentStats[field]) {
+             // Add tolerance for floats later if needed, direct compare for now
+            // console.log(`DEBUG Def Change [${newDef.id}]: Stats field '${field}': ${currentStats[field]} -> ${newStats[field]}`);
+            return true;
+        }
+    }
+    // Check if any fields were removed in new stats (that existed in current)
+    for (const field of statsFields) {
+         if (currentStats[field] !== undefined && newStats[field] === undefined) {
+             // console.log(`DEBUG Def Change [${newDef.id}]: Stats field '${field}' removed.`);
+             return true;
+         }
+    }
+
+    // Compare other complex fields using stringify as a fallback (less critical usually)
+    const complexFields = ['effects', 'sprite', 'display'];
+    for (const field of complexFields) {
+        const newFieldData = newDef[field];
+        const currentFieldData = currentDef[field];
+
+        // Check existence consistency
+        const newFieldExists = newFieldData !== undefined && newFieldData !== null;
+        const currentFieldExists = currentFieldData !== undefined && currentFieldData !== null;
+        if (newFieldExists !== currentFieldExists) {
+             // console.log(`DEBUG Def Change [${newDef.id}]: Existence mismatch for field '${field}'`);
+             return true; // One has it, the other doesn't
+        }
+
+        // If both exist, compare contents using stringify
+        if (newFieldExists) { // Implies currentFieldExists is also true
+            if (JSON.stringify(newFieldData) !== JSON.stringify(currentFieldData)) {
+                 // console.log(`DEBUG Def Change [${newDef.id}]: Content mismatch for field '${field}'`);
+                 return true;
+            }
+        }
+    }
+
+    return false; // No changes detected
+}
+
 // Make DefenceManager an EventTarget to dispatch update events
 export default class DefenceManager extends EventTarget {
     constructor(game) { // Accept Game instance instead of individual managers
@@ -149,74 +213,122 @@ export default class DefenceManager extends EventTarget {
 
     // Method called by TuningManager when new data is fetched
     applyParameterUpdates(newData) {
-        // console.log("DEBUG: DefenceManager.applyParameterUpdates called."); // REMOVE LOG
-        
+        // console.log("DEBUG: DefenceManager.applyParameterUpdates called");
+
+        let definitionsChanged = false;
+        const checkSingleDef = (def) => {
+            if (definitionsChanged) return; // Stop checking if a change is already found
+            if (!def || !def.id) return;
+            if (haveDefsChanged(def, this.defenceDefinitions[def.id])) {
+                 definitionsChanged = true;
+            }
+        };
+
+        // Perform the comparison check first using the helper
+        if (Array.isArray(newData)) {
+             newData.forEach(checkSingleDef);
+        } else if (typeof newData === 'object' && newData !== null) {
+            if (newData.id) { // Single object
+                checkSingleDef(newData);
+            } else { // Dictionary of definitions
+                Object.values(newData).forEach(checkSingleDef);
+            }
+        } else {
+            console.error("DefenceManager.applyParameterUpdates: Invalid newData format for comparison.", newData);
+            return; // Don't proceed with invalid data
+        }
+
+        // If no changes detected based on the helper function, exit early
+        if (!definitionsChanged) {
+             // console.log(`DefenceManager: No relevant changes detected in incoming definitions data.`);
+             return;
+        }
+
+        // --- Changes were detected, proceed with merging and updating --- 
+        console.log("DefenceManager: Change detected in source definitions, proceeding with update..."); // Keep this log
+
         const newDefinitions = {};
-        const processDefinition = (def) => {
+        const processDefinitionMerge = (def) => {
             if (!def || !def.id) return;
 
-            const currentDef = this.defenceDefinitions[def.id];
-            const mergedDef = { ...def }; // Start with the new data
+            const currentDef = this.defenceDefinitions[def.id] || {}; // Use empty object if new
+            const currentStats = currentDef.stats || {};
+            const mergedDef = { ...currentDef, ...def }; // Merge top-level, new overwrites old
 
-            // --- Merge Wear Params --- 
-            if (currentDef && currentDef.stats) {
-                // Ensure stats object exists on mergedDef
-                if (!mergedDef.stats) mergedDef.stats = {}; 
-                
-                // Preserve calculated wear params if they exist on current and aren't explicitly in new data
-                if (currentDef.stats.wearEnabled !== undefined && mergedDef.stats.wearEnabled === undefined) {
-                    mergedDef.stats.wearEnabled = currentDef.stats.wearEnabled;
-                }
-                if (currentDef.stats.totalHitsK !== undefined && mergedDef.stats.totalHitsK === undefined) {
-                    mergedDef.stats.totalHitsK = currentDef.stats.totalHitsK;
-                }
+            // --- Deeper merge for specific nested objects if needed --- 
+            // Merge stats carefully
+            if (def.stats) {
+                 mergedDef.stats = { ...currentStats, ...def.stats };
             }
-            // --- End Merge --- 
+            // Merge effects (assuming new definition fully replaces old effects)
+            if (def.effects !== undefined) { // Check if effects key exists in new data
+                 mergedDef.effects = def.effects; // Replace whole object (or set null/undefined)
+            } else if (currentDef.effects !== undefined) {
+                 // Keep existing effects if not specified in new data
+                 mergedDef.effects = currentDef.effects;
+            }
+            // Merge sprite (assuming new definition fully replaces old sprite)
+            if (def.sprite !== undefined) {
+                mergedDef.sprite = def.sprite;
+            } else if (currentDef.sprite !== undefined) {
+                 mergedDef.sprite = currentDef.sprite;
+            }
+             // Merge display (assuming new definition fully replaces old display)
+            if (def.display !== undefined) {
+                mergedDef.display = def.display;
+            } else if (currentDef.display !== undefined) {
+                 mergedDef.display = currentDef.display;
+            }
+            // --- End Deeper Merge --- 
+            
+            // --- Preserve calculated wear params if they exist on current and aren't explicitly in new data --- 
+            // Ensure stats object exists on mergedDef after potential merges
+            if (!mergedDef.stats) mergedDef.stats = {}; 
+            
+            // Preserve calculated wear params (maxHp, wearDecrement, wearEnabled)
+            // These should only be overwritten if calculateWearParameters runs again
+            if (currentStats.wearEnabled !== undefined && mergedDef.stats.wearEnabled === undefined) {
+                mergedDef.stats.wearEnabled = currentStats.wearEnabled;
+            }
+            if (currentStats.maxHp !== undefined && mergedDef.stats.maxHp === undefined) {
+                mergedDef.stats.maxHp = currentStats.maxHp;
+            }
+            if (currentStats.wearDecrement !== undefined && mergedDef.stats.wearDecrement === undefined) {
+                mergedDef.stats.wearDecrement = currentStats.wearDecrement;
+            }
+            // --- End Preserve --- 
 
             newDefinitions[def.id] = mergedDef;
         };
 
+        // Perform the merge using the same iteration logic as the comparison
         if (Array.isArray(newData)) {
-             newData.forEach(processDefinition);
+             newData.forEach(processDefinitionMerge);
         } else if (typeof newData === 'object' && newData !== null) {
-            // Handle case where newData is a single definition object or a dictionary
             if (newData.id) { // Single object
-                processDefinition(newData);
+                processDefinitionMerge(newData);
             } else { // Dictionary of definitions
-                Object.values(newData).forEach(processDefinition);
+                Object.values(newData).forEach(processDefinitionMerge);
             }
-        } else {
-            console.error("DefenceManager.applyParameterUpdates: Invalid newData format.", newData);
-            return; // Don't proceed with invalid data
         }
 
-        // Check if definitions actually changed (simple JSON string comparison)
-        if (JSON.stringify(this.defenceDefinitions) !== JSON.stringify(newDefinitions)) {
-            this.defenceDefinitions = newDefinitions;
-            //console.log(`DefenceManager: Definitions updated (merged).`); // Optional confirmation log
+        // --- Update internal definitions and propagate --- 
+        this.defenceDefinitions = newDefinitions;
 
-            // --- Propagate updates to active instances --- 
-            this.activeDefences.forEach(defence => {
-                const updatedDef = this.defenceDefinitions[defence.id];
-                if (updatedDef && typeof defence.applyUpdate === 'function') {
-                    defence.applyUpdate(updatedDef);
-                }
-            });
-            // --- End Propagation ---
+        // Propagate updates to active instances
+        this.activeDefences.forEach(defence => {
+            const updatedDef = this.defenceDefinitions[defence.id];
+            if (updatedDef && typeof defence.applyUpdate === 'function') {
+                defence.applyUpdate(updatedDef);
+            }
+        });
 
-            // Dispatch an event to notify listeners (like the UI)
-            this.dispatchEvent(new CustomEvent('definitionsUpdated'));
+        // Dispatch an event to notify listeners (like the UI)
+        this.dispatchEvent(new CustomEvent('definitionsUpdated'));
 
-            // --- ADDED: Recalculate wear parameters if definitions changed ---
-            console.log("DefenceManager: Definitions updated, recalculating own wear parameters (k).");
-            // Use a microtask to avoid potential issues if called during initial load?
-            // Or just call directly if calculateWearParameters is robust.
-            // We call it directly for now. Check if await is needed if it becomes async.
-            this.calculateWearParameters(); 
-            // --- END ADDED ---
-        } else {
-            // //console.log(`DefenceManager: No changes detected in definitions.`);
-        }
+        // --- Recalculate wear parameters (maxHp, wearDecrement) --- 
+        console.log("DefenceManager: Definitions updated, recalculating own wear parameters (maxHp, wearDecrement)."); // Updated log msg
+        this.calculateWearParameters();
     }
 
     // Add getter for active defences
@@ -248,10 +360,19 @@ export default class DefenceManager extends EventTarget {
         const w = this.game.getWearParameter(); // Assumes game instance has this method
         const L = this.game.getTotalPathLength(); // Assumes game instance has this method
         const enemyDefinitions = this.game.enemyManager?.getEnemyDefinitions(); // Use optional chaining
+        const alpha = this.game.getAlphaFactor(); // Get alpha_0
+        let costs;
+        try {
+             costs = await this.game.priceManager.calculateAllCosts(); // Get unrounded costs
+        } catch (error) {
+             console.error("DefenceManager: Failed to get defender costs from PriceManager:", error);
+             return; // Cannot proceed without costs
+        }
+
         // REMOVED: console.log(`DEBUG: calculateWearParameters - Global params: w=${w}, L=${L}, enemyDefs=${!!enemyDefinitions}`);
 
-        if (w === undefined || L === null || !enemyDefinitions) {
-            console.error(`DefenceManager: Missing required parameters for wear calculation (w=${w}, L=${L}, enemies=${!!enemyDefinitions})`);
+        if (w === undefined || L === null || !enemyDefinitions || alpha === null || alpha <= 0 || !costs) {
+            console.error(`DefenceManager: Missing required parameters for wear calculation (w=${w}, L=${L}, enemies=${!!enemyDefinitions}, alpha=${alpha}, costs=${!!costs})`);
             return;
         }
 
@@ -266,7 +387,9 @@ export default class DefenceManager extends EventTarget {
                  const def = this.defenceDefinitions[defenceId];
                  if (def.stats) {
                      def.stats.wearEnabled = false;
-                     def.stats.totalHitsK = 1; // Dummy value
+                     // REMOVED: def.stats.totalHitsK = 1; // Dummy value
+                     def.stats.maxHp = 1; // Set dummy health
+                     def.stats.wearDecrement = 0;
                  }
              }
             return; // Exit if no enemies
@@ -276,6 +399,17 @@ export default class DefenceManager extends EventTarget {
         for (const defenceId in this.defenceDefinitions) {
             const def = this.defenceDefinitions[defenceId];
             if (!def || !def.stats) continue;
+            
+            // Get cost for this defender
+            const Ci = costs[defenceId];
+            if (Ci === undefined || Ci === null || Ci < 0) {
+                 console.warn(`DefenceManager: Missing or invalid cost for ${defenceId}. Skipping wear calculation.`);
+                 def.stats.wearEnabled = false;
+                 def.stats.maxHp = 1; // Dummy health
+                 def.stats.wearDecrement = 0;
+                 // REMOVED: delete def.stats.totalHitsK;
+                 continue;
+            }
             
             // REMOVED: --- Log specific defender start ---
             // if (defenceId === 'axolotl_gunner') console.log(`\n--- DEBUG: Calculating wear for ${defenceId} ---`);
@@ -291,7 +425,9 @@ export default class DefenceManager extends EventTarget {
             if (!D || D <= 0 || !rateMs || rateMs <= 0) {
                 // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Skipping: Non-damaging/firing.`);
                 def.stats.wearEnabled = false;
-                def.stats.totalHitsK = 1; // Dummy value
+                // REMOVED: def.stats.totalHitsK = 1; // Dummy value
+                def.stats.maxHp = Ci / alpha; // Still assign maxHp based on cost/alpha
+                def.stats.wearDecrement = 0;
                 continue;
             }
 
@@ -306,7 +442,9 @@ export default class DefenceManager extends EventTarget {
                 // Defender can never hit path, disable wear
                 // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Skipping: P_in_range is 0.`);
                 def.stats.wearEnabled = false;
-                def.stats.totalHitsK = 1;
+                // REMOVED: def.stats.totalHitsK = 1;
+                def.stats.maxHp = Ci / alpha;
+                def.stats.wearDecrement = 0;
                 continue;
             }
 
@@ -326,22 +464,35 @@ export default class DefenceManager extends EventTarget {
             const D_fire_bar = sumMinFactors / N_types;
             // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> D_fire_bar (avg factor): ${D_fire_bar}`);
 
-            // Calculate final f_bar
+            // Calculate final f_bar (average duty cycle)
             const f_bar = P_in_range * D_fire_bar;
             // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> f_bar (P_in_range * D_fire_bar): ${f_bar}`);
 
-            // Calculate k and set flags
-            if (w > 0 && f_bar > 0) {
-                const k = Math.round(r * f_bar / w);
-                def.stats.totalHitsK = Math.max(1, k); // Ensure k is at least 1
-                def.stats.wearEnabled = true;
-                // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear ENABLED. Calculated k=${k}, final totalHitsK=${def.stats.totalHitsK}`);
+            // Calculate k, Ri, maxHp and wearDecrement and set flags
+            const wearIsEnabled = (w > 0 && f_bar > 0);
+            def.stats.wearEnabled = wearIsEnabled;
+            
+            const Ri = Ci / alpha;
+            def.stats.maxHp = Math.max(1, Ri); // Ensure maxHp is at least 1
+            
+            if (wearIsEnabled) {
+                const ki = (r * f_bar) / w; // Total hits k
+                if (ki > 1e-9) { // Avoid division by near-zero k
+                    def.stats.wearDecrement = Ri / ki; 
+                    def.stats.wearDecrement = Math.max(0, def.stats.wearDecrement); // Ensure non-negative
+                     // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear ENABLED. Calculated ki=${ki.toFixed(2)}, Ri=${Ri.toFixed(2)}, maxHp=${def.stats.maxHp.toFixed(2)}, wearDecrement=${def.stats.wearDecrement.toFixed(4)}`);
+                } else {
+                     // k is effectively zero, cannot calculate meaningful decrement
+                     def.stats.wearDecrement = def.stats.maxHp; // Set decrement to instantly destroy
+                     def.stats.wearEnabled = true; // Still enable wear, it just finishes instantly
+                     // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear ENABLED (Instant). Calculated ki near zero. Ri=${Ri.toFixed(2)}, maxHp=${def.stats.maxHp.toFixed(2)}, wearDecrement=${def.stats.wearDecrement.toFixed(4)}`);
+                }
             } else {
-                // Wear disabled (w=0) or defender effectively never fires (f_bar=0)
-                def.stats.totalHitsK = 1; // Dummy value
-                def.stats.wearEnabled = false;
-                // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear DISABLED. Reason: w=${w}, f_bar=${f_bar}`);
+                // Wear disabled (w=0 or f_bar=0)
+                def.stats.wearDecrement = 0;
+                // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear DISABLED. Ri=${Ri.toFixed(2)}, maxHp=${def.stats.maxHp.toFixed(2)}, wearDecrement=0`);
             }
+            // REMOVED: delete def.stats.totalHitsK; // Remove the old property
         }
 
         // REMOVED: console.log("DEBUG: Finished calculateWearParameters.");

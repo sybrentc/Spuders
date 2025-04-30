@@ -168,8 +168,28 @@ export default class Game {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
             }
 
+            // --- ADDED: Calculate initial alpha factor (Moved earlier) ---
+            this.recalculateAlphaFactor(); // Call after all dependencies are ready
+            // --- END ADDED ---
+
+            // Instantiate PriceManager (Moved earlier)
+            if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
+                //console.log("DEBUG: Game Initialize - About to create PriceManager..."); // <-- ADD LOG
+                this.priceManager = new PriceManager(
+                    this.defenceManager,
+                    this.enemyManager,
+                    this.base,
+                    this // <-- Pass the Game instance
+                );
+                await this.priceManager.load(); // <-- Ensure price manager is loaded (now just marks ready)
+                //console.log("DEBUG: Game Initialize - PriceManager created:", this.priceManager); // <-- ADD LOG
+            } else {
+                console.error("Game Initialize: Cannot create PriceManager, required managers not loaded."); // <-- Keep this error
+                throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
+            }
+
             // *** NOW Calculate Wear Parameters ***
-            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded) { // Depend on pathCoverageLoaded
+            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager) { // Add check for priceManager
                 await this.defenceManager.calculateWearParameters(); // <-- CALL IT HERE
             } else {
                 console.error("Cannot calculate wear parameters - managers not ready.");
@@ -229,26 +249,6 @@ export default class Game {
             }
             
             ////console.log('Game initialization complete.');
-
-            // --- ADDED: Calculate initial alpha factor ---
-            this.recalculateAlphaFactor(); // Call after all dependencies are ready
-            // --- END ADDED ---
-
-            // Instantiate PriceManager
-            if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
-                //console.log("DEBUG: Game Initialize - About to create PriceManager..."); // <-- ADD LOG
-                this.priceManager = new PriceManager(
-                    this.defenceManager,
-                    this.enemyManager,
-                    this.base,
-                    this // <-- Pass the Game instance
-                );
-                await this.priceManager.load(); // <-- Ensure price manager is loaded (now just marks ready)
-                //console.log("DEBUG: Game Initialize - PriceManager created:", this.priceManager); // <-- ADD LOG
-            } else {
-                console.error("Game Initialize: Cannot create PriceManager, required managers not loaded."); // <-- Keep this error
-                throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
-            }
 
             return true;
         } catch (error) {

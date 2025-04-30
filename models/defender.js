@@ -10,16 +10,17 @@ export default class DefenceEntity {
         this.lastAttackTime = 0;
 
         // Stats
-        this.hp = definition.stats.hp;
-        this.maxHp = definition.stats.hp;
         this.attackRange = definition.stats.attackRange;
         this.attackRate = definition.stats.attackRate; // ms between attacks
         this.attackStrength = definition.stats.attackStrength;
         
-        // --- Wear properties ---
+        // --- Wear properties --- UPDATED to use HP
         this.wearEnabled = definition.stats.wearEnabled ?? false;
-        this.totalHitsK = this.wearEnabled ? (definition.stats.totalHitsK ?? 1) : 1;
-        this.remainingHits = this.totalHitsK;
+        // REMOVED: this.totalHitsK = this.wearEnabled ? (definition.stats.totalHitsK ?? 1) : 1;
+        // REMOVED: this.remainingHits = this.totalHitsK;
+        this.maxHp = this.wearEnabled ? (definition.stats.maxHp ?? 1) : 1; // Get calculated maxHp
+        this.hp = this.maxHp; // Initialize current HP
+        this.wearDecrement = this.wearEnabled ? (definition.stats.wearDecrement ?? 0) : 0; // Get calculated decrement
         this.isDestroyed = false;
         // --- End Wear properties ---
         
@@ -121,9 +122,10 @@ export default class DefenceEntity {
         // Apply direct damage if applicable
         if (this.attackStrength > 0) {
             this.target.hit(this.attackStrength);
-            // --- Deplete Wear --- 
-            if (this.wearEnabled && this.remainingHits > 0) {
-                this.remainingHits--;
+            // --- Deplete Wear (HP) --- 
+            if (this.wearEnabled && this.wearDecrement > 0) {
+                // REMOVED: this.remainingHits--;
+                this.hp -= this.wearDecrement;
             }
             // --- End Deplete Wear ---
         }
@@ -132,7 +134,8 @@ export default class DefenceEntity {
 
     update(timestamp, deltaTime, enemies) {
         // --- Check for Wear Destruction --- 
-        if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
+        // if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
+        if (this.wearEnabled && this.hp <= 0 && !this.isDestroyed) { // Check HP instead of hits
             this.isDestroyed = true;
             console.log(`Defender ${this.id} worn out!`); // Optional log
             // TODO: Trigger removal logic? (Handled by Manager filter for now)
@@ -271,7 +274,8 @@ export default class DefenceEntity {
             // --- Draw Wear/Durability Bar --- 
             if (this.wearEnabled) {
                 // Reuse the existing health bar logic, treating remaining hits as 'current health'
-                drawHealthBar(ctx, this.remainingHits, this.totalHitsK, drawX, drawY, destWidth, destHeight);
+                // REMOVED: drawHealthBar(ctx, this.remainingHits, this.totalHitsK, drawX, drawY, destWidth, destHeight);
+                drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, destWidth, destHeight); // Use hp and maxHp
             }
             // --- End Draw Wear Bar ---
 
@@ -303,15 +307,37 @@ export default class DefenceEntity {
 
     // Method to apply updates from new definitions
     applyUpdate(updatedDef) {
-        // Update stats (handle HP carefully)
-        const hpRatio = this.maxHp > 0 ? this.hp / this.maxHp : 1; // Preserve health percentage
-        this.hp = Math.max(1, Math.round((updatedDef.stats.hp || this.maxHp) * hpRatio)); // Apply ratio to new max HP
-        this.maxHp = updatedDef.stats.hp || this.maxHp;
-        
+        // Update stats 
         this.attackRange = updatedDef.stats.attackRange ?? this.attackRange;
         this.attackRate = updatedDef.stats.attackRate ?? this.attackRate;
         this.attackStrength = updatedDef.stats.attackStrength ?? this.attackStrength;
         
+        // --- Update Wear/HP Properties --- 
+        const wasEnabled = this.wearEnabled;
+        this.wearEnabled = updatedDef.stats.wearEnabled ?? this.wearEnabled;
+        
+        if (this.wearEnabled) {
+            // Preserve health percentage if wear remains enabled or becomes enabled
+            const hpRatio = (this.maxHp > 0) ? (this.hp / this.maxHp) : (wasEnabled ? 0 : 1); // If just enabled, start full
+            
+            // Update maxHp and wearDecrement from the new definition
+            this.maxHp = updatedDef.stats.maxHp ?? (wasEnabled ? this.maxHp : 1); // Use new value or keep old if wear was enabled
+            this.wearDecrement = updatedDef.stats.wearDecrement ?? (wasEnabled ? this.wearDecrement : 0);
+            
+            // Apply the ratio to the potentially updated maxHp
+            this.hp = this.maxHp * hpRatio;
+            this.hp = Math.max(0, this.hp); // Ensure HP doesn't go negative
+
+        } else {
+            // Wear is disabled in the update
+            this.maxHp = 1; // Reset HP values (or keep them? Setting to 1/0)
+            this.hp = 1;
+            this.wearDecrement = 0;
+        }
+        // Ensure hp doesn't exceed maxHp (could happen due to rounding or edge cases)
+        this.hp = Math.min(this.hp, this.maxHp);
+        // --- End Wear/HP Update --- 
+
         // --- Update effects object and properties --- 
         this.effects = updatedDef.effects; // Overwrite the whole effects object
         this.effectRadius = this.effects?.radius; 
