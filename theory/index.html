@@ -246,7 +246,7 @@
 
 \[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{39} \]
 
-<p>To implement this required destruction rate using discrete events like airstrikes, we need to determine the cumulative target reduction in earning power that should have occurred by time \(t\) within wave \(n\) due to \(d_n\). This target cumulative loss, denoted \(\Delta R_n(t)\), can be found by integrating the destruction rate over the time the wave has been active, from its start \(t=0\) to the current time \(t\). We use the solution to eqt. 39, \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\), to obtain</p>
+<p>To implement this required destruction rate using discrete events, we need to determine the cumulative target reduction in earning power that should have occurred by time \(t\) within wave \(n\) due to \(d_n\). This target cumulative loss, denoted \(\Delta R_n(t)\), can be found by integrating the destruction rate over the time the wave has been active, from its start \(t=0\) to the current time \(t\). We use the solution to eqt. 39, \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\), to obtain</p>
 
 \[ \Delta R_n(t) = \int_0^t d_n R_n(t') dt' = \int_0^t d_n R_n(0) e^{-d_n t'} dt'. \tag{40} \]
 
@@ -264,16 +264,29 @@
 
 \[ \Delta R_n(t) = \sum_{i=1}^{N} \frac{R_i}{k_i}\Delta k_i(t). \tag{43} \]
 
-<p>We can simplify calculation by defining defender health as \(h_i(t) = R_ik_i(t)/k_i\). This yields a direct relationship between defender health and the reduction in earning rate as</p>
+<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R_n(t)\), we redefine eqt. 43 in terms of a rescaled defender health \(h^d_i(t)\) such that</p>
 
-\[ \Delta R_n(t) = \sum_{i=1}^{N} \Delta h_i(t). \tag{44} \]
+\[\Delta R_n(t) \equiv \sum_{i=1}^{N} \Delta h^d_i(t). \tag{44}\]
 
-<p>Suppose we have an explosion with an \(A_0/r_i^2\) damage profile. The wipe-out amplitude for exactly destroying a defender of health \(h_i\) at a distance \(r_i\) from the epicentre is</p>
+<p>Comparing eqts. 43 and 44 yields an expression for \(h^d_i(t)\)</p>
 
-\[ A_{0,i} = h_ir_i^2. \tag{45} \]
+\[h^d_i(t) = \frac{R_i}{k_i}k_i(t), \tag{45}\]
 
-<p>A target reduction in earning power \(\Delta R_n(t)\) can be achieved by selecting a location of an epicentre, calculating the wipe-out amplitudes for all defenders from that point, finding the amplitude bracketing range for which the cumulative health damage brackets the target damage, and determining the exact aplitude of explosive needed at that epicentre location to reach the exact target health damage through linear interpolation within that bracketing range.</p>
+<p>We note that the rescaled defender health has units of earning rate, with \(h^d_i(t)=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since, each enemy has an associated bounty in units of currency, and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i(t)\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i(t)\) is the health of enemy \(i\) at time \(t\)</p>
 
+\[h^e_i(t)=\frac{\beta s_i}{\alpha}h_i(t). \tag{46} \]
+
+<h2>Airstrikes</h2>
+
+<p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i(t)\) and ask what the maximum distance \(r^w_i(t)\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
+
+\[ r^w_i(t) = \sqrt{\frac{A}{h^d_i(t)}}. \tag{47} \]
+
+<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 47 and 45, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i(t)=1\), is a certain percentage of the map width, say 25%.</p>
+
+<p>We work on the basis that it is the best interests of the enemy to remove as many defenders from the pool per explosion as possible, since that translates into the greatest instantaneous reduction in fire power. The optimal location for the epicentre of the explosion is therefore the location with the greatest number of overlapping wipe-out radii. To pick this optimal location, we add all defender wipe-out circles to a z-buffer and randomly select a pixel of maximum z-value to be the target location.</p>
+
+<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the \(\Delta h^d_n(t)\) health reduction per bomb, which according to eqt. 44 equals the \(\Delta R_n(t)\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
