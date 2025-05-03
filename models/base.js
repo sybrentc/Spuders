@@ -191,6 +191,12 @@ export default class Base extends EventTarget {
         //console.log(`Base took ${amount} damage, HP remaining: ${this.currentHp}/${this.maxHp}`);
         if (this.currentHp <= 0) {
             this.currentHp = 0;
+            // --- Dispatch gameOver event ONCE --- 
+            if (!this._isDestroyed) { // Check if not already destroyed
+                this.dispatchEvent(new CustomEvent('gameOver'));
+                //console.log("Base: Dispatched 'gameOver' event.");
+            }
+            // ------------------------------------
             this._isDestroyed = true;
             //console.log("Base has been destroyed!");
             this.die(); // Call the die method
@@ -247,6 +253,18 @@ export default class Base extends EventTarget {
         // Dispatch event AFTER funds are updated
         this.dispatchEvent(new CustomEvent('fundsUpdated'));
         // console.log(`Base: Added ${amount} funds. Current: ${this.currentFunds}`);
+    }
+
+    /**
+     * Resets the base to its initial state (full HP, starting funds).
+     */
+    reset() {
+        //console.log("Base: Resetting state.");
+        this.currentHp = this.maxHp;
+        this.currentFunds = this.startingFunds;
+        this._isDestroyed = false;
+        // Dispatch event to update UI display
+        this.dispatchEvent(new CustomEvent('fundsUpdated')); 
     }
 
     /**

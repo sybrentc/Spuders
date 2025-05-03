@@ -52,6 +52,13 @@ export default class Game {
         this.pathExclusionRadius = null; // Stores the path exclusion radius
         this.pathStats = {}; // Holds path stats like total length
         this.levelConfig = {}; // Holds level-specific config like paths, factors
+        this.isGameActive = false; // Added: Flag to control game loop activity
+        // --- Game Over / Slow-Mo State --- 
+        this.isGameOver = false;
+        this.timeScale = 1.0;       // Current time scale (1.0 = normal, <1.0 = slow)
+        this.slowMoStartTime = null; // Timestamp when slow-mo transition begins
+        this.slowMoDuration = 3000; // Duration of slow-mo transition (ms)
+        this.targetTimeScale = 0.2; // MODIFIED: Target time scale for slow-mo (changed from 0.3)
         // --- END ADDED ---
     }
     
@@ -247,13 +254,6 @@ export default class Game {
                  this.tuningManager.start();
             } else {
                  console.warn("Game Initialize: No managers registered with TuningManager.")
-            }
-            
-            // Start the wave system via the manager
-            if (this.waveManager && this.waveManager.isLoaded) { // Check if loaded before starting
-                this.waveManager.start();
-            } else {
-                console.warn("Game Initialize: WaveManager not loaded or available, cannot start waves.")
             }
             
             ////console.log('Game initialization complete.');
@@ -502,28 +502,58 @@ export default class Game {
      * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
      */
     update(timestamp, deltaTime) {
-        // Update game components
-        if (this.waveManager) {
-            this.waveManager.update(timestamp, deltaTime);
+        let currentTimeScale = this.timeScale;
+
+        // --- Calculate Time Scale during Game Over Transition --- 
+        if (this.isGameOver && this.slowMoStartTime !== null) {
+            const elapsed = timestamp - this.slowMoStartTime;
+            const progress = Math.min(elapsed / this.slowMoDuration, 1.0);
+            // Linear interpolation from 1.0 down to targetTimeScale
+            currentTimeScale = 1.0 + (this.targetTimeScale - 1.0) * progress; 
+            this.timeScale = currentTimeScale; // Update stored timescale
+            if (progress === 1.0) {
+                this.slowMoStartTime = null; // Transition finished, keep final timescale
+            }
+        }
+        // --- End Time Scale Calculation ---
+
+        // --- Pausing Check (only if NOT game over) --- 
+        if (!this.isGameActive && !this.isGameOver) {
+            // If paused, only update the last timestamp to avoid large deltaTime jump on resume
+            // And skip the rest of the update logic
+            this.lastTimestamp = timestamp;
+            return; 
+        }
+        // --- End Pausing Check ---
+
+        // --- Calculate Effective Delta Time --- 
+        const effectiveDeltaTime = deltaTime * currentTimeScale;
+        
+        // Always update last timestamp if game is running (even during slow-mo)
+        this.lastTimestamp = timestamp;
+
+        // --- Update Game Components using Effective Delta Time --- 
+        // Prevent WaveManager updates during game over to stop new spawns/timers
+        if (this.waveManager && !this.isGameOver) { 
+            this.waveManager.update(timestamp, effectiveDeltaTime);
         }
         if (this.enemyManager) {
-            // No longer pass base here
-            this.enemyManager.update(timestamp, deltaTime); 
+            this.enemyManager.update(timestamp, effectiveDeltaTime);
         }
         if (this.defenceManager) {
-            this.defenceManager.update(timestamp, deltaTime);
+            this.defenceManager.update(timestamp, effectiveDeltaTime);
         }
         if (this.base) {
-            this.base.update(timestamp, deltaTime);
+            this.base.update(timestamp, effectiveDeltaTime);
         }
         
         // Call registered update listeners
         for (const listener of this.updateListeners) {
             try {
-                listener(timestamp, deltaTime);
+                // Pass effectiveDeltaTime to listeners as well?
+                listener(timestamp, effectiveDeltaTime); 
             } catch (error) {
                 console.error("Error in game update listener:", error);
-                // Consider removing the listener if it consistently fails
             }
         }
     }
@@ -819,7 +849,7 @@ export default class Game {
             return;
         }
         if (scalar !== this.difficultyScalar) {
-            console.log(`Game: Updating difficulty scalar 'a' from ${this.difficultyScalar} to ${scalar}`);
+            //console.log(`Game: Updating difficulty scalar 'a' from ${this.difficultyScalar} to ${scalar}`);
             this.difficultyScalar = scalar;
             // Trigger PriceManager recalculation because effective alpha changed
             if (this.priceManager) {
@@ -831,6 +861,105 @@ export default class Game {
             }
             // --- END ADDED ---
         }
+    }
+
+    /**
+     * Resets the game state to its initial conditions for a new game.
+     */
+    reset() {
+        //console.log("Game: Resetting game state...");
+
+        // 1. Reset Wave Manager
+        if (this.waveManager) {
+            this.waveManager.reset(); // Call the manager's own reset method
+            /* // REMOVED manual reset logic
+             this.waveManager.currentWaveNumber = 0;
+             this.waveManager.isFinished = false;
+             this.waveManager.timeUntilNextWave = 0;
+             this.waveManager.activeWaveState = { groups: [] };
+             this.waveManager.waitingForClear = false;
+             this.waveManager.lastAverageDeathDistance = null;
+             this.waveManager.lastDisplayedSeconds = null; 
+             this.waveManager.isStarted = false; 
+            */
+        }
+
+        // 2. Reset Enemy Manager
+        if (this.enemyManager) {
+            this.enemyManager.activeEnemies = [];
+            this.enemyManager.currentWaveDeathDistances = [];
+            this.enemyManager.lastDeathInfo = { distance: null, originalX: null, originalY: null };
+        }
+
+        // 3. Reset Defence Manager
+        if (this.defenceManager) {
+            this.defenceManager.activeDefences = [];
+            // TODO: Reset any other state within DefenceManager if needed
+        }
+
+        // 4. Reset Base (assuming a reset method exists or will be added)
+        if (this.base) {
+            // TODO: Implement Base.reset() to restore health/funds
+            // For now, log the intent
+            // console.log("Game: Requesting Base reset (method needs implementation).");
+            // Example if Base.reset exists:
+            this.base.reset(); // Call the newly added reset method
+        }
+
+        // 5. Reset Game Loop Timer
+        this.lastTimestamp = 0;
+
+        // 6. Reset Game Over / Slow-Mo State
+        this.isGameOver = false;
+        this.timeScale = 1.0;
+        this.slowMoStartTime = null;
+
+        // 7. IMPORTANT: Need mechanism to restart WaveManager's initial timer
+        // This is handled by Game.startGame() which is called by controller on restart
+        
+        // 8. Recalculate costs/wear based on initial state? (Optional)
+        // Might be good practice to ensure consistency after reset
+        // if (this.priceManager) this.priceManager.recalculateAndStoreCosts();
+        // if (this.defenceManager) this.defenceManager.calculateWearParameters();
+
+        //console.log("Game: State reset complete.");
+    }
+
+    /**
+     * Activates the game loop updates.
+     */
+    startGame() {
+        this.isGameActive = true;
+        // Reset last timestamp to prevent large deltaTime jump after pause
+        this.lastTimestamp = 0; 
+        
+        // --- ADDED: Ensure WaveManager starts --- 
+        if (this.waveManager && !this.waveManager.isStarted) {
+            //console.log("Game: Triggering WaveManager start.");
+            this.waveManager.start();
+        }
+        // --- END ADDED ---
+    }
+
+    /**
+     * Pauses the game loop updates.
+     */
+    pauseGame() {
+        //console.log("Game: Pausing updates.");
+        this.isGameActive = false;
+    }
+
+    /**
+     * Initiates the game over sequence, including slow-motion transition.
+     */
+    startGameOverSequence() {
+        if (this.isGameOver) return; // Already game over
+
+        //console.log("Game: Starting game over sequence.");
+        this.isGameOver = true;
+        this.isGameActive = false; // Ensure no new player actions / wave starts
+        this.slowMoStartTime = performance.now(); // Record start time for transition
+        // Time scale will start decreasing in the update loop
     }
 }
 

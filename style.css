@@ -170,3 +170,80 @@ body {
     /* background-color: rgba(0, 0, 0, 0.5); */
     /* padding: 5px; */
 }
+
+/* --- NEW: Overlay Styles --- */
+.overlay {
+    position: fixed; /* Cover the whole viewport */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.75); /* Default dark overlay */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10; /* Ensure it's above game layers and UI overlay */
+    opacity: 1; /* Start fully visible */
+    pointer-events: auto; /* Allow clicks when visible */
+}
+
+.overlay.hidden {
+    display: none; 
+    pointer-events: none; /* Prevent clicks when hidden */
+}
+
+/* ADDED: Class specifically for fade-in transition */
+.overlay.fade-in {
+    transition: opacity 3s ease-in-out;
+}
+
+/* Game over specific overlay style */
+.overlay.game-over {
+    background-color: rgba(150, 0, 0, 0.75); /* Dark red */
+}
+
+/* --- NEW: Popup Window Styles --- */
+.popup {
+    background-color: #f0f0f0; /* Light grey background */
+    padding: 30px 40px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    color: #333;
+}
+
+.popup h2 {
+    margin-top: 0;
+    margin-bottom: 25px;
+    font-family: 'Arial', sans-serif; /* Example font */
+}
+
+/* --- NEW: Button Styles --- */
+#popupButtons {
+    display: flex;
+    gap: 15px; /* Space between buttons */
+    justify-content: center;
+}
+
+.difficulty-button {
+    padding: 12px 25px;
+    font-size: 1em;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: #4CAF50; /* Example green */
+    color: white;
+    transition: background-color 0.2s ease;
+}
+
+.difficulty-button:hover {
+    background-color: #45a049;
+}
+
+/* Optional: Different colors for difficulty? */
+.difficulty-button[data-difficulty="easy"] { background-color: #5cb85c; }
+.difficulty-button[data-difficulty="easy"]:hover { background-color: #4cae4c; }
+.difficulty-button[data-difficulty="normal"] { background-color: #f0ad4e; }
+.difficulty-button[data-difficulty="normal"]:hover { background-color: #ec971f; }
+.difficulty-button[data-difficulty="hard"] { background-color: #d9534f; }
+.difficulty-button[data-difficulty="hard"]:hover { background-color: #c9302c; }

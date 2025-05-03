@@ -55,6 +55,8 @@ export default class WaveManager extends EventTarget {
         this.waitingForClear = false; // Initialize the new flag
         this.lastAverageDeathDistance = null; // Store the average distance from the last wave
 
+        this.initialWaveTimeoutId = null; // Added: To store the ID of the initial setTimeout
+
         //console.log("WaveManager: Instance created.");
     }
 
@@ -161,7 +163,9 @@ export default class WaveManager extends EventTarget {
         //console.log(`WaveManager: Starting system. First wave calculation in ${initialDelay / 1000} seconds.`);
 
         // Use timeout for the very first wave delay
-        setTimeout(() => {
+        // Store the timeout ID so it can be cleared on reset
+        this.initialWaveTimeoutId = setTimeout(() => { 
+            this.initialWaveTimeoutId = null; // Clear ID once timeout runs
             if (this.isStarted && !this.isFinished) { // Check if stopped during delay
                  this.startNextWave();
             }
@@ -642,5 +646,29 @@ export default class WaveManager extends EventTarget {
      */
     getActiveWaveGroupMetrics() {
         return this.activeWaveState?.calculatedMetrics || null;
+    }
+
+    /**
+     * Resets the WaveManager to its initial state.
+     */
+    reset() {
+        //console.log("WaveManager: Resetting state.");
+        // Clear any pending initial wave timeout
+        if (this.initialWaveTimeoutId) {
+            clearTimeout(this.initialWaveTimeoutId);
+            this.initialWaveTimeoutId = null;
+            console.log("WaveManager: Cleared pending initial wave timeout.");
+        }
+
+        // Reset internal state variables
+        this.isStarted = false;
+        this.isFinished = false;
+        this.currentWaveNumber = 0;
+        this.waveStartTime = 0;
+        this.timeUntilNextWave = 0;
+        this.lastDisplayedSeconds = null;
+        this.activeWaveState = { groups: [] }; 
+        this.waitingForClear = false;
+        this.lastAverageDeathDistance = null;
     }
 }

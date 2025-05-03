@@ -45,6 +45,20 @@
              <div id="waveInfoDisplay"></div>
         </div>
     </div>
+
+    <!-- NEW: Overlay and Popup -->
+    <div id="gameOverlay" class="overlay">
+        <div id="popupWindow" class="popup">
+            <h2 id="popupTitle">Choose your destiny</h2>
+            <div id="popupButtons">
+                <!-- Use data attributes to store difficulty mapping -->
+                <button class="difficulty-button" data-difficulty="easy">Easy</button>
+                <button class="difficulty-button" data-difficulty="normal">Normal</button>
+                <button class="difficulty-button" data-difficulty="hard">Bring it on!</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="controller.js"></script>
 </body>
 </html> 

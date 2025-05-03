@@ -137,7 +137,7 @@ export default class DefenceEntity {
         // if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
         if (this.wearEnabled && this.hp <= 0 && !this.isDestroyed) { // Check HP instead of hits
             this.isDestroyed = true;
-            console.log(`Defender ${this.id} worn out!`); // Optional log
+            //console.log(`Defender ${this.id} worn out!`); // Optional log
             // TODO: Trigger removal logic? (Handled by Manager filter for now)
             return; // Stop further updates if destroyed by wear
         }
