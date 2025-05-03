@@ -221,8 +221,10 @@ body {
 /* --- NEW: Button Styles --- */
 #popupButtons {
     display: flex;
-    gap: 15px; /* Space between buttons */
-    justify-content: center;
+    flex-direction: column; /* MODIFIED: Stack vertically */
+    align-items: center;    /* ADDED: Center horizontally */
+    gap: 10px;             /* Adjust gap for vertical spacing */
+    /* REMOVED: justify-content: center; (Not needed for single column centering) */
 }
 
 .difficulty-button {
@@ -234,6 +236,8 @@ body {
     background-color: #4CAF50; /* Example green */
     color: white;
     transition: background-color 0.2s ease;
+    width: 180px; /* ADDED: Set a fixed width */
+    box-sizing: border-box; /* ADDED: Ensure padding is included in width */
 }
 
 .difficulty-button:hover {
