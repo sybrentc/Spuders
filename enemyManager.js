@@ -16,8 +16,8 @@ export default class EnemyManager {
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
         }
-        if (!game || typeof game.getBetaFactor !== 'function') {
-             throw new Error("EnemyManager requires a valid Game instance.");
+        if (!game || typeof game.getAlpha !== 'function' || typeof game.getBetaFactor !== 'function' || typeof game.getExtendedPathData !== 'function') {
+             throw new Error("EnemyManager requires a valid Game instance with getAlpha, getBetaFactor, and getExtendedPathData methods.");
         }
         this.enemyDataPath = enemyDataPath; 
         this.base = base;                   
@@ -35,26 +35,40 @@ export default class EnemyManager {
         // -------------------------------------------------
     }
 
-    // Method to load initial data
+    // Method to load initial data (Definitions and Sprites ONLY)
     async load() {
         try {
-            // 1. Load Enemy Definitions and Sprites
+            // 1. Load Enemy Definitions
             const enemyResponse = await fetch(this.enemyDataPath);
              if (!enemyResponse.ok) throw new Error(`HTTP error! status: ${enemyResponse.status} loading ${this.enemyDataPath}`);
             const enemyDefinitions = await enemyResponse.json();
 
-            //console.log(`EnemyManager: Loading ${enemyDefinitions.length} enemy types from ${this.enemyDataPath}`);
-
             // Load sprites and store definitions
             const spritePromises = enemyDefinitions.map(async (enemyDef) => {
+                // Basic validation of enemy definition structure
+                if (!enemyDef || !enemyDef.id || !enemyDef.stats || typeof enemyDef.stats.hp !== 'number' || typeof enemyDef.stats.speed !== 'number') {
+                    console.error('EnemyManager Load: Invalid enemy definition structure encountered:', enemyDef);
+                    return; // Skip this invalid definition
+                }
+
                 try {
-                const sprite = await this.loadSprite(enemyDef.sprite.path);
-                this.enemySprites[enemyDef.id] = sprite;
-                this.enemyTypes[enemyDef.id] = enemyDef;
+                    const sprite = await this.loadSprite(enemyDef.sprite.path);
+                    this.enemySprites[enemyDef.id] = sprite;
+
+                    // --- MODIFIED: Store only the BASE definition initially ---
+                    // Store a clean version of the definition, keeping original HP
+                    this.enemyTypes[enemyDef.id] = {
+                        ...enemyDef,
+                        originalHp: enemyDef.stats.hp, // Explicitly store original HP
+                        // Initialize scaled values to null/zero or keep undefined until calculated
+                        scaledMaxHp: null,
+                        healthScaleFactor: null,
+                        bounty: 0
+                    };
+                    // --- END MODIFIED ---
+
                 } catch (spriteError) {
                      console.error(`Failed to load sprite for ${enemyDef.id}:`, spriteError);
-                     // Optionally, handle this: skip enemy, use placeholder, etc.
-                     // For now, it will prevent the enemy type from being fully loaded.
                 }
             });
             // --- Load the Shared Hit Sprite ---
@@ -62,8 +76,6 @@ export default class EnemyManager {
                 this.sharedHitSprite = await this.loadSprite('assets/images/spider-hit.png');
             } catch (hitSpriteError) {
                  console.error(`Failed to load shared hit sprite:`, hitSpriteError);
-                 // Decide how to handle this - game might break visually without it.
-                 // Maybe throw error or set a flag? For now, log and continue.
                  this.sharedHitSprite = null;
             }
             // --- End Load Shared Hit Sprite ---
@@ -77,7 +89,7 @@ export default class EnemyManager {
             // -----------------------------------------------------------------
 
             this.isLoaded = true;
-            //console.log('EnemyManager: All enemy types loaded. Path data/stats loaded by Game.'); // Updated log
+            //console.log('EnemyManager: Base definitions and sprites loaded.'); // Updated log
             return true;
         } catch (error) {
             console.error('EnemyManager: Error during loading:', error);
@@ -96,42 +108,25 @@ export default class EnemyManager {
         });
     }
 
-    /**
-     * Calculates the bounty for a given enemy type based on current stats and global factor.
-     * @param {string} enemyTypeId 
-     * @returns {number} The calculated bounty value.
-     */
-    getCalculatedBounty(enemyTypeId) {
-        const enemyDef = this.enemyTypes[enemyTypeId];
-        const beta = this.game.getBetaFactor();
-
-        if (!enemyDef || !enemyDef.stats || beta === null || beta < 0) {
-            return 0; // No definition or factor
-        }
-
-        const hp = enemyDef.stats.hp ?? 0;
-        const speed = enemyDef.stats.speed ?? 0;
-
-        if (hp <= 0 || speed <= 0) {
-            return 0; // No bounty for invalid stats
-        }
-
-        const rawBounty = beta * hp * speed;
-        const finalBounty = Math.max(0, rawBounty); // Ensure non-negative
-        return Math.round(finalBounty); // Round to nearest integer
-    }
-
     // Factory method to create enemies
     async createEnemy(enemyTypeId) { // Make async to handle awaiting sprite promise
         if (!this.isLoaded) {
             console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Manager not loaded yet.`);
             return null;
         }
-        if (!this.enemyTypes[enemyTypeId]) {
-            console.error(`EnemyManager: Enemy type ${enemyTypeId} not found`);
+        const enemyDef = this.enemyTypes[enemyTypeId]; // Get the blueprint with calculated values
+        if (!enemyDef) {
+            console.error(`EnemyManager: Enemy type ${enemyTypeId} not found in enemyTypes.`);
             return null;
         }
-        const enemyDef = this.enemyTypes[enemyTypeId];
+        // --- ADDED: Check if scaled values are calculated ---
+        if (enemyDef.scaledMaxHp === null || enemyDef.healthScaleFactor === null) {
+             console.error(`EnemyManager: Scaled health values not calculated for ${enemyTypeId}. Cannot create enemy.`);
+             // This might happen if calculateAndStoreScaledValues hasn't run successfully yet.
+             return null;
+        }
+        // --- END ADDED ---
+
         let spriteOrPromise = this.enemySprites[enemyTypeId];
 
         // --- Handle potential sprite loading promise --- 
@@ -162,13 +157,14 @@ export default class EnemyManager {
              return null;
          }
 
+        // --- MODIFIED: Pass scaled HP, bounty, and scale factor ---
         const enemy = new Enemy({ 
             id: enemyTypeId,
             name: enemyDef.name,
             extendedPath: extendedPathData, // Use path from game
             sprite: sprite,
             sharedHitSprite: this.sharedHitSprite, // <-- Pass the shared hit sprite
-            base: this.base, // Pass base for bounty calculation
+            base: this.base, // Pass base 
             frameWidth: enemyDef.sprite.frameWidth,
             frameHeight: enemyDef.sprite.frameHeight,
             framesPerRow: enemyDef.sprite.framesPerRow,
@@ -177,13 +173,19 @@ export default class EnemyManager {
             scale: enemyDef.display?.scale,
             anchorX: enemyDef.display?.anchorX,
             anchorY: enemyDef.display?.anchorY,
-            hp: enemyDef.stats.hp,
+            // --- Pass calculated/scaled values --- 
+            hp: enemyDef.scaledMaxHp,           // Pass scaled max HP as initial HP
+            bounty: enemyDef.bounty,             // Pass pre-calculated bounty
+            healthScaleFactor: enemyDef.healthScaleFactor, // Pass the factor itself
+            // --- Pass original stats (speed, attack etc.) ---
             speed: enemyDef.stats.speed,
             attackRate: enemyDef.stats.attackRate,
             attackStrength: enemyDef.stats.attackStrength,
             attackRange: enemyDef.stats.attackRange,
             flashDuration: enemyDef.effects.flashDuration
         });
+        // --- END MODIFIED ---
+
         this.activeEnemies.push(enemy);
         return enemy;
     }
@@ -195,13 +197,6 @@ export default class EnemyManager {
             const enemy = this.activeEnemies[i];
             enemy.update(timestamp, deltaTime, this.base); 
             if (enemy.isDead) {
-                // --- Calculate and Award Bounty --- 
-                const bounty = this.getCalculatedBounty(enemy.id);
-                if (bounty > 0 && this.base) {
-                    this.base.addFunds(bounty);
-                }
-                // ----------------------------------
-
                 // --- Record Death Distance --- 
                 let totalDistance = 0;
                 const targetIndex = enemy.targetWaypointIndex;
@@ -261,14 +256,10 @@ export default class EnemyManager {
              return;
         }
 
-        // --- ADDED: Check if min speed changes ---
-        const previousMinSpeed = this.getMinimumEnemySpeed();
-        // --- END ADDED ---
-
         // Create a map for efficient lookup of new definitions by ID
         const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
 
-        // --- Store a copy of old definitions for comparison ---
+        // --- Store a copy of old definitions for comparison (Keep this for general change detection) ---
         const oldEnemyTypesString = JSON.stringify(this.enemyTypes);
         // -----------------------------------------------------
 
@@ -276,29 +267,34 @@ export default class EnemyManager {
         newDefinitionsMap.forEach((newDef, enemyId) => {
             const existingDef = this.enemyTypes[enemyId];
 
+            // Basic validation
+            if (!newDef || !newDef.stats || typeof newDef.stats.hp !== 'number' || typeof newDef.stats.speed !== 'number') {
+                console.error(`EnemyManager Update: Invalid new definition structure for ${enemyId}:`, newDef);
+                return; // Skip this invalid definition
+            }
+
+            // --- MODIFIED: Merge new definition, keep existing calculated fields temporarily ---
+            let updatedDefinitionBase = existingDef ? {
+                ...existingDef, // Start with existing calculated values
+                ...newDef,      // Overwrite with ALL new base values (incl. name, sprite, stats etc)
+                originalHp: newDef.stats.hp // Make sure originalHp reflects the NEW stats.hp
+            } : { ...newDef, originalHp: newDef.stats.hp }; // For new enemy, just use new def
+            // --- END MODIFIED ---
+
             if (existingDef) {
-                // --- Update Existing Enemy --- 
-                // Merge definition updates (shallow merge, consider deep merge if needed)
-                this.enemyTypes[enemyId] = { ...existingDef, ...newDef }; 
-                
                 // Check if sprite path changed
                 const oldSpritePath = existingDef.sprite?.path;
                 const newSpritePath = newDef.sprite?.path;
 
                 if (newSpritePath && newSpritePath !== oldSpritePath) {
-                    //console.log(`EnemyManager: Sprite path changed for ${enemyId}. Reloading sprite from ${newSpritePath}`);
-                    // Start loading new sprite, store the promise
-                    // Overwrite existing sprite or promise
                     this.enemySprites[enemyId] = this.loadSprite(newSpritePath).catch(err => {
                         console.error(`EnemyManager: Failed to reload sprite for ${enemyId} from ${newSpritePath}:`, err);
                         return null; // Store null on failure to prevent repeated attempts
                     });
                 }
-                // //console.log(`EnemyManager: Updated blueprint for ${enemyId}`);
             } else {
                 // --- Add New Enemy --- 
-                //console.log(`EnemyManager: Adding new enemy type: ${enemyId}`);
-                this.enemyTypes[enemyId] = newDef; // Add the new definition
+                console.log(`EnemyManager: Adding new enemy type: ${enemyId}`);
 
                 // Load sprite for the new enemy, store the promise
                 const newSpritePath = newDef.sprite?.path;
@@ -312,30 +308,27 @@ export default class EnemyManager {
                     this.enemySprites[enemyId] = null; // Ensure it's explicitly null
                 }
             }
+
+            // Update the definition in this.enemyTypes
+            this.enemyTypes[enemyId] = updatedDefinitionBase;
         });
+
+        // --- ADDED: Recalculate all scaled values AFTER processing all updates ---
+        this.calculateAndStoreScaledValues();
 
         // --- Update Active Enemy Instances (using the updated blueprints) --- 
         this.activeEnemies.forEach(enemy => {
             const updatedDef = this.enemyTypes[enemy.id]; // Get potentially updated definition
             if (updatedDef) {
-                // Call the enemy's own update method
-                enemy.applyUpdate(updatedDef);
-                 // //console.log(`EnemyManager: Applied update to active enemy ${enemy.id}`);
+                // Call the enemy's own update method - this needs adjustment
+                // Enemy.applyUpdate should ONLY update basic stats/display,
+                // NOT the scaled health or bounty which are set at creation.
+                enemy.applyUpdate(updatedDef); // Pass the full updated definition
             }
         });
         // ----------------------------------------------------------------
 
-        // --- ADDED: Recalculate alpha factor if min speed changed ---
-        const currentMinSpeed = this.getMinimumEnemySpeed();
-        // Check if the speed value actually changed (handle null cases)
-        if (previousMinSpeed !== currentMinSpeed) {
-             console.log(`EnemyManager: Minimum speed changed from ${previousMinSpeed} to ${currentMinSpeed}. Triggering alpha factor recalculation.`);
-             // Call the renamed recalculation method in game
-             this.game.recalculateBreakEvenAlphaFactor(); 
-        }
-        // --- END ADDED ---
-
-        // --- ADDED: Recalculate defender durability ONLY if enemy stats ACTUALLY changed ---
+        // --- ADDED: Recalculate defender durability ONLY if enemy stats ACTUALLY changed (KEEP THIS LOGIC) ---
         const newEnemyTypesString = JSON.stringify(this.enemyTypes);
         if (oldEnemyTypesString !== newEnemyTypesString) { // Compare before/after strings
             if (this.game.defenceManager?.isLoaded) {
@@ -429,4 +422,62 @@ export default class EnemyManager {
         }
         return this.game.getPointAtDistance(targetDistance);
     }
+
+    // --- ADDED: New method to calculate and store scaled values ---
+    /**
+     * Calculates scaledMaxHp, healthScaleFactor, and bounty for all loaded enemy types.
+     * Should be called AFTER base definitions are loaded and AFTER game alpha/beta are available.
+     */
+    calculateAndStoreScaledValues() {
+        if (!this.isLoaded) {
+            console.error("EnemyManager: Cannot calculate scaled values - definitions not loaded.");
+            return;
+        }
+        const alpha = this.game.getAlpha();
+        const beta = this.game.getBetaFactor();
+
+        if (alpha === null || alpha <= 0) {
+            console.error(`EnemyManager CalcScaled: Invalid alpha value (${alpha}). Cannot calculate.`);
+            // Optionally: Reset existing scaled values to defaults/null?
+            return;
+        }
+        if (beta === null || beta < 0) {
+            console.error(`EnemyManager CalcScaled: Invalid beta value (${beta}). Cannot calculate bounty.`);
+            // Optionally: Reset existing bounty values?
+            return;
+        }
+
+        //console.log(`EnemyManager: Calculating scaled values with alpha=${alpha.toFixed(4)}, beta=${beta}`);
+
+        for (const enemyId in this.enemyTypes) {
+            const enemyDef = this.enemyTypes[enemyId];
+
+            // Use originalHp stored during load
+            const originalHp = enemyDef.originalHp;
+            const speed = enemyDef.stats.speed;
+
+            if (typeof originalHp !== 'number' || typeof speed !== 'number') {
+                console.warn(`EnemyManager CalcScaled: Missing originalHp or speed for ${enemyId}. Skipping.`);
+                continue;
+            }
+
+            if (speed <= 0 || originalHp <= 0) {
+                console.warn(`EnemyManager CalcScaled: Enemy type ${enemyId} has non-positive speed (${speed}) or HP (${originalHp}).`);
+            }
+
+            const healthScaleFactor = (speed > 0) ? (beta * speed) / alpha : 0;
+            const scaledMaxHp = (originalHp > 0 && healthScaleFactor > 0) ? healthScaleFactor * originalHp : 0;
+            const bounty = (originalHp > 0 && speed > 0) ? Math.round(beta * speed * originalHp) : 0;
+
+            // Update the stored definition
+            this.enemyTypes[enemyId] = {
+                ...enemyDef,
+                scaledMaxHp: scaledMaxHp,
+                healthScaleFactor: healthScaleFactor,
+                bounty: bounty
+            };
+        }
+        //console.log("EnemyManager: Finished calculating scaled values.");
+    }
+    // --- END ADDED ---
 }

@@ -257,43 +257,43 @@
 
 <p>To find a mechanism for implementing the active destruction of defenders by enemy forces, we isolate the differential contribution due to destruction from eqt. 28 as follows</p>
 
-\[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{39} \]
+\[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{40} \]
 
 <p>To implement this required destruction rate using discrete events, we need to determine the cumulative target reduction in earning power that should have occurred by time \(t\) within wave \(n\) due to \(d_n\). This target cumulative loss, denoted \(\Delta R_n(t)\), can be found by integrating the destruction rate over the time the wave has been active, from its start \(t=0\) to the current time \(t\). We use the solution to eqt. 39, \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\), to obtain</p>
 
-\[ \Delta R_n(t) = \int_0^t d_n R_n(t') dt' = \int_0^t d_n R_n(0) e^{-d_n t'} dt'. \tag{40} \]
+\[ \Delta R_n(t) = \int_0^t d_n R_n(t') dt' = \int_0^t d_n R_n(0) e^{-d_n t'} dt'. \tag{41} \]
 
 <p>Solving this integral yields the total target earning power that should have been removed by time \(t\) in wave \(n\)</p>
 
-\[ \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}). \tag{41} \]
+\[ \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}). \tag{42} \]
 
 <p>At runtime, we accumulate \(\Delta R_n(t)\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run.</p>
 
 <p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing \(\Delta R_n(t)\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k(t)/k\), where \(k(t)\) is the number of its total \(k\) attacks a defender has left before it is entirely worn out, i.e., \(C^*(t)=Ck(t)/k\). This yields</p>
 
-\[\Delta R_n(t)=\frac{1}{\alpha}\Delta C^*(t) = \frac{R}{k}\Delta k(t). \tag{42}\]
+\[\Delta R_n(t)=\frac{1}{\alpha}\Delta C^*(t) = \frac{R}{k}\Delta k(t). \tag{43}\]
 
 <p>The above result for a single defender can be generalised to a population by simple summation to yield</p>
 
-\[ \Delta R_n(t) = \sum_{i=1}^{N} \frac{R_i}{k_i}\Delta k_i(t). \tag{43} \]
+\[ \Delta R_n(t) = \sum_{i=1}^{N} \frac{R_i}{k_i}\Delta k_i(t). \tag{44} \]
 
 <p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R_n(t)\), we redefine eqt. 43 in terms of a rescaled defender health \(h^d_i(t)\) such that</p>
 
-\[\Delta R_n(t) \equiv \sum_{i=1}^{N} \Delta h^d_i(t). \tag{44}\]
+\[\Delta R_n(t) \equiv \sum_{i=1}^{N} \Delta h^d_i(t). \tag{45}\]
 
 <p>Comparing eqts. 43 and 44 yields an expression for \(h^d_i(t)\)</p>
 
-\[h^d_i(t) = \frac{R_i}{k_i}k_i(t), \tag{45}\]
+\[h^d_i(t) = \frac{R_i}{k_i}k_i(t), \tag{46}\]
 
 <p>We note that the rescaled defender health has units of earning rate, with \(h^d_i(t)=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since, each enemy has an associated bounty in units of currency, and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i(t)\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i(t)\) is the health of enemy \(i\) at time \(t\)</p>
 
-\[h^e_i(t)=\frac{\beta s_i}{\alpha}h_i(t). \tag{46} \]
+\[h^e_i(t)=\frac{\beta s_i}{\alpha}h_i(t). \tag{47} \]
 
 <h2>Airstrikes</h2>
 
 <p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i(t)\) and ask what the maximum distance \(r^w_i(t)\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
 
-\[ r^w_i(t) = \sqrt{\frac{A}{h^d_i(t)}}. \tag{47} \]
+\[ r^w_i(t) = \sqrt{\frac{A}{h^d_i(t)}}. \tag{48} \]
 
 <p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 47 and 45, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i(t)=1\), is a certain percentage of the map width, say 25%.</p>
 

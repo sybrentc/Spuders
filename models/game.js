@@ -176,10 +176,16 @@ export default class Game {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
             }
 
-            // --- Calculate initial alpha factor --- 
-            // Moved HERE: Needs WaveManager (f), EnemyManager (s_min), PathStats (L), LevelConfig (w)
+            // --- Calculate initial break-even alpha factor --- 
+            // Moved EARLIER: Needs WaveManager (f), EnemyManager (s_min), PathStats (L), LevelConfig (w)
             this.recalculateBreakEvenAlphaFactor(); 
             // ------------------------------------
+
+            // --- Calculate Enemy Scaled Values (Needs Alpha) ---
+            if (this.enemyManager) {
+                this.enemyManager.calculateAndStoreScaledValues();
+            }
+            // --------------------------------------------------
 
             // Instantiate PriceManager
             if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {

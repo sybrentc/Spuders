@@ -5,7 +5,10 @@ export default class Enemy {
         id, name, extendedPath, sprite, sharedHitSprite,
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
         scale, anchorX, anchorY,
-        hp, speed, attackRate, attackStrength, attackRange,
+        hp, // This will be the SCALED max HP
+        bounty, // This is the pre-calculated bounty
+        healthScaleFactor, // The factor used for scaling
+        speed, attackRate, attackStrength, attackRange,
         flashDuration,
         base
     }) {
@@ -51,8 +54,10 @@ export default class Enemy {
         this.lastFrameTime = 0;
         
         // Stats
-        this.hp = hp;
-        this.maxHp = hp;
+        this.hp = hp;             // Initial HP is the scaled max HP
+        this.maxHp = hp;          // Max HP is also the scaled max HP
+        this.healthScaleFactor = healthScaleFactor; // Store the scale factor
+        this.bounty = bounty;      // Store the pre-calculated bounty
         this.speed = speed;
         this.attackRate = attackRate;
         this.attackStrength = attackStrength;
@@ -141,17 +146,7 @@ export default class Enemy {
         this.anchorY = updatedDef.display?.anchorY;
 
         // Update stats directly
-        const hpRatio = this.hp / this.maxHp; // Keep track of current health percentage
-        this.maxHp = updatedDef.stats?.hp; 
-        // Need to handle potential undefined maxHp before Math.min
-        if (this.maxHp !== undefined) { 
-             this.hp = Math.min(this.hp, this.maxHp); // Ensure current HP doesn't exceed new max
-        } else {
-            console.warn(`Enemy ${this.id} applyUpdate: maxHp became undefined from tuning data.`);
-            // Decide fallback: keep old maxHp? Set hp to 0? For now, log warning.
-            // Resetting maxHp to a previous value might be safest if available.
-        }
-
+        // --- REMOVED HP/MaxHP update - These are set at creation via scaling ---
         this.speed = updatedDef.stats?.speed ?? this.speed; // Use nullish coalescing for safety
         this.attackRate = updatedDef.stats?.attackRate ?? this.attackRate;
         this.attackStrength = updatedDef.stats?.attackStrength ?? this.attackStrength;
@@ -163,7 +158,10 @@ export default class Enemy {
     
     hit(damage) {
         if (this.isDead) return;
-        this.hp -= damage;
+        // --- MODIFIED: Scale incoming damage ---
+        const scaledDamage = damage * this.healthScaleFactor;
+        this.hp -= scaledDamage;
+        // --- END MODIFIED ---
         this.isFlashing = true;
         this.lastFlashTime = performance.now();
         if (this.hp <= 0) {
@@ -176,9 +174,8 @@ export default class Enemy {
         if (this.isDead) return; 
         this.isDead = true;
         // Get bounty dynamically
-        const calculatedBounty = this.getBounty(); 
-        if (this.base && calculatedBounty > 0) {
-            this.base.addFunds(calculatedBounty);
+        if (this.base && this.bounty > 0) { // Use stored bounty
+            this.base.addFunds(this.bounty);
         }
     }
     
@@ -234,24 +231,5 @@ export default class Enemy {
         
         // --- Draw Health Bar using utility function --- 
         drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
-    }
-
-    /**
-     * Calculates the bounty for this enemy based on its current stats and global factor.
-     * Rounds the result to the nearest 5.
-     * @returns {number} The calculated bounty value.
-     */
-    getBounty() {
-        const alpha = this.base?.stats?.bountyFactor ?? 0; // Default to 0 if base or factor missing
-        const currentHp = this.hp ?? 0; // Use current HP for bounty calculation? Or maxHp? Let's use maxHp as difficulty measure
-        const currentSpeed = this.speed ?? 0;
-        
-        if (this.maxHp <= 0 || currentSpeed <= 0 || alpha <= 0) {
-             return 0; // No bounty for invalid stats or factor
-        }
-
-        const rawBounty = alpha * this.maxHp * currentSpeed;
-        const roundedBounty = Math.max(0, Math.round(rawBounty / 5) * 5); // Ensure non-negative
-        return roundedBounty;
     }
 }

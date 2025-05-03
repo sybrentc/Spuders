@@ -25,7 +25,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // --- Initialize Game and Defence Menu --- 
     const gameInstance = new Game();
     // Expose game instance for debugging/testing scalar changes
-    window.myGame = gameInstance; 
+    window.game = gameInstance; 
 
     try {
         // Wait for the game to fully initialize (loads assets, calculates alpha_0, etc.)

@@ -184,21 +184,31 @@ class PriceManager extends EventTarget {
                  if (!enemy || !enemy.stats || !enemy.stats.speed || enemy.stats.speed <= 0 || !enemy.stats.hp || enemy.stats.hp <= 0) {
                     continue; // Skip invalid enemies
                 }
+
+                // --- Get Pre-calculated Bounty --- 
+                const bounty = enemy.bounty; // <-- Use pre-calculated bounty from enemy definition
+                if (bounty === undefined || bounty <= 0) { // Check if bounty is valid
+                    // console.warn(`PriceManager: Skipping enemy ${enemyId} for cost calculation due to invalid bounty (${bounty}).`);
+                    continue; // If bounty is 0 or invalid, skip this enemy
+                }
+                // --- END Get Bounty ---
+
                 validEnemyCount++;
 
                 const speed = enemy.stats.speed;
-                const hp = enemy.stats.hp;
-
-                // --- Get Bounty from EnemyManager --- 
-                const calculatedBounty = this.enemyManager.getCalculatedBounty(enemyId);
-                if (calculatedBounty <= 0) continue; // If bounty is 0, skip
-                // -----------------------------------
+                // Use original HP for timeToKill calculation, as strength is based on original HP scale
+                const originalHp = enemy.originalHp; // <-- Use originalHp
+                if (typeof originalHp !== 'number' || originalHp <= 0) {
+                     console.warn(`PriceManager: Invalid originalHp (${originalHp}) for enemy ${enemyId}. Skipping.`);
+                     validEnemyCount--; // Decrement count as this enemy is invalid for this calculation
+                     continue;
+                }
 
                 // --- Calculate R* (Ideal Bounty Rate) --- 
                 const timePerShotSec = rate / 1000.0;
-                const shotsToKill = Math.ceil(hp / strength); 
+                const shotsToKill = Math.ceil(originalHp / strength); // <-- Use originalHp
                 const timeToKillSec = shotsToKill * timePerShotSec;
-                const R_star = (timeToKillSec > 1e-6) ? (calculatedBounty / timeToKillSec) : 0; 
+                const R_star = (timeToKillSec > 1e-6) ? (bounty / timeToKillSec) : 0; // <-- Use pre-calculated bounty
                 
                 if (R_star <= 0) continue; // Cannot earn from this enemy
 
@@ -212,7 +222,7 @@ class PriceManager extends EventTarget {
                 const pathLengthInRange = totalPathLength * f_e;
                 const timeInRangeSec = (speed > 1e-6) ? (pathLengthInRange / speed) : 0; // Avoid division by zero
                 
-                const f_k = Math.min(timeInRangeSec / timeToKillSec, 1.0);
+                const f_k = (timeToKillSec > 1e-6) ? Math.min(timeInRangeSec / timeToKillSec, 1.0) : 0; // Avoid division by zero
 
                 // --- Calculate and Accumulate --- 
                 const earningRateEnemy = R_star * f_e * f_k;
