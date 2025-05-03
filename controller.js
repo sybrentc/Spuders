@@ -170,6 +170,15 @@ window.addEventListener('DOMContentLoaded', async () => {
         } else {
              console.error("Controller: Cannot add fundsUpdated listener, game.base is not available.");
         }
+        // ADD listener for wave status updates
+        if (game.waveManager) { // Ensure waveManager exists
+            game.waveManager.addEventListener('statusUpdated', () => {
+                // console.log("Controller: Received wave statusUpdated event. Running updateUI."); // Optional debug
+                updateUI(); // Trigger UI update when wave status changes
+            });
+        } else {
+            console.error("Controller: Cannot add statusUpdated listener, game.waveManager is not available.");
+        }
     } else {
         console.error('Could not initially populate defence menu or set up listener (DefenceManager or PriceManager missing/not loaded).');
     }

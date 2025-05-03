@@ -1,4 +1,4 @@
-export default class WaveManager {
+export default class WaveManager extends EventTarget {
     /**
      * Manages the timing and algorithmic generation of enemy waves.
      * @param {string} waveDataPath - Path to the wave configuration JSON file (e.g., assets/waves/waves.json).
@@ -24,6 +24,8 @@ export default class WaveManager {
             throw new Error("WaveManager requires a Game instance.");
         }
 
+        super(); // Call EventTarget constructor
+
         this.waveDataPath = waveDataPath;
         this.enemyManager = enemyManager;
         this.createEnemy = createEnemyCallback;
@@ -39,6 +41,7 @@ export default class WaveManager {
         this.currentWaveNumber = 0;      // Tracks the wave number
         this.waveStartTime = 0;          // Timestamp when the current wave's spawning began (or calculation)
         this.timeUntilNextWave = 0;      // Countdown timer (in ms) between waves
+        this.lastDisplayedSeconds = null; // Tracks the last integer second value displayed
         
         // Placeholder for the details of the currently active/spawning wave
         // This will be populated by the algorithmic calculation in startNextWave
@@ -183,6 +186,7 @@ export default class WaveManager {
         //console.log(`WaveManager: Starting calculation for Wave ${this.currentWaveNumber}`);
         this.waveStartTime = performance.now(); // Record when wave calculation/setup starts
         this.timeUntilNextWave = 0; // Clear inter-wave timer
+        this.dispatchEvent(new CustomEvent('statusUpdated')); // Wave number changed
 
         // --- Target Point & Fallback ---
         // For Wave 1, initialize the target distance to L/2 if not already set
@@ -221,7 +225,9 @@ export default class WaveManager {
         if (availableEnemyCosts.length === 0) { // ... handle no available enemies error ...
             console.error(`WaveManager: No enemies available... cannot generate wave.`);
             this.activeWaveState = { groups: [] }; // Set empty state
-            this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
+            this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; // Still start delay
+            this.dispatchEvent(new CustomEvent('statusUpdated')); // Start delay timer
+            return;
         }
 
         // --- Step 1: Sort available types by cost (low to high) ---
@@ -270,7 +276,9 @@ export default class WaveManager {
         if (enemyWhitelist.length === 0) {
             console.error(`WaveManager: Whitelist is empty after exclusion (minTypes=${minEnemyTypes}). Cannot generate wave.`);
             this.activeWaveState = { groups: [] };
-            this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; return;
+            this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; // Still start delay
+            this.dispatchEvent(new CustomEvent('statusUpdated')); // Start delay timer
+            return;
         }
         //console.log(`WaveManager: Whitelist contains ${enemyWhitelist.length} enemy types.`);
 
@@ -329,7 +337,8 @@ export default class WaveManager {
         if (selectedEnemies.length === 0 && targetDifficulty > 0) {
              console.warn(`WaveManager: Wave ${this.currentWaveNumber} resulted in 0 enemies despite target difficulty > 0. Check costs/config. Starting delay.`);
              this.activeWaveState = { groups: [] };
-             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
+             this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs; // Still start delay
+             this.dispatchEvent(new CustomEvent('statusUpdated')); // Start delay timer
              return;
         }
 
@@ -586,14 +595,28 @@ export default class WaveManager {
                 this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
                 //console.log(`WaveManager: Next wave calculation starting in ${this.timeUntilNextWave / 1000} seconds.`);
                  this.activeWaveState = { groups: [] }; // Clear groups state for the completed wave
+                 // Calculate and store initial seconds for the countdown
+                 this.lastDisplayedSeconds = Math.ceil(this.timeUntilNextWave / 1000);
+                 this.dispatchEvent(new CustomEvent('statusUpdated')); // Status changed to delay timer
             }
         }
         // Else, check if the inter-wave timer is running (after screen clear)
         else if (this.timeUntilNextWave > 0) {
             this.timeUntilNextWave -= deltaTime;
+
+            // Calculate current displayed seconds
+            const currentSeconds = Math.ceil(this.timeUntilNextWave / 1000);
+
             if (this.timeUntilNextWave <= 0) {
                 this.timeUntilNextWave = 0;
+                this.lastDisplayedSeconds = null; // Reset tracker
+                // Dispatch BEFORE starting next wave calculation, as status changes here
+                this.dispatchEvent(new CustomEvent('statusUpdated')); 
                 this.startNextWave(); // Time's up, start calculating the next wave
+            } else if (currentSeconds !== this.lastDisplayedSeconds) {
+                // Only dispatch if the integer second value has changed
+                this.lastDisplayedSeconds = currentSeconds;
+                this.dispatchEvent(new CustomEvent('statusUpdated'));
             }
         }
     }
