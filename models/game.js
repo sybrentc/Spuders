@@ -45,7 +45,8 @@ export default class Game {
         this.pathCoverageLookup = []; // <-- ADDED STORAGE
         this.pathCoverageLoaded = false; // <-- ADDED FLAG
         // --- ADDED: Dynamic difficulty factor ---
-        this._alphaZeroFactor = null; // Stores the calculated alpha factor (α₀)
+        this._breakEvenAlphaFactor = null; // Renamed from _alphaZeroFactor - Stores the calculated break-even alpha factor (α₀)
+        this.difficultyScalar = 1.0; // Added: Stores the difficulty scalar 'a' (default to 1.0 = break-even)
         this.betaFactor = null; // Stores the currency scale factor (β)
         this.wearParameter = null; // Stores the wear factor (w)
         this.pathExclusionRadius = null; // Stores the path exclusion radius
@@ -170,7 +171,7 @@ export default class Game {
 
             // --- Calculate initial alpha factor --- 
             // Moved HERE: Needs WaveManager (f), EnemyManager (s_min), PathStats (L), LevelConfig (w)
-            this.recalculateAlphaFactor(); 
+            this.recalculateBreakEvenAlphaFactor(); 
             // ------------------------------------
 
             // Instantiate PriceManager
@@ -196,10 +197,10 @@ export default class Game {
             // --------------------------
 
             // *** NOW Calculate Wear Parameters (Needs Alpha and Costs) ***
-            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this._alphaZeroFactor !== null) { // Add check for alpha
+            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this.getAlpha() !== null) {
                 await this.defenceManager.calculateWearParameters();
             } else {
-                console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this._alphaZeroFactor}`);
+                console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this.getAlpha()}`);
             }
             
             // Draw background (Path drawing is now part of render loop)
@@ -288,7 +289,7 @@ export default class Game {
             if (this.levelData) { // Ensure levelData exists before trying to update
                  this.levelData.wear = newData.wear; 
             }
-            this.recalculateAlphaFactor(); // Recalculate α₀
+            this.recalculateBreakEvenAlphaFactor(); // Recalculate α₀ - Renamed call
             // --- ADDED: Recalculate defender durability (k) ---
             if (this.defenceManager?.isLoaded && this.pathCoverageLoaded) {
                 console.log("Game: Wear parameter changed, recalculating defender wear parameters (k)...");
@@ -298,7 +299,7 @@ export default class Game {
                 console.warn("Game: Cannot recalculate defender wear parameters - DefenceManager or Path Coverage not ready.")
             }
             updated = true; 
-            // Note: PriceManager will pick up the new α₀ via getAlphaFactor()
+            // Note: PriceManager will pick up the new α₀ via getAlpha()
         }
         // --- END ADDED ---
 
@@ -628,26 +629,35 @@ export default class Game {
     }
 
     /**
-     * Gets the calculated alpha factor (alpha_0).
-     * Ensures the factor is calculated if needed.
-     * @returns {number | null} The alpha factor.
+     * Gets the effective alpha factor (a * alpha_0).
+     * Ensures the break-even factor is calculated if needed.
+     * @returns {number | null} The effective alpha factor.
      */
-    getAlphaZeroFactor() {
+    getAlpha() { // Renamed from getAlphaZeroFactor
+        const breakEvenFactor = this._breakEvenAlphaFactor;
+        const scalar = this.difficultyScalar;
+
         // Check the initialized flag set at the end of the initialize() method
-        if (!this.initialized && this._alphaZeroFactor === null) { 
-            // Game hasn't finished initializing, and factor is not yet calculated
-             console.warn("Game.getAlphaZeroFactor: Called before game is fully initialized. Returning null.");
+        if (!this.initialized && breakEvenFactor === null) { 
+             console.warn("Game.getAlpha: Called before game is fully initialized. Returning null.");
              return null;
-        } else if (this.initialized && this._alphaZeroFactor === null) {
-            // Game is initialized, but factor is somehow still null (e.g., calculation failed)
-            console.error("Game.getAlphaZeroFactor: Game initialized, but alpha factor is null. Attempting recalculation...");
-            this.recalculateAlphaFactor(); // Try to calculate it now
-            if (this._alphaZeroFactor === null) {
-                 console.error("Game.getAlphaZeroFactor: Recalculation failed. Returning null.");
+        } else if (this.initialized && breakEvenFactor === null) {
+            console.error("Game.getAlpha: Game initialized, but break-even alpha factor is null. Attempting recalculation...");
+            this.recalculateBreakEvenAlphaFactor(); // Try to calculate break-even factor now - Renamed call
+            // Re-check after attempting recalculation
+            if (this._breakEvenAlphaFactor === null) {
+                 console.error("Game.getAlpha: Recalculation failed. Returning null.");
+                 return null;
             }
+            // If recalculation succeeded, fall through to return the calculated value
+        } else if (breakEvenFactor === null) {
+             // Should not happen if logic above is correct, but as a safeguard
+             console.error("Game.getAlpha: Break-even alpha factor is unexpectedly null. Returning null.");
+             return null;
         }
-        // If initialized and _alphaZeroFactor is not null, or if not initialized but a value exists, return it
-        return this._alphaZeroFactor;
+
+        // Return the effective alpha: scalar * breakEvenFactor
+        return scalar * breakEvenFactor;
     }
 
     getCurrencyScale() {
@@ -714,14 +724,14 @@ export default class Game {
 
     // --- ADDED: Dynamic Difficulty Factor Calculation ---
     /**
-     * Calculates the alpha factor (difficulty/cost scaling) based on Eq. 31.
+     * Calculates the BREAK-EVEN alpha factor (alpha_0) based on Eq. 31.
      * Requires WaveManager, EnemyManager, path stats, and levelData.wear to be loaded.
      * α₀ = 1 / (((f - 1) / T₀) + w)
      * where T₀ = L / s_min
-     * @returns {number | null} The calculated factor, or null if calculation fails.
+     * @returns {number | null} The calculated break-even factor, or null if calculation fails.
      * @private
      */
-    _calculateAlphaFactor() {
+    _calculateBreakEvenAlphaFactor() { // Renamed from _calculateAlphaFactor
         // 1. Get necessary parameters
         const f = this.waveManager?.getDifficultyIncreaseFactor();
         const w = this.getWearParameter(); // Already has default
@@ -730,26 +740,26 @@ export default class Game {
 
         // 2. Validate parameters
         if (typeof f !== 'number' || f <= 1) {
-            console.error(`Game._calculateAlphaFactor: Invalid difficulty increase factor (f=${f}). Must be > 1.`);
+            console.error(`Game._calculateBreakEvenAlphaFactor: Invalid difficulty increase factor (f=${f}). Must be > 1.`);
             return null;
         }
         if (typeof w !== 'number' || w < 0) {
-            console.error(`Game._calculateAlphaFactor: Invalid wear parameter (w=${w}). Must be >= 0.`);
+            console.error(`Game._calculateBreakEvenAlphaFactor: Invalid wear parameter (w=${w}). Must be >= 0.`);
             // Allow w=0, so don't return null here unless strictly required
         }
         if (typeof L !== 'number' || L <= 0) {
-            console.error(`Game._calculateAlphaFactor: Invalid total path length (L=${L}). Must be > 0.`);
+            console.error(`Game._calculateBreakEvenAlphaFactor: Invalid total path length (L=${L}). Must be > 0.`);
             return null;
         }
         if (typeof s_min !== 'number' || s_min <= 0) {
-            console.error(`Game._calculateAlphaFactor: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
+            console.error(`Game._calculateBreakEvenAlphaFactor: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
             return null;
         }
 
         // 3. Calculate T0
         const T0 = L / s_min;
         if (T0 <= 0) {
-             console.error(`Game._calculateAlphaFactor: Calculated T0 (${T0}) is not positive.`);
+             console.error(`Game._calculateBreakEvenAlphaFactor: Calculated T0 (${T0}) is not positive.`);
              return null;
         }
 
@@ -759,7 +769,7 @@ export default class Game {
 
         // 5. Check denominator and calculate alpha_0
         if (Math.abs(denominator) < 1e-9) { // Avoid division by near-zero
-            console.warn(`Game._calculateAlphaFactor: Denominator near zero (${denominator}). Returning Infinity.`);
+            console.warn(`Game._calculateBreakEvenAlphaFactor: Denominator near zero (${denominator}). Returning Infinity.`);
             return Infinity; // Or null, depending on desired behavior
         }
         const alpha_0 = 1 / denominator;
@@ -769,31 +779,59 @@ export default class Game {
     }
 
     /**
-     * Public method to trigger the recalculation of the alpha factor.
-     * Should be called when underlying parameters (like min enemy speed) change.
+     * Public method to trigger the recalculation of the BREAK-EVEN alpha factor (alpha_0).
+     * Should be called when underlying parameters (f, w, T0) change.
      */
-    recalculateAlphaFactor() {
+    recalculateBreakEvenAlphaFactor() { // Renamed from recalculateAlphaFactor
         // Check if dependencies seem ready before calculating
         if (!this.waveManager || !this.enemyManager || this.totalPathLength === null || this.wearParameter === null) {
-             console.warn("Game.recalculateAlphaFactor: Dependencies not ready. Cannot calculate alpha factor yet.");
+             console.warn("Game.recalculateBreakEvenAlphaFactor: Dependencies not ready. Cannot calculate alpha factor yet.");
              return; // Cannot calculate if critical parts are missing
         }
         
-        const newAlphaFactor = this._calculateAlphaFactor();
-        if (newAlphaFactor !== null && this._alphaZeroFactor !== newAlphaFactor) {
-             if(this._alphaZeroFactor !== null) {
-                 console.log(`Game: Alpha factor recalculated: ${this._alphaZeroFactor} -> ${newAlphaFactor}`);
+        const newBreakEvenFactor = this._calculateBreakEvenAlphaFactor(); // Renamed call
+        if (newBreakEvenFactor !== null && this._breakEvenAlphaFactor !== newBreakEvenFactor) {
+             if(this._breakEvenAlphaFactor !== null) {
+                 console.log(`Game: Break-even alpha factor recalculated: ${this._breakEvenAlphaFactor} -> ${newBreakEvenFactor}`);
              }
-             this._alphaZeroFactor = newAlphaFactor;
-             // Trigger PriceManager recalculation
+             this._breakEvenAlphaFactor = newBreakEvenFactor;
+             // Trigger PriceManager recalculation because effective alpha changed
              if (this.priceManager) {
                 this.priceManager.recalculateAndStoreCosts(); // Call new method
              }
-        } else if (newAlphaFactor === null) {
-             console.error("Game.recalculateAlphaFactor: Failed to calculate new alpha factor.");
+             // --- ADDED: Trigger DefenceManager recalculation --- 
+             if (this.defenceManager) {
+                this.defenceManager.calculateWearParameters();
+             }
+             // --- END ADDED ---
+        } else if (newBreakEvenFactor === null) {
+             console.error("Game.recalculateBreakEvenAlphaFactor: Failed to calculate new break-even alpha factor.");
         }
     }
-    // --- END ADDED ---
+
+    /**
+     * Sets the difficulty scalar 'a'.
+     * @param {number} scalar - The new difficulty scalar (e.g., 1.0 for hard, <1 for easier).
+     */
+    setDifficultyScalar(scalar) {
+        if (typeof scalar !== 'number' || scalar <= 0) {
+            console.error(`Game.setDifficultyScalar: Invalid scalar value (${scalar}). Must be a positive number.`);
+            return;
+        }
+        if (scalar !== this.difficultyScalar) {
+            console.log(`Game: Updating difficulty scalar 'a' from ${this.difficultyScalar} to ${scalar}`);
+            this.difficultyScalar = scalar;
+            // Trigger PriceManager recalculation because effective alpha changed
+            if (this.priceManager) {
+               this.priceManager.recalculateAndStoreCosts(); 
+            }
+            // --- ADDED: Trigger DefenceManager recalculation --- 
+            if (this.defenceManager) {
+                this.defenceManager.calculateWearParameters();
+            }
+            // --- END ADDED ---
+        }
+    }
 }
 
 // --- Standalone Path Utility Function --- 

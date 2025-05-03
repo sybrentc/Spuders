@@ -330,7 +330,8 @@ export default class EnemyManager {
         // Check if the speed value actually changed (handle null cases)
         if (previousMinSpeed !== currentMinSpeed) {
              console.log(`EnemyManager: Minimum speed changed from ${previousMinSpeed} to ${currentMinSpeed}. Triggering alpha factor recalculation.`);
-             this.game.recalculateAlphaFactor(); // Call game's method
+             // Call the renamed recalculation method in game
+             this.game.recalculateBreakEvenAlphaFactor(); 
         }
         // --- END ADDED ---
 

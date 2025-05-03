@@ -360,7 +360,6 @@ export default class DefenceManager extends EventTarget {
         const w = this.game.getWearParameter(); // Assumes game instance has this method
         const L = this.game.getTotalPathLength(); // Assumes game instance has this method
         const enemyDefinitions = this.game.enemyManager?.getEnemyDefinitions(); // Use optional chaining
-        const alpha_zero_factor = this.game.getAlphaZeroFactor(); // Get alpha_0
         let costs;
         try {
              costs = await this.game.priceManager.calculateAllCosts(); // Get unrounded costs
@@ -371,8 +370,11 @@ export default class DefenceManager extends EventTarget {
 
         // REMOVED: console.log(`DEBUG: calculateWearParameters - Global params: w=${w}, L=${L}, enemyDefs=${!!enemyDefinitions}`);
 
-        if (w === undefined || L === null || !enemyDefinitions || alpha_zero_factor === null || alpha_zero_factor <= 0 || !costs) {
-            console.error(`DefenceManager: Missing required parameters for wear calculation (w=${w}, L=${L}, enemies=${!!enemyDefinitions}, alpha=${alpha_zero_factor}, costs=${!!costs})`);
+        // Get effective alpha
+        const effective_alpha = this.game.getAlpha();
+
+        if (w === undefined || L === null || !enemyDefinitions || effective_alpha === null || effective_alpha <= 0 || !costs) {
+            console.error(`DefenceManager: Missing required parameters for wear calculation (w=${w}, L=${L}, enemies=${!!enemyDefinitions}, alpha=${effective_alpha}, costs=${!!costs})`);
             return;
         }
 
@@ -426,7 +428,7 @@ export default class DefenceManager extends EventTarget {
                 // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Skipping: Non-damaging/firing.`);
                 def.stats.wearEnabled = false;
                 // REMOVED: def.stats.totalHitsK = 1; // Dummy value
-                def.stats.maxHp = Ci / alpha_zero_factor; // Still assign maxHp based on cost/alpha
+                def.stats.maxHp = Ci / effective_alpha; // Still assign maxHp based on cost/alpha
                 def.stats.wearDecrement = 0;
                 continue;
             }
@@ -443,7 +445,7 @@ export default class DefenceManager extends EventTarget {
                 // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Skipping: P_in_range is 0.`);
                 def.stats.wearEnabled = false;
                 // REMOVED: def.stats.totalHitsK = 1;
-                def.stats.maxHp = Ci / alpha_zero_factor;
+                def.stats.maxHp = Ci / effective_alpha;
                 def.stats.wearDecrement = 0;
                 continue;
             }
@@ -472,9 +474,10 @@ export default class DefenceManager extends EventTarget {
             const wearIsEnabled = (w > 0 && f_bar > 0);
             def.stats.wearEnabled = wearIsEnabled;
             
-            const Ri = Ci / alpha_zero_factor;
+            const Ri = Ci / effective_alpha;
             def.stats.maxHp = Math.max(1, Ri); // Ensure maxHp is at least 1
             
+            let k_theoretical = Infinity;
             if (wearIsEnabled) {
                 const ki = (r * f_bar) / w; // Total hits k
                 if (ki > 1e-9) { // Avoid division by near-zero k

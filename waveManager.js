@@ -124,7 +124,8 @@ export default class WaveManager extends EventTarget {
 
         // --- ADDED: Trigger recalculation if f changed ---
         if (fChanged && this.game) {
-            this.game.recalculateAlphaFactor();
+            // Call the renamed recalculation method in game
+            this.game.recalculateBreakEvenAlphaFactor(); 
         }
         // --- END ADDED ---
 
