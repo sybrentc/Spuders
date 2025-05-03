@@ -16,7 +16,7 @@ export default class EnemyManager {
         if (!base) {
              throw new Error("EnemyManager requires a Base instance.");
         }
-        if (!game || typeof game.getCurrencyScale !== 'function') {
+        if (!game || typeof game.getBetaFactor !== 'function') {
              throw new Error("EnemyManager requires a valid Game instance.");
         }
         this.enemyDataPath = enemyDataPath; 
@@ -60,7 +60,6 @@ export default class EnemyManager {
             // --- Load the Shared Hit Sprite ---
             try {
                 this.sharedHitSprite = await this.loadSprite('assets/images/spider-hit.png');
-                console.log("EnemyManager: Shared hit sprite loaded.");
             } catch (hitSpriteError) {
                  console.error(`Failed to load shared hit sprite:`, hitSpriteError);
                  // Decide how to handle this - game might break visually without it.
@@ -104,9 +103,9 @@ export default class EnemyManager {
      */
     getCalculatedBounty(enemyTypeId) {
         const enemyDef = this.enemyTypes[enemyTypeId];
-        const alpha = this.game.getCurrencyScale();
+        const beta = this.game.getBetaFactor();
 
-        if (!enemyDef || !enemyDef.stats || alpha === null || alpha < 0) {
+        if (!enemyDef || !enemyDef.stats || beta === null || beta < 0) {
             return 0; // No definition or factor
         }
 
@@ -117,7 +116,7 @@ export default class EnemyManager {
             return 0; // No bounty for invalid stats
         }
 
-        const rawBounty = alpha * hp * speed;
+        const rawBounty = beta * hp * speed;
         const finalBounty = Math.max(0, rawBounty); // Ensure non-negative
         return Math.round(finalBounty); // Round to nearest integer
     }

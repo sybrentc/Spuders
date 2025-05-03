@@ -98,7 +98,7 @@ async function saveAnalysisParameters() {
 
         const parameters = {
             B0: levelConfig.overrideStartingMoney ?? (baseStats.money || 0),
-            beta: levelConfig.currencyScale,
+            betaFactor: levelConfig.currencyScale,
             W1: waveConfig.startingDifficulty,
             f: waveConfig.difficultyIncreaseFactor,
             alpha: levelConfig.difficulty, // Save the original alpha from config

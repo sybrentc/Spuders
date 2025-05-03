@@ -96,7 +96,7 @@ async function saveAnalysisParameters() {
 
         const parameters = {
             B0: baseStats.money || 0, // Use the base starting money
-            beta: levelConfig.currencyScale,
+            betaFactor: levelConfig.currencyScale,
             W1: waveConfig.startingDifficulty,
             f: waveConfig.difficultyIncreaseFactor,
             alpha: levelConfig.difficulty,

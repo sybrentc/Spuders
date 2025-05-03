@@ -45,7 +45,12 @@ export default class Game {
         this.pathCoverageLookup = []; // <-- ADDED STORAGE
         this.pathCoverageLoaded = false; // <-- ADDED FLAG
         // --- ADDED: Dynamic difficulty factor ---
-        this.calculatedAlphaFactor = null; // To store the result of Eq. 31
+        this._alphaZeroFactor = null; // Stores the calculated alpha factor (α₀)
+        this.betaFactor = null; // Stores the currency scale factor (β)
+        this.wearParameter = null; // Stores the wear factor (w)
+        this.pathExclusionRadius = null; // Stores the path exclusion radius
+        this.pathStats = {}; // Holds path stats like total length
+        this.levelConfig = {}; // Holds level-specific config like paths, factors
         // --- END ADDED ---
     }
     
@@ -131,11 +136,6 @@ export default class Game {
             if (!this.pathStatsPath) {
                 throw new Error("Game Initialize: pathStatsPath was not loaded correctly from level data.");
             }
-            // --> ADDED: Get currencyScale from levelData
-            const currencyScale = this.levelData?.currencyScale;
-            if (typeof currencyScale !== 'number' || currencyScale < 0) {
-                throw new Error(`Game Initialize: Invalid currencyScale (${currencyScale}) found in level data.`);
-            }
             this.enemyManager = new EnemyManager(
                 enemyDataPath,
                 this.base,
@@ -168,11 +168,12 @@ export default class Game {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
             }
 
-            // --- ADDED: Calculate initial alpha factor (Moved earlier) ---
-            this.recalculateAlphaFactor(); // Call after all dependencies are ready
-            // --- END ADDED ---
+            // --- Calculate initial alpha factor --- 
+            // Moved HERE: Needs WaveManager (f), EnemyManager (s_min), PathStats (L), LevelConfig (w)
+            this.recalculateAlphaFactor(); 
+            // ------------------------------------
 
-            // Instantiate PriceManager (Moved earlier)
+            // Instantiate PriceManager
             if (this.defenceManager?.isLoaded && this.enemyManager?.isLoaded && this.base?.isLoaded) {
                 //console.log("DEBUG: Game Initialize - About to create PriceManager..."); // <-- ADD LOG
                 this.priceManager = new PriceManager(
@@ -184,15 +185,21 @@ export default class Game {
                 await this.priceManager.load(); // <-- Ensure price manager is loaded (now just marks ready)
                 //console.log("DEBUG: Game Initialize - PriceManager created:", this.priceManager); // <-- ADD LOG
             } else {
-                console.error("Game Initialize: Cannot create PriceManager, required managers not loaded."); // <-- Keep this error
+                console.error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
                 throw new Error("Game Initialize: Cannot create PriceManager, required managers not loaded.");
             }
 
-            // *** NOW Calculate Wear Parameters ***
-            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager) { // Add check for priceManager
-                await this.defenceManager.calculateWearParameters(); // <-- CALL IT HERE
+            // *** Initial Cost Calculation ***
+            if (this.priceManager) {
+                await this.priceManager.recalculateAndStoreCosts();
+            }
+            // --------------------------
+
+            // *** NOW Calculate Wear Parameters (Needs Alpha and Costs) ***
+            if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this._alphaZeroFactor !== null) { // Add check for alpha
+                await this.defenceManager.calculateWearParameters();
             } else {
-                console.error("Cannot calculate wear parameters - managers not ready.");
+                console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this._alphaZeroFactor}`);
             }
             
             // Draw background (Path drawing is now part of render loop)
@@ -321,16 +328,15 @@ export default class Game {
                 height: this.levelData.canvas.height
             };
             
-            // --> Store initial difficulty and currencyScale from levelData
-            // REMOVED: Static difficulty loading - Now calculated dynamically
-            // if (typeof this.levelData.difficulty === 'number' && this.levelData.difficulty > 0) { ... }
-            
-            if (typeof this.levelData.currencyScale === 'number' && this.levelData.currencyScale >= 0) {
-                 this.currencyScale = this.levelData.currencyScale;
-                 ////console.log(`Game: Initial currencyScale set to ${this.currencyScale}`);
+            // Check for betaFactor from levelData
+            if (typeof this.levelData.betaFactor === 'number' && this.levelData.betaFactor >= 0) {
+                 this.betaFactor = this.levelData.betaFactor; // Use betaFactor
+                 //console.log(`Game: Initial betaFactor set to ${this.betaFactor}`);
             } else {
-                 console.warn(`Game: Using default currencyScale ${this.currencyScale}. Invalid or missing value in level data.`);
-                 // No throw, use default
+                 // Use the current value if already set (e.g., default), otherwise use 0.01
+                 const defaultValue = this.betaFactor !== null ? this.betaFactor : 0.01;
+                 console.warn(`Game: Using default betaFactor ${defaultValue}. Invalid or missing value in level data.`);
+                 this.betaFactor = defaultValue; 
             }
             // --- End storing initial values ---
             
@@ -440,6 +446,13 @@ export default class Game {
                 this.defencesPath = null;
             }
             // <-- END ADDED block
+            
+            // Now we have the paths, we can store them or use them immediately
+            this.wearParameter = this.levelData.wear ?? 0; // Load wear
+            this.pathExclusionRadius = this.levelData.pathExclusionRadius ?? 0; // Load exclusion radius
+
+            // Store paths for other components to use or for later loading steps
+            this.levelConfig = this.levelData;
             
             return this.levelData;
         } catch (error) {
@@ -603,11 +616,38 @@ export default class Game {
 
     // --- Getters for Live Parameters ---
     /**
-     * Returns the dynamically calculated alpha factor (α₀).
-     * @returns {number | null} The factor, or null if not calculated.
+     * Gets the current currency scale factor (beta).
+     * @returns {number}
      */
-    getAlphaFactor() {
-         return this.calculatedAlphaFactor; // Return the calculated value
+    getBetaFactor() {
+        // Add a check for loading? Or assume it's always set post-load?
+        if (!this.initialized && this.betaFactor === null) {
+            console.warn("Game.getBetaFactor: Called before level config loaded, returning default/null.");
+        }
+        return this.betaFactor;
+    }
+
+    /**
+     * Gets the calculated alpha factor (alpha_0).
+     * Ensures the factor is calculated if needed.
+     * @returns {number | null} The alpha factor.
+     */
+    getAlphaZeroFactor() {
+        // Check the initialized flag set at the end of the initialize() method
+        if (!this.initialized && this._alphaZeroFactor === null) { 
+            // Game hasn't finished initializing, and factor is not yet calculated
+             console.warn("Game.getAlphaZeroFactor: Called before game is fully initialized. Returning null.");
+             return null;
+        } else if (this.initialized && this._alphaZeroFactor === null) {
+            // Game is initialized, but factor is somehow still null (e.g., calculation failed)
+            console.error("Game.getAlphaZeroFactor: Game initialized, but alpha factor is null. Attempting recalculation...");
+            this.recalculateAlphaFactor(); // Try to calculate it now
+            if (this._alphaZeroFactor === null) {
+                 console.error("Game.getAlphaZeroFactor: Recalculation failed. Returning null.");
+            }
+        }
+        // If initialized and _alphaZeroFactor is not null, or if not initialized but a value exists, return it
+        return this._alphaZeroFactor;
     }
 
     getCurrencyScale() {
@@ -718,37 +758,39 @@ export default class Game {
         const denominator = term1 + w;
 
         // 5. Check denominator and calculate alpha_0
-        if (denominator <= 1e-9) { // Check for zero or very small denominator
-            console.error(`Game._calculateAlphaFactor: Denominator (${denominator}) too small or zero. Cannot calculate factor. Check f, T0, w.`);
-            return null;
+        if (Math.abs(denominator) < 1e-9) { // Avoid division by near-zero
+            console.warn(`Game._calculateAlphaFactor: Denominator near zero (${denominator}). Returning Infinity.`);
+            return Infinity; // Or null, depending on desired behavior
         }
-
         const alpha_0 = 1 / denominator;
 
-        // Add a check for unreasonably large/small values?
-        if (!isFinite(alpha_0) || alpha_0 < 0) {
-             console.error(`Game._calculateAlphaFactor: Calculation resulted in invalid value (${alpha_0}).`);
-             return null;
-        }
-
+        //console.log(`Game: Calculated alpha_0: f=${f}, w=${w}, L=${L}, s_min=${s_min}, T0=${T0} => alpha_0=${alpha_0}`);
         return alpha_0;
     }
 
     /**
-     * Recalculates the dynamic alpha factor and stores it.
-     * Should be called during initialization and when relevant parameters change.
+     * Public method to trigger the recalculation of the alpha factor.
+     * Should be called when underlying parameters (like min enemy speed) change.
      */
     recalculateAlphaFactor() {
+        // Check if dependencies seem ready before calculating
+        if (!this.waveManager || !this.enemyManager || this.totalPathLength === null || this.wearParameter === null) {
+             console.warn("Game.recalculateAlphaFactor: Dependencies not ready. Cannot calculate alpha factor yet.");
+             return; // Cannot calculate if critical parts are missing
+        }
+        
         const newAlphaFactor = this._calculateAlphaFactor();
-        if (newAlphaFactor !== null) {
-            if (this.calculatedAlphaFactor !== newAlphaFactor) {
-                console.log(`Game: Recalculated alpha factor (α₀): ${newAlphaFactor.toFixed(4)} (previously: ${this.calculatedAlphaFactor?.toFixed(4)})`);
-                this.calculatedAlphaFactor = newAlphaFactor;
-                // TODO: Potentially notify PriceManager or other dependents here
-                // For now, PriceManager will pick it up via getAlphaFactor()
-            }
-        } else {
-            console.error("Game: Failed to recalculate alpha factor. Previous value retained.");
+        if (newAlphaFactor !== null && this._alphaZeroFactor !== newAlphaFactor) {
+             if(this._alphaZeroFactor !== null) {
+                 console.log(`Game: Alpha factor recalculated: ${this._alphaZeroFactor} -> ${newAlphaFactor}`);
+             }
+             this._alphaZeroFactor = newAlphaFactor;
+             // Trigger PriceManager recalculation
+             if (this.priceManager) {
+                this.priceManager.recalculateAndStoreCosts(); // Call new method
+             }
+        } else if (newAlphaFactor === null) {
+             console.error("Game.recalculateAlphaFactor: Failed to calculate new alpha factor.");
         }
     }
     // --- END ADDED ---

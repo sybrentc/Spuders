@@ -39,7 +39,7 @@ async function loadCsvLookup(filePath) {
 }
 // --- End Helper ---
 
-class PriceManager {
+class PriceManager extends EventTarget {
     /**
      * @param {DefenceManager} defenceManager - Instance of DefenceManager
      * @param {EnemyManager} enemyManager - Instance of EnemyManager
@@ -51,14 +51,16 @@ class PriceManager {
             throw new Error("PriceManager requires defenceManager, enemyManager, and base.");
         }
         // Added check for game instance - UPDATED to check for getAlphaFactor
-        if (!game || typeof game.getAlphaFactor !== 'function') { // Check if it looks like a Game instance
+        if (!game || typeof game.getAlphaZeroFactor !== 'function') { // Check if it looks like a Game instance
             throw new Error("PriceManager requires a valid Game instance.");
         }
+        super();
         this.defenceManager = defenceManager;
         this.enemyManager = enemyManager;
         this.base = base; // Keep base for now, might be needed elsewhere?
         this.game = game; // Store the game instance
         this.isLoaded = false;
+        this.cachedCosts = {}; // Add property to store costs
     }
 
     /**
@@ -110,13 +112,13 @@ class PriceManager {
 
         const defenceDefinitions = this.defenceManager.getDefinitions();
         const enemyDefinitions = this.enemyManager.getEnemyDefinitions();
-        // Use game.getAlphaFactor() to get the live calculated value (α₀)
-        const alpha_factor = this.game.getAlphaFactor(); // RENAMED getter and variable
+        // Use game.getAlphaZeroFactor() to get the live calculated value (α₀)
+        const alpha_zero_factor = this.game.getAlphaZeroFactor(); // RENAMED getter and variable
         const costs = {};
 
         // --- Handle case where alpha factor couldn't be calculated ---
-        if (alpha_factor === null || alpha_factor <= 0) {
-            console.error(`PriceManager: Invalid alpha_factor (${alpha_factor}) from Game. Setting all costs to Infinity.`);
+        if (alpha_zero_factor === null || alpha_zero_factor <= 0) {
+            console.error(`PriceManager: Invalid alpha_zero_factor (${alpha_zero_factor}) from Game. Setting all costs to Infinity.`);
             for (const defenceId in defenceDefinitions) {
                 costs[defenceId] = Infinity;
             }
@@ -220,7 +222,7 @@ class PriceManager {
             // --- Calculate Final Cost --- 
             if (validEnemyCount > 0) {
                 const avgEarningRate = sumOfEnemyEarningRates / validEnemyCount;
-                costs[defenceId] = alpha_factor * avgEarningRate; // Use alpha_factor (α₀)
+                costs[defenceId] = alpha_zero_factor * avgEarningRate; // Use alpha_zero_factor (α₀)
             } else {
                 console.warn(`PriceManager: No valid enemies found to calculate cost for ${defenceId}. Setting cost to Infinity.`);
                 costs[defenceId] = Infinity; // No valid enemies to base cost upon
@@ -245,6 +247,27 @@ class PriceManager {
         }
 
         return costs;
+    }
+
+    /**
+     * Recalculates all defence costs, stores them internally,
+     * and dispatches an event.
+     */
+    async recalculateAndStoreCosts() {
+        // Use the existing calculation logic
+        const costs = await this.calculateAllCosts();
+        this.cachedCosts = costs;
+        // Dispatch an event to notify listeners
+        this.dispatchEvent(new CustomEvent('costsUpdated'));
+        // console.log("PriceManager: Costs recalculated and event dispatched.", this.cachedCosts); // Optional debug log
+    }
+
+    /**
+     * Gets the latest cached costs.
+     * @returns {Object<string, number>} The cached costs.
+     */
+    getStoredCosts() {
+        return this.cachedCosts;
     }
 }
 

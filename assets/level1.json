@@ -7,7 +7,7 @@
     "baseData": "assets/base.json",
     "waveDataPath": "assets/waves/waves.json",
     "defencesPath": "assets/defences.json",
-    "currencyScale": 0.0041,
+    "betaFactor": 0.0041,
     "wear": 1e-3,
     "pathExclusionRadius": 35.0,
     "canvas": {

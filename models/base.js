@@ -3,7 +3,7 @@ import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility f
 /**
  * Represents the player's main base.
  */
-export default class Base {
+export default class Base extends EventTarget {
     /**
      * Static factory method to create and initialize a Base instance from a config file path.
      * @param {string} path - The path to the base configuration JSON file.
@@ -40,6 +40,7 @@ export default class Base {
      * @param {object} baseConfig - Configuration object (expected to be valid).
      */
     constructor(baseConfig) {
+        super(); // Call EventTarget constructor
         // Validate required configuration fields
         if (!baseConfig) throw new Error("Base constructor requires a configuration object.");
         if (!baseConfig.stats?.hp) throw new Error("Base config requires 'stats.hp'.");
@@ -229,11 +230,11 @@ export default class Base {
     spendFunds(amount) {
         if (this.canAfford(amount)) {
             this.currentFunds -= amount;
-            //console.log(`Base spent ${amount}. Funds remaining: ${this.currentFunds}`);
-            // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
+            // Dispatch event AFTER funds are updated
+            this.dispatchEvent(new CustomEvent('fundsUpdated'));
+            // console.log(`Base: Spent ${amount} funds. Current: ${this.currentFunds}`);
             return true;
         }
-        //console.log(`Base cannot afford to spend ${amount}. Funds available: ${this.currentFunds}`);
         return false;
     }
 
@@ -242,11 +243,10 @@ export default class Base {
      * @param {number} amount - The amount to add.
      */
     addFunds(amount) {
-        if (amount > 0) {
-            this.currentFunds += amount;
-            //console.log(`Base earned ${amount}. Funds remaining: ${this.currentFunds}`);
-            // TODO: Consider dispatching an event here if needed elsewhere (e.g., for UI)
-        }
+        this.currentFunds += amount;
+        // Dispatch event AFTER funds are updated
+        this.dispatchEvent(new CustomEvent('fundsUpdated'));
+        // console.log(`Base: Added ${amount} funds. Current: ${this.currentFunds}`);
     }
 
     /**

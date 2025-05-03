@@ -29,12 +29,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     async function updateDefenceMenu(definitions) {
         // console.log('DEBUG: Entering updateDefenceMenu'); // Optional log
         // --- Detailed Guard Clause Check ---
-        
+        if (!game.priceManager) {
+            console.error("updateDefenceMenu: PriceManager not available!");
+            defenceMenu.innerHTML = '<p style="color:red;">Error: Prices unavailable.</p>';
+            return;
+        }
 
         defenceMenu.innerHTML = ''; // Clear existing content
-        const calculatedCosts = await game.priceManager.calculateAllCosts(); // <-- ADD await
+        // Use cached costs instead of recalculating
+        const calculatedCosts = game.priceManager.getStoredCosts();
 
-        // --- Sort defences by calculated cost --- 
+        // --- Sort defences by cached cost --- 
         const sortedDefences = Object.entries(definitions)
             .filter(([id, def]) => calculatedCosts[id] !== undefined && calculatedCosts[id] !== Infinity) // Filter out invalid costs before sorting
             .sort(([idA], [idB]) => calculatedCosts[idA] - calculatedCosts[idB]);
@@ -140,26 +145,37 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Initial population and setup listener for updates
-    if (game.defenceManager && game.defenceManager.isLoaded) {
-        // REMOVED: console.log("DEBUG: Controller - Before initial updateDefenceMenu call. game.priceManager is:", game.priceManager);
-        updateDefenceMenu(game.defenceManager.getDefinitions());
+    if (game.defenceManager && game.defenceManager.isLoaded && game.priceManager) { // Check priceManager here too
+        updateDefenceMenu(game.defenceManager.getDefinitions()); // Update uses cached costs now
+        // Listen for definition updates from DefenceManager (keeps current logic)
         game.defenceManager.addEventListener('definitionsUpdated', async () => {
-            // Preserve selection if possible when menu updates
             const currentSelectedId = selectedDefenceType;
-            // --- Update: Added await here ---
             await updateDefenceMenu(game.defenceManager.getDefinitions());
-            // --- End Update ---
             if (currentSelectedId) {
                 const selectedButton = document.querySelector(`.defence-button[data-defence-id="${currentSelectedId}"]`);
                 if (selectedButton) selectedButton.classList.add('selected');
             }
         });
+        // ADD listener for cost updates from PriceManager
+        game.priceManager.addEventListener('costsUpdated', () => {
+            // console.log("Controller: Received costsUpdated event. Running updateUI."); // Optional debug
+            updateUI(); // Trigger UI update when costs change
+        });
+        // ADD listener for funds updates from Base
+        if (game.base) { // Ensure base exists before adding listener
+            game.base.addEventListener('fundsUpdated', () => {
+                // console.log("Controller: Received fundsUpdated event. Running updateUI."); // Optional debug
+                updateUI(); // Trigger UI update when funds change
+            });
+        } else {
+             console.error("Controller: Cannot add fundsUpdated listener, game.base is not available.");
+        }
     } else {
-        console.error('Could not initially populate defence menu or set up listener.');
+        console.error('Could not initially populate defence menu or set up listener (DefenceManager or PriceManager missing/not loaded).');
     }
 
     // --- UI Update Function (Handles Text and Button States) ---
-    async function updateUI() { // <-- ADD async
+    /*async*/ function updateUI() { // <-- REMOVE async
         // REMOVED: console.log('DEBUG: Entering updateUI function');
         
         // --- Detailed Guard Clause Check --- 
@@ -193,7 +209,8 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         // --- Update Button Affordability AND Price Text ---
         const currentFunds = game.base.currentFunds;
-        const calculatedCosts = await game.priceManager.calculateAllCosts(); // <-- ADD await
+        // Use cached costs instead of recalculating
+        const calculatedCosts = game.priceManager.getStoredCosts();
         const buttons = defenceMenu.querySelectorAll('.defence-button');
 
         buttons.forEach(button => {
@@ -225,13 +242,6 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
             // --------------------------
         });
-    }
-
-    // --- Register Main UI Update with Game Loop ---
-    if (game.addUpdateListener) { 
-        game.addUpdateListener(updateUI); // Register the combined function
-    } else {
-        console.error("Controller: Game object missing addUpdateListener method. UI will not update dynamically.");
     }
 
     // Initial UI update after menu population

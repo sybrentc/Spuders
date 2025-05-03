@@ -1192,7 +1192,7 @@
         const enemiesData = await fetchJson_calc(enemyDataPath_calc);
 
         // --- Extract required parameters ---
-        const beta = levelData.currencyScale;
+        const beta = levelData.betaFactor; // Use betaFactor key
         const W1 = waveData.startingDifficulty;
         const f = waveData.difficultyIncreaseFactor;
         const L = pathStats.totalPathLength;
@@ -1228,7 +1228,7 @@
 
         // --- Log Results ---
         console.log(`--- Theoretical Break-even Parameters (Current Game Files) ---`);
-        console.log(`  Parameters Used: f=${f.toFixed(3)}, W1=${W1}, beta=${beta}`);
+        console.log(`  Parameters Used: f=${f.toFixed(3)}, W1=${W1}, beta=${beta}`); // Log as beta
         console.log(`  Calculated T0 (L/s_min): ${T0.toFixed(2)} s`);
         console.log(`  Calculated T1: ${T1.toFixed(2)} s`);
         console.log(`  Theoretical alpha_0 (Eq. 19): ${alpha_0.toFixed(2)}`);
