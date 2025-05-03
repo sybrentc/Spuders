@@ -2,7 +2,7 @@ import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility f
 
 export default class Enemy {
     constructor({
-        id, name, extendedPath, sprite, 
+        id, name, extendedPath, sprite, sharedHitSprite,
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
         scale, anchorX, anchorY,
         hp, speed, attackRate, attackStrength, attackRange,
@@ -38,6 +38,7 @@ export default class Enemy {
         
         // Sprite and animation
         this.sprite = sprite;
+        this.sharedHitSprite = sharedHitSprite;
         this.frameWidth = frameWidth;
         this.frameHeight = frameHeight;
         this.framesPerRow = framesPerRow;
@@ -197,46 +198,24 @@ export default class Enemy {
         const drawHeight = this.frameHeight * this.scale;
         const drawX = this.x - drawWidth * this.anchorX; // Use anchorX
         const drawY = this.y - drawHeight * this.anchorY; // Use anchorY
+
+        // --- Select the correct sprite based on flashing state --- 
+        let sourceImage = this.sprite; // Default to normal sprite
+        if (this.isFlashing && this.sharedHitSprite) {
+            sourceImage = this.sharedHitSprite;
+        } else if (this.isFlashing && !this.sharedHitSprite) {
+            // Optional: Fallback if hit sprite failed to load - maybe log warning?
+            // console.warn(`Enemy ${this.id}: Flashing but shared hit sprite is missing.`);
+            // Keep sourceImage = this.sprite
+        }
+        // --- End Sprite Selection --- 
+
         ctx.save();
         
-        // Apply flash effect if active using temporary canvas
-        if (this.isFlashing) {
-            // --- Use Temporary Canvas for Flash Effect --- 
-            // 1. Create offscreen canvas
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = drawWidth; // Use calculated scaled dimensions
-            tempCanvas.height = drawHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            if (!tempCtx) {
-                console.error("Failed to get temporary canvas context for flash effect.");
-                ctx.restore();
-                return; // Cannot perform flash effect
-            }
-
-            // 2. Draw current sprite frame onto temp canvas
-            tempCtx.drawImage(
-                this.sprite,
-                frameX, frameY, this.frameWidth, this.frameHeight,
-                0, 0, // Draw at top-left corner of temp canvas
-                drawWidth, drawHeight
-            );
-
-            // 3. Apply flash effect ONLY on temp canvas using 'source-in'
-            tempCtx.globalCompositeOperation = 'source-in'; 
-            tempCtx.fillStyle = 'white'; // Pure white
-            tempCtx.fillRect(0, 0, drawWidth, drawHeight);
-            // No need to reset composite op on tempCtx
-
-            // 4. Draw the result (whitened sprite) onto the main canvas
-            ctx.drawImage(
-                tempCanvas, 
-                drawX, drawY // Draw at the calculated final position
-            );
-            // --- End Temporary Canvas Logic --- 
-        } else {
-            // Draw the normal enemy sprite frame if not flashing
-            ctx.drawImage(
-                this.sprite,         // The spritesheet image
+        // --- Draw the selected sprite --- 
+        if (sourceImage && sourceImage.complete) { // Check if image is loaded
+             ctx.drawImage(
+                sourceImage,         // Use the selected image
                 frameX,              // Source X from spritesheet
                 frameY,              // Source Y from spritesheet
                 this.frameWidth,     // Source Width
@@ -246,7 +225,10 @@ export default class Enemy {
                 drawWidth,           // Destination Width
                 drawHeight           // Destination Height
             );
+        } else {
+            // Optional: Add fallback rendering if selected image isn't ready
         }
+        // --- End Drawing --- 
         
         ctx.restore(); // Restore context state (e.g., transformations, composite operations if any)
         

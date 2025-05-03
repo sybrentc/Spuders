@@ -27,6 +27,7 @@ export default class EnemyManager {
         this.enemySprites = {};     
         this.activeEnemies = [];    
         this.isLoaded = false;      
+        this.sharedHitSprite = null; // Add property to store the shared hit sprite
         
         // --- Data for Average Death Distance Calculation ---
         this.currentWaveDeathDistances = []; 
@@ -56,6 +57,18 @@ export default class EnemyManager {
                      // For now, it will prevent the enemy type from being fully loaded.
                 }
             });
+            // --- Load the Shared Hit Sprite ---
+            try {
+                this.sharedHitSprite = await this.loadSprite('assets/images/spider-hit.png');
+                console.log("EnemyManager: Shared hit sprite loaded.");
+            } catch (hitSpriteError) {
+                 console.error(`Failed to load shared hit sprite:`, hitSpriteError);
+                 // Decide how to handle this - game might break visually without it.
+                 // Maybe throw error or set a flag? For now, log and continue.
+                 this.sharedHitSprite = null;
+            }
+            // --- End Load Shared Hit Sprite ---
+
             await Promise.all(spritePromises); // Wait for all sprites to load (or fail)
 
             // --- Check if Game has loaded path data (optional sanity check) --- 
@@ -155,6 +168,7 @@ export default class EnemyManager {
             name: enemyDef.name,
             extendedPath: extendedPathData, // Use path from game
             sprite: sprite,
+            sharedHitSprite: this.sharedHitSprite, // <-- Pass the shared hit sprite
             base: this.base, // Pass base for bounty calculation
             frameWidth: enemyDef.sprite.frameWidth,
             frameHeight: enemyDef.sprite.frameHeight,
