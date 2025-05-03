@@ -219,7 +219,7 @@
 \end{cases} 
 \tag{33} \]
 
-<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition.</p>
+<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition. Specifically, it is the dynamically calculated destruction rate which prevents the runaway win condition. It does this independently of the influence of wear, as can be seen by the independence of eqt. 32 on \(w.\) Moreover, wear alone is insufficient to prevent a runawawy win condition since, although it increases defender upkeep, the break-even difficulty factor \(\alpha_0\) is adjusted to account for this added expense through eqt. 31.</p>
 
 <div class="plot-container">
   <div id="depreciationComparisonPlot"></div>
@@ -229,16 +229,29 @@
 <h2>Defender wear</h2>
 
 <p>Eqt. 28 shows that the rate of change in \(R_n\) is a linear superposition of the contributions due to bounty, wear, and destruction. This allows us to isolate the differential contribution due to wear as</p>
+
 \[ \frac{dR_n}{dt}\bigg|_\text{wear} = - wR_n. \tag{34} \]
+
 <p>If we let this equation describe a steady-state population consisting entirely of a single type of defender, wherein we have a random distribution of accumulated wear across the population (i.e., different defenders have different amounts of remaining life), then renewal theory enables us to express the average wear rate \(w\) as the inverse of the expected lifetime \(\mathbb{E}[\tau]\) of this defender type</p>
+
 \[ w = \frac{1}{\mathbb{E}[\tau]}. \tag{35} \]
+
 <p>The expected lifetime of a defender can be expressed in terms of the total number of attacks \(k\) the defender has in its life before it is entirely worn out, its rate of attack \(r\) in hits per second when it is engaging an enemy, and its duty cycle \(\bar{f}\), which is the average fraction of gametime the defender is firing. This yields</p>
+
 \[ \mathbb{E}[\tau] = \frac{k}{r \bar{f}}. \tag{36} \]
+
 <p>Equating eqts. 35 and 36, we obtain an expression for \(k\), which we can use to provide each defender of the given type with a durability bar (health bar) which depletes by \(1/k\) with every attack it carries out</p>
 \[ k = \frac{r \bar{f}}{w}. \tag{37} \]
 
 <p>Consider a single defender-enemy interaction. We first take as our reference the time the enemy is within range \(T_r\) and calculate what fraction of that time the defender spends firing at the enemy. This can be 1 if the enemy leaves the range before being killed, or can be \(T_k/T_r\lt1\) if the enemy is killed before leaving the range (cf. eqts. 11 and 13). To obtain the duty cycle in terms of game time, we then multiply that fraction by the fraction of total time on path which the enemy spends in range, i.e., \(P(\text{in range})\). We then take the expectation value over all \(N\) enemy types to obtain</p>
+
 \[ \bar{f} = P(\text{in range}) \frac{1}{N} \sum_{j=1}^{N} \min(1, \frac{T_{k,j}}{T_{r,j}}). \tag{38} \]
+
+<p>The addition of wear forces a player to keep investing both to grow their defenses but also to counteract the continuous defender turnover due to wear. If the player fails to keep up, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play, where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, means the player can only win with an optimally managed defense. Hence, a single slip can be fatal.</p>
+
+<p>To weaken the impact of the above problem, we may either reduce the rate of wear \(w\) and/or we may set the game difficulty slightly below break-even using a difficulty scalar \(a\leq1\)to give the player a choice of game difficulty, with \(a=1\) being the most difficult. This yields</p>
+
+\[ \alpha = a\alpha_0. \tag{39} \]
 
 <h2>Defender destruction</h2>
 
