@@ -10,6 +10,9 @@ import { loadCsvLookup } from '../utils/dataLoaders.js'; // <-- IMPORT HELPER
 
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
+const INITIAL_MUSIC_VOLUME = 0.2; // Low volume for fade target
+const FULL_MUSIC_VOLUME = 1.0;    // Full volume
+const MUSIC_PATH = 'assets/music/bach-menuet-frenchsuite3.mp3'; // Path to music
 
 export default class Game {
     constructor() {
@@ -58,10 +61,8 @@ export default class Game {
         this.isGameOver = false;
         this.timeScale = 1.0;       // Current time scale (1.0 = normal, <1.0 = slow)
         this.slowMoStartTime = null; // Timestamp when slow-mo transition begins
-        // REMOVED: Hardcoded values, will be loaded from config
-        // this.slowMoDuration = 3000; 
-        // this.targetTimeScale = 0.2; 
-        // --- END ADDED ---
+        this.backgroundMusic = null; // Property to hold the Audio element
+        this.isMusicPlaying = false; // Flag to track if music has been started
     }
     
     // --- ADD methods for placement preview --- 
@@ -137,6 +138,9 @@ export default class Game {
         try {
             // *** Load Global Config FIRST ***
             await this.loadGameConfig();
+
+            // *** Initialize Background Music Object ***
+            this.initializeBackgroundMusicObject(); // Renamed for clarity
 
             // *** Assign config values AFTER loading ***
             this.slowMoDuration = this.gameConfig.gameOver.slowMoDurationMs;
@@ -565,20 +569,38 @@ export default class Game {
     update(timestamp, deltaTime) { // Renamed parameter to deltaTime, which IS the clampedDeltaTime
         let currentTimeScale = this.timeScale;
 
-        // --- Calculate Time Scale during Game Over Transition --- 
+        // --- Calculate Time Scale & Music Fade during Game Over Transition ---
         if (this.isGameOver && this.slowMoStartTime !== null) {
             const elapsed = timestamp - this.slowMoStartTime;
             const progress = Math.min(elapsed / this.slowMoDuration, 1.0);
-            // Linear interpolation from 1.0 down to targetTimeScale
-            currentTimeScale = 1.0 + (this.targetTimeScale - 1.0) * progress; 
-            this.timeScale = currentTimeScale; // Update stored timescale
+
+            // Log state BEFORE fade check
+            //console.log(`Update - GameOver Check: isMusicPlaying=${this.isMusicPlaying}, music?=${!!this.backgroundMusic}`); // <-- ADD LOG
+
+            // Time scale interpolation
+            currentTimeScale = 1.0 + (this.targetTimeScale - 1.0) * progress;
+            this.timeScale = currentTimeScale;
+
+            // Music Volume Fade Out Interpolation (Directly setting volume)
+            if (this.backgroundMusic) { // Check if music object exists
+                // Lerp from Full to Initial volume
+                const fadeVolume = FULL_MUSIC_VOLUME + (INITIAL_MUSIC_VOLUME - FULL_MUSIC_VOLUME) * progress;
+                // Directly set volume, clamped between 0 and 1
+                this.backgroundMusic.volume = Math.max(0, Math.min(1, fadeVolume));
+            }
+
             if (progress === 1.0) {
-                this.slowMoStartTime = null; // Transition finished, keep final timescale
+                this.slowMoStartTime = null; // Slow-mo transition finished
+                // Ensure final volume is exact if music exists
+                if (this.backgroundMusic) {
+                    this.backgroundMusic.volume = INITIAL_MUSIC_VOLUME;
+                }
+                // console.log("Slow-mo transition and music fade complete."); // Optional log
             }
         }
-        // --- End Time Scale Calculation ---
+        // --- End Time Scale & Music Fade Calculation ---
 
-        // --- Pausing Check (only if NOT game over) --- 
+        // --- Pausing Check (only if NOT game over) ---
         if (!this.isGameActive && !this.isGameOver) {
             // If paused, only update the last timestamp to avoid large deltaTime jump on resume
             // And skip the rest of the update logic
@@ -1047,16 +1069,32 @@ export default class Game {
     }
 
     /**
-     * Initiates the game over sequence, including slow-motion transition.
+     * Initiates the game over sequence, including slow-motion transition and music fade-out.
      */
     startGameOverSequence() {
         if (this.isGameOver) return; // Already game over
 
-        //console.log("Game: Starting game over sequence.");
+        // console.log("Game: Starting game over sequence."); // Optional log
         this.isGameOver = true;
-        this.isGameActive = false; // Ensure no new player actions / wave starts
+        this.isGameActive = false;
         this.slowMoStartTime = performance.now(); // Record start time for transition
-        // Time scale will start decreasing in the update loop
+        // Volume will start changing in the update loop based on isGameOver & slowMoStartTime
+    }
+
+    /**
+     * Creates the Audio element and sets its properties.
+     * Does NOT attempt to play here.
+     */
+    initializeBackgroundMusicObject() {
+        try {
+            this.backgroundMusic = new Audio(MUSIC_PATH);
+            this.backgroundMusic.loop = true;
+            // NO volume setting here
+            // NO .play() call here
+        } catch (error) {
+            console.error("Failed to create background music Audio object:", error);
+            this.backgroundMusic = null; // Ensure it's null if creation fails
+        }
     }
 }
 

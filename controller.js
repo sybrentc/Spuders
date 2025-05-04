@@ -84,11 +84,43 @@ window.addEventListener('DOMContentLoaded', async () => {
             // Set the difficulty scalar in the game instance
             gameInstance.setDifficultyScalar(scalar);
 
+            // --- Start Music & Set Volume ---
+            if (gameInstance.backgroundMusic) { // Check if music object exists
+                 // Attempt to play only if the flag indicates it hasn't started
+                 if (!gameInstance.isMusicPlaying) {
+                      //console.log("Attempting to start background music for the first time...");
+                      const playPromise = gameInstance.backgroundMusic.play();
+                      if (playPromise !== undefined) {
+                           playPromise.then(_ => {
+                                // Successfully started playing
+                                //console.log("Background music successfully started.");
+                                gameInstance.isMusicPlaying = true; // Set flag *after* successful start
+                           }).catch(error => {
+                                // Autoplay failed or other error
+                                console.error("Background music play failed:", error);
+                                // Keep isMusicPlaying false, maybe log a warning?
+                                // The volume set below will still apply if the object exists.
+                           });
+                      } else {
+                           // Fallback for browsers not returning a promise (less likely)
+                           console.warn("Audio play() did not return a promise. Assuming interaction allows play.");
+                           gameInstance.isMusicPlaying = true; // Assume it worked due to interaction
+                      }
+                 }
+                 // Always set volume to full when difficulty is clicked
+                 gameInstance.backgroundMusic.volume = 1.0; // Use 1.0 directly for full volume
+                 // console.log(`Music volume set to 1.0`); // Optional log
+            } else {
+                 console.warn("Cannot control music: gameInstance.backgroundMusic is null.");
+            }
+            // --- End Music Logic ---
+
             // Update game state and UI
             gameInstance.startGame(); // Tell the game instance to start updating
             overlay.classList.add('hidden'); // Use display: none for instant hide
+            // REMOVED: gameInstance.increaseMusicVolumeToFull();
             // Ensure fade-in class is removed if it was added during game over
-            overlay.classList.remove('fade-in'); 
+            overlay.classList.remove('fade-in');
             overlay.classList.remove('game-over');
             overlay.style.opacity = ''; // Remove inline opacity style
 
