@@ -1,9 +1,13 @@
 import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
 
 export default class DefenceEntity {
-    constructor(id, definition, position, spriteDefinition) {
+    constructor(id, definition, position, spriteDefinition, gameInstance) {
+        if (!gameInstance) {
+             throw new Error("DefenceEntity requires a valid Game instance.");
+        }
         this.id = id; // e.g., 'laser_tower'
         this.definition = definition; // The raw data from defences.json
+        this.game = gameInstance; // <-- STORE game instance
         this.x = position.x;
         this.y = position.y;
         this.target = null; // Current enemy target
@@ -52,6 +56,7 @@ export default class DefenceEntity {
         this.displayScale = definition.display?.scale
         this.displayAnchorX = definition.display?.anchorX
         this.displayAnchorY = definition.display?.anchorY
+        this.frameTimeAccumulator = 0; // Accumulator for animation timing
         // --- End Display Properties ---
     }
 
@@ -186,20 +191,28 @@ export default class DefenceEntity {
             // Assuming frame 0 is idle and frames 1 to N-1 are the attack animation
             const lastAttackFrameIndex = framesInRow - 1; 
 
-            if (timestamp - this.lastFrameChangeTime > frameDuration) {
+            this.frameTimeAccumulator += deltaTime; // Accumulate effective time
+
+            // Check if enough accumulated time has passed to change frame
+            while (this.frameTimeAccumulator >= frameDuration) { 
+                 this.frameTimeAccumulator -= frameDuration; // Subtract consumed time
+                 
                  // Check if we are still within the attack animation frames (1 to lastAttackFrameIndex)
                  if (this.currentFrame < lastAttackFrameIndex) {
                     this.currentFrame++; // Advance to the next frame
-                    this.lastFrameChangeTime = timestamp;
+                    // Removed: this.lastFrameChangeTime = timestamp; // No longer needed
                  } else {
                     // Animation cycle finished
                     this.isAttacking = false;
                     this.currentFrame = 0; // Reset to idle frame (frame 0)
+                    this.frameTimeAccumulator = 0; // Reset accumulator when animation ends
+                    break; // Exit the while loop as animation finished
                  }
             }
         } else {
             // Not attacking, ensure we are on the idle frame
             this.currentFrame = 0;
+            this.frameTimeAccumulator = 0; // Reset accumulator when not attacking
         }
         // --- End Animation Update ---
 
@@ -294,8 +307,10 @@ export default class DefenceEntity {
     renderEffects(ctx) {
         // Check if this entity creates puddles
         if (this.effects && this.effectRadius !== undefined && this.effectDuration !== undefined && this.effectSpeedFactor !== undefined) {
+             // Get color from the defender's own definition/effects
+             const puddleColor = this.effects?.color || 'rgba(0, 0, 0, 0.1)'; // Fallback to dim black if missing
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.3)'; // Translucent cyan (generalize color later?)
+            ctx.fillStyle = puddleColor;
             this.puddles.forEach(puddle => {
                 ctx.beginPath();
                 ctx.arc(puddle.x, puddle.y, puddle.radius, 0, Math.PI * 2);

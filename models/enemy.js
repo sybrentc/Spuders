@@ -72,6 +72,7 @@ export default class Enemy {
         this.targetTower = null;
         this.lastAttackTime = 0;
         this.speedModifier = 1.0;
+        this.frameTimeAccumulator = 0; // Accumulator for animation timing
     }
     
     update(timestamp, deltaTime, base) {
@@ -123,9 +124,14 @@ export default class Enemy {
         }
         
         // Update animation
-        if (timestamp - this.lastFrameTime >= this.frameDuration) {
+        // Uses effectiveDeltaTime via deltaTime parameter
+        this.frameTimeAccumulator += deltaTime; 
+        if (this.frameTimeAccumulator >= this.frameDuration) {
             this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
-            this.lastFrameTime = timestamp;
+            this.frameTimeAccumulator -= this.frameDuration; // Subtract duration, don't reset to 0
+            // If frameTimeAccumulator is still >= frameDuration (e.g., large deltaTime), 
+            // the loop will run again in the next frame, which is usually fine.
+            // Or handle multiple frame skips in a loop here if needed for very low frame rates.
         }
     }
     
@@ -183,7 +189,7 @@ export default class Enemy {
         return { x: this.x, y: this.y };
     }
     
-    render(ctx) {
+    render(ctx, healthBarConfig) {
         if (this.isDead) return;
         
         // Calculate source frame from spritesheet
@@ -230,6 +236,6 @@ export default class Enemy {
         ctx.restore(); // Restore context state (e.g., transformations, composite operations if any)
         
         // --- Draw Health Bar using utility function --- 
-        drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
+        drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight, healthBarConfig);
     }
 }

@@ -164,7 +164,7 @@ export default class DefenceManager extends EventTarget {
         }
         
         // Create and add the defence
-        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite);
+        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite, this.game);
         this.activeDefences.push(newDefence);
         //console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
         return newDefence; // Return the created instance
@@ -500,4 +500,10 @@ export default class DefenceManager extends EventTarget {
 
         // REMOVED: console.log("DEBUG: Finished calculateWearParameters.");
     }
+
+    // --- ADDED: Method to get a single definition by ID ---
+    getDefinition(id) {
+        return this.defenceDefinitions ? this.defenceDefinitions[id] : undefined;
+    }
+    // --- END ADDED ---
 }

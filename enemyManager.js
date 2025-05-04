@@ -332,7 +332,7 @@ export default class EnemyManager {
         const newEnemyTypesString = JSON.stringify(this.enemyTypes);
         if (oldEnemyTypesString !== newEnemyTypesString) { // Compare before/after strings
             if (this.game.defenceManager?.isLoaded) {
-                console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
+                //console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
                 // TODO: Check if calculateWearParameters needs await in the future
                 this.game.defenceManager.calculateWearParameters(); 
             } else {

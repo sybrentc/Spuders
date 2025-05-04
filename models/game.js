@@ -23,10 +23,11 @@ export default class Game {
         this.waveDataPath = null;
         this.baseDataPath = null; // ADD path for base config
         this.defencesPath = null; // <-- ADD this line
+        this.gameConfig = null; // <-- ADDED: To store global game settings
         this.waveManager = null;
         this.canvas = null;
         this.initialized = false;
-        this.tuningManager = new TuningManager(500);
+        this.tuningManager = null; // Initialize as null
         this.enemyManager = null;
         this.base = null; // ADD base instance property
         this.defenceManager = null; // <-- ADD defenceManager property
@@ -57,14 +58,20 @@ export default class Game {
         this.isGameOver = false;
         this.timeScale = 1.0;       // Current time scale (1.0 = normal, <1.0 = slow)
         this.slowMoStartTime = null; // Timestamp when slow-mo transition begins
-        this.slowMoDuration = 3000; // Duration of slow-mo transition (ms)
-        this.targetTimeScale = 0.2; // MODIFIED: Target time scale for slow-mo (changed from 0.3)
+        // REMOVED: Hardcoded values, will be loaded from config
+        // this.slowMoDuration = 3000; 
+        // this.targetTimeScale = 0.2; 
         // --- END ADDED ---
     }
     
     // --- ADD methods for placement preview --- 
-    setPlacementPreview(position) {
-        if (!position) {
+    /**
+     * Sets the placement preview data.
+     * @param {object | null} position - The {x, y} position or null to clear.
+     * @param {object | null} defenceDefinition - The definition of the defence being placed.
+     */
+    setPlacementPreview(position, defenceDefinition) { // <-- MODIFIED SIGNATURE
+        if (!position || !defenceDefinition) { // <-- Check for definition too
             this.placementPreview = null;
             return;
         }
@@ -76,7 +83,8 @@ export default class Game {
         if (path && path.length >= 2 && typeof exclusionRadius === 'number') { // Ensure path has at least 2 points
             const distance = minDistanceToPath(position, path); // Use path variable
             const isValid = distance >= exclusionRadius;
-            this.placementPreview = { ...position, isValid };
+            // Store the definition along with position and validity
+            this.placementPreview = { ...position, isValid, definition: defenceDefinition }; // <-- MODIFIED TO STORE DEF
         } else {
             // If path or config not ready, assume invalid or hide preview
              if (!path || path.length < 2) {
@@ -85,7 +93,8 @@ export default class Game {
              if (typeof exclusionRadius !== 'number') {
                  console.warn(`setPlacementPreview: pathExclusionRadius (${exclusionRadius}) not available or not a number in level data.`);
              }
-             this.placementPreview = { ...position, isValid: false }; 
+             // Store definition even if invalid placement
+             this.placementPreview = { ...position, isValid: false, definition: defenceDefinition }; // <-- MODIFIED TO STORE DEF
             // Or set to null: this.placementPreview = null;
         }
     }
@@ -95,8 +104,49 @@ export default class Game {
     }
     // --- END ADD methods --- 
 
+    // --- ADDED: Load Global Game Config ---
+    async loadGameConfig() {
+        try {
+            const response = await fetch('./assets/gameConfig.json');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            this.gameConfig = await response.json();
+            //console.log("Game: Global game config loaded:", this.gameConfig);
+        } catch (error) {
+            console.error("Game Initialize: Failed to load global game config (./assets/gameConfig.json):", error);
+            // Set default values or throw error to prevent game start?
+            // Setting defaults for resilience:
+            this.gameConfig = {
+                 maxDeltaTimeMs: 250,
+                 gameOver: {
+                     slowMoDurationMs: 3000,
+                     slowMoTargetScale: 0.2
+                 },
+                 placementPreview: {
+                     scaleFactor: 0.7
+                 }
+            };
+            console.warn("Game Initialize: Using default game config values due to loading error.");
+            // Or re-throw: throw error; 
+        }
+    }
+    // --- END ADDED ---
+
     async initialize() {
         try {
+            // *** Load Global Config FIRST ***
+            await this.loadGameConfig();
+
+            // *** Assign config values AFTER loading ***
+            this.slowMoDuration = this.gameConfig.gameOver.slowMoDurationMs;
+            this.targetTimeScale = this.gameConfig.gameOver.slowMoTargetScale;
+
+            // *** Initialize Tuning Manager with config interval ***
+            const tuningInterval = this.gameConfig?.tuning?.defaultIntervalMs || 500; // Fallback
+            this.tuningManager = new TuningManager(tuningInterval);
+            console.log(`Game: Initialized TuningManager with interval: ${tuningInterval}ms`);
+
             // Load level data FIRST (paths for enemies, waves, base)
             await this.loadLevel(1);
 
@@ -479,10 +529,15 @@ export default class Game {
             if (!this.lastTimestamp) {
                 this.lastTimestamp = timestamp; // Initialize on first frame
             }
-            const deltaTime = timestamp - this.lastTimestamp;
+            let deltaTime = timestamp - this.lastTimestamp;
             this.lastTimestamp = timestamp;
 
-            this.update(timestamp, deltaTime); // Pass both timestamp and deltaTime
+            // --- ADDED: Clamp Delta Time --- 
+            const MAX_DELTA_TIME = this.gameConfig?.maxDeltaTimeMs || 250; // Use config, fallback if needed
+            const clampedDeltaTime = Math.min(deltaTime, MAX_DELTA_TIME);
+            // -----------------------------
+
+            this.update(timestamp, clampedDeltaTime); // <-- Use clampedDeltaTime for update
             this.render();
             requestAnimationFrame(gameLoop);
         };
@@ -505,9 +560,9 @@ export default class Game {
     /**
      * Main game update loop.
      * @param {number} timestamp - The current high-resolution timestamp.
-     * @param {number} deltaTime - The time elapsed (in milliseconds) since the last update.
+     * @param {number} deltaTime - The CLAMPED time elapsed (in milliseconds) since the last update.
      */
-    update(timestamp, deltaTime) {
+    update(timestamp, deltaTime) { // Renamed parameter to deltaTime, which IS the clampedDeltaTime
         let currentTimeScale = this.timeScale;
 
         // --- Calculate Time Scale during Game Over Transition --- 
@@ -533,6 +588,7 @@ export default class Game {
         // --- End Pausing Check ---
 
         // --- Calculate Effective Delta Time --- 
+        // Use the already clamped deltaTime passed into the function
         const effectiveDeltaTime = deltaTime * currentTimeScale;
         
         // Always update last timestamp if game is running (even during slow-mo)
@@ -604,7 +660,7 @@ export default class Game {
         // 4. Render the sorted entities by calling their respective methods
         renderables.forEach(entity => {
             if (typeof entity.render === 'function') {
-                entity.render(this.fgCtx); // Call render for all entities
+                entity.render(this.fgCtx, this.gameConfig?.ui?.healthBar); 
             } else if (typeof entity.draw === 'function') {
                  // Fallback for entities like Base that might use 'draw'
                 entity.draw(this.fgCtx); 
@@ -626,17 +682,52 @@ export default class Game {
     // --- ADD method to render preview --- 
     renderPlacementPreview(ctx) {
         if (!this.placementPreview) return;
+
+        // --- DETAILED DEBUG LOGGING --- 
+        // console.log("DEBUG: renderPlacementPreview - Entering function.");
+        // console.log("DEBUG: this.placementPreview:", JSON.stringify(this.placementPreview));
+        // const definition = this.placementPreview?.definition; // Use optional chaining for logging safety
+        // const config = this.gameConfig;
+        // console.log("DEBUG: definition retrieved:", definition ? JSON.stringify(definition) : 'null/undefined');
+        // console.log("DEBUG: definition.sprite exists:", !!definition?.sprite);
+        // console.log("DEBUG: definition.display exists:", !!definition?.display);
+        // console.log("DEBUG: config exists:", !!config);
+        // console.log("DEBUG: config.ui.placementPreview exists:", !!config?.ui?.placementPreview);
+        // --- END DEBUG LOGGING --- 
+
+        // Get the definition and global config
+        const definition = this.placementPreview.definition; // Restore direct access
+        const config = this.gameConfig; 
+
+        // Check required data exists
+        // Use the already retrieved definition/config from logging block
+        if (!definition || !definition.sprite || !definition.display || !config || !config.ui?.placementPreview) { // Modified check to use logged vars and check config.ui path
+            console.warn("renderPlacementPreview: Missing definition, sprite, display, or gameConfig data. Cannot render preview.");
+            return; 
+        }
+
         ctx.save();
         
         // Choose color based on validity
+        // Use colors from config, provide fallbacks
+        const validColor = config.ui?.placementPreview?.validColor || 'rgba(0, 255, 0, 0.5)';
+        const invalidColor = config.ui?.placementPreview?.invalidColor || 'rgba(255, 0, 0, 0.5)';
         if (this.placementPreview.isValid) {
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.5)'; // Semi-transparent green
+            ctx.fillStyle = validColor;
         } else {
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Semi-transparent red
+            ctx.fillStyle = invalidColor;
         }
         
-        // Simple square for now, size could be based on defence type later
-        const previewSize = 40; 
+        // --- Calculate dynamic preview size --- 
+        const frameWidth = definition.sprite.frameWidth;
+        const definitionScale = definition.display.scale;
+        const globalScaleFactor = config.ui.placementPreview.scaleFactor; // Use updated config path
+        
+        // Refined calculation: globalFactor * frameWidth * definitionScale
+        const previewSize = frameWidth * definitionScale * globalScaleFactor;
+        // --- End calculation ---
+
+        // Draw the preview square
         ctx.fillRect(
             this.placementPreview.x - previewSize / 2, 
             this.placementPreview.y - previewSize / 2, 

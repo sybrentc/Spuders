@@ -5,13 +5,6 @@ let selectedDefenceType = null;
 let isPlacingDefence = false;
 let placementPreviewPos = null; // {x, y} in canvas coordinates
 
-// --- Difficulty Configuration ---
-const DIFFICULTY_SCALARS = {
-    easy: 0.6,
-    normal: 0.8,
-    hard: 1.0 // Break-even
-};
-
 // Create and start game
 window.addEventListener('DOMContentLoaded', async () => {
     // --- State Variable ---
@@ -71,7 +64,17 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
             // --- Initial Difficulty Selection Logic --- 
             const selectedDifficulty = event.target.dataset.difficulty;
-            const scalar = DIFFICULTY_SCALARS[selectedDifficulty];
+            // REMOVED: const scalar = DIFFICULTY_SCALARS[selectedDifficulty];
+            // --- Read scalar from config --- 
+            let scalar;
+            if (gameInstance.gameConfig && gameInstance.gameConfig.difficultyScalars) {
+                 scalar = gameInstance.gameConfig.difficultyScalars[selectedDifficulty];
+            } else {
+                 console.error("Game config or difficulty scalars not loaded! Cannot set difficulty.");
+                 // Fallback or return? Returning for now.
+                 return;
+            }
+            // --- End read scalar --- 
 
             if (scalar === undefined) {
                 console.error(`Invalid difficulty selected: ${selectedDifficulty}`);
@@ -131,7 +134,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Function to create/update menu buttons (NOW SORTS BY PRICE)
-    async function updateDefenceMenu(definitions) {
+    /*async*/ function updateDefenceMenu(definitions) { // <-- REMOVE async
         // console.log('DEBUG: Entering updateDefenceMenu'); // Optional log
         // --- Detailed Guard Clause Check ---
         if (!gameInstance.priceManager) {
@@ -190,24 +193,45 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // Function to handle defence selection
     function handleDefenceSelection(defenceId, clickedButton) {
+        let definition = null; // Store definition here
         if (selectedDefenceType === defenceId) {
             // Deselect if clicking the same button again
             selectedDefenceType = null;
             isPlacingDefence = false;
             placementPreviewPos = null;
             clickedButton.classList.remove('selected');
+            // Clear preview in game state
+            gameInstance.setPlacementPreview(null, null); // <-- Pass null for definition too
         } else {
             // Select new defence type
             selectedDefenceType = defenceId;
             isPlacingDefence = true;
             
+            // --- Get the definition --- 
+            if (gameInstance.defenceManager) {
+                 definition = gameInstance.defenceManager.getDefinition(defenceId);
+                 if (!definition) {
+                     console.error(`Controller: Could not find definition for selected defence ID: ${defenceId}`);
+                     // Handle error - maybe deselect?
+                     selectedDefenceType = null;
+                     isPlacingDefence = false;
+                     return;
+                 }
+            } else {
+                 console.error("Controller: DefenceManager not available to get definition.");
+                 return; // Cannot proceed
+            }
+            // --- End Get definition --- 
+
             // Update button styling
             // Get the actual menu element here
             document.querySelectorAll('#defenceMenu .defence-button.selected').forEach(btn => btn.classList.remove('selected'));
             clickedButton.classList.add('selected');
         }
         // Update game state for rendering preview
-        gameInstance.setPlacementPreview(placementPreviewPos); // Pass null if deselected
+        // If selecting, pass definition but null position (mousemove will set position)
+        // If deselecting, definition is already null from above
+        gameInstance.setPlacementPreview(placementPreviewPos, definition); // <-- Pass definition
     }
 
     // Canvas Mouse Move Listener
@@ -223,7 +247,22 @@ window.addEventListener('DOMContentLoaded', async () => {
             y: (event.clientY - rect.top) * scaleY
         };
         // Update game state for rendering preview
-        gameInstance.setPlacementPreview(placementPreviewPos);
+        // --- Pass definition along with position --- 
+        let definition = null;
+        if (selectedDefenceType && gameInstance.defenceManager) {
+            definition = gameInstance.defenceManager.getDefinition(selectedDefenceType);
+        } // If definition isn't found, setPlacementPreview will handle null gracefully
+
+        // ONLY set preview if we have a valid position AND definition
+        if (placementPreviewPos && definition) {
+             gameInstance.setPlacementPreview(placementPreviewPos, definition);
+        } else {
+             // If no definition found (or mouse moved out, etc.), clear the preview
+             gameInstance.setPlacementPreview(null, null); 
+             // Clear the controller's position cache too, as it's no longer relevant
+             placementPreviewPos = null;
+        }
+        // --- End Pass definition --- 
     });
 
     // Canvas Click Listener
@@ -252,20 +291,22 @@ window.addEventListener('DOMContentLoaded', async () => {
         isPlacingDefence = false;
         placementPreviewPos = null; // Clear the controller's cached position
         // Update game state to remove preview
-        gameInstance.setPlacementPreview(null);
+        gameInstance.setPlacementPreview(null, null); // <-- CORRECT CALL with null definition
     });
 
     // Initial population and setup listener for updates
     if (gameInstance.defenceManager && gameInstance.defenceManager.isLoaded && gameInstance.priceManager) { // Check priceManager here too
         updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // Update uses cached costs now
         // Listen for definition updates from DefenceManager (keeps current logic)
-        gameInstance.defenceManager.addEventListener('definitionsUpdated', async () => {
+        gameInstance.defenceManager.addEventListener('definitionsUpdated', /*async*/ () => { // <-- REMOVE async
             const currentSelectedId = selectedDefenceType;
-            await updateDefenceMenu(gameInstance.defenceManager.getDefinitions());
+            // await updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // <-- REMOVE await
+            updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // Rebuild the menu
             if (currentSelectedId) {
                 const selectedButton = document.querySelector(`.defence-button[data-defence-id="${currentSelectedId}"]`);
                 if (selectedButton) selectedButton.classList.add('selected');
             }
+            updateUI(); // <-- ADD call to update affordability of new buttons
         });
         // ADD listener for cost updates from PriceManager
         gameInstance.priceManager.addEventListener('costsUpdated', () => {
@@ -312,7 +353,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         // if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !defenceManager || !defenceMenu || !priceManager) return;
 
         // --- Update Text Displays ---
-        fundsDisplay.textContent = `${gameInstance.base.currentFunds}G`; 
+        const currencySuffix = gameInstance.gameConfig?.ui?.currencySuffix || 'G'; // Use config, fallback to 'G'
+        fundsDisplay.textContent = `${gameInstance.base.currentFunds}${currencySuffix}`; 
 
         let waveText = '';
         if (gameInstance.waveManager.isFinished) {
@@ -335,14 +377,23 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         buttons.forEach(button => {
             const defenceId = button.dataset.defenceId;
-            const cost = calculatedCosts[defenceId]; 
+            const cost = calculatedCosts[defenceId]; // UNROUNDED cost
 
             // --- Update Price Text --- 
             const priceSpan = button.querySelector('.price'); // Find the price span inside the button
             if (priceSpan && cost !== undefined && cost !== Infinity) {
-                priceSpan.textContent = `${cost}G`; // Update the displayed text
+                // Round cost for display based on config
+                let displayCost;
+                const roundingDecimals = gameInstance.gameConfig?.ui?.priceRoundingDecimals ?? 0; // Default to 0 decimals
+                if (roundingDecimals >= 0) {
+                    const factor = Math.pow(10, roundingDecimals);
+                    displayCost = Math.round(cost * factor) / factor;
+                } else {
+                    displayCost = Math.round(cost); // Fallback to integer rounding
+                }
+                priceSpan.textContent = `${displayCost}${currencySuffix}`; // Use rounded cost and suffix
             } else if (priceSpan) {
-                priceSpan.textContent = `---G`; // Indicate invalid/missing cost
+                priceSpan.textContent = `---${currencySuffix}`; // Indicate invalid/missing cost with suffix
             }
             // ------------------------
 
@@ -352,6 +403,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
 
             // --- Update Affordability --- 
+            // Compare against the UNROUNDED cost for accuracy
             if (currentFunds >= cost) {
                 button.classList.remove('disabled');
             } else {

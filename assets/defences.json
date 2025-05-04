@@ -121,7 +121,8 @@
     "effects": {
       "speedFactor": 0.5,
       "duration": 5000,
-      "radius": 30
+      "radius": 30,
+      "color": "rgba(0, 255, 255, 0.3)"
     },
     "sprite": {
       "path": "./assets/images/subzero.png",
