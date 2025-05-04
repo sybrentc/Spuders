@@ -145,7 +145,7 @@ export default class Game {
             // *** Initialize Tuning Manager with config interval ***
             const tuningInterval = this.gameConfig?.tuning?.defaultIntervalMs || 500; // Fallback
             this.tuningManager = new TuningManager(tuningInterval);
-            console.log(`Game: Initialized TuningManager with interval: ${tuningInterval}ms`);
+            //console.log(`Game: Initialized TuningManager with interval: ${tuningInterval}ms`);
 
             // Load level data FIRST (paths for enemies, waves, base)
             await this.loadLevel(1);
