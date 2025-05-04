@@ -12,6 +12,8 @@ export default class DefenceEntity {
         this.y = position.y;
         this.target = null; // Current enemy target
         this.lastAttackTime = 0;
+        this.gridCol = null; // <-- ADDED: Storage for Z-buffer grid column
+        this.gridRow = null; // <-- ADDED: Storage for Z-buffer grid row
 
         // Stats
         this.attackRange = definition.stats.attackRange;

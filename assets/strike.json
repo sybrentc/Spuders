@@ -1,0 +1,11 @@
+{
+  "targetMaxWipeoutRadiusPercent": 0.75,
+  "zBufferResolution": {
+    "width": 256,
+    "height": 256
+  },
+  "stampMapResolution": {
+    "width": 257,
+    "height": 257
+  }
+} 

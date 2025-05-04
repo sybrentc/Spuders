@@ -3,8 +3,8 @@ import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
 import Base from './base.js'; // Import the Base class
 import DefenceManager from '../defenceManager.js'; // <-- ADD Import
-import Enemy from './enemy.js'; // <--- ADD Enemy import
 import PriceManager from '../priceManager.js'; // Import PriceManager
+import StrikeManager from '../strikeManager.js'; // <-- ADDED Import
 import { minDistanceToPath } from '../utils/geometryUtils.js'; // <-- ADD Import
 import { loadCsvLookup } from '../utils/dataLoaders.js'; // <-- IMPORT HELPER
 
@@ -41,6 +41,7 @@ export default class Game {
         this.priceManager = null; // Initialize as null
         this.difficulty = null;
         this.currencyScale = null;
+        this.strikeManager = null; // <-- ADDED: Initialize strikeManager property
         // Path metrics - loaded from path-stats.json
         this.totalPathLength = null;
         this.segmentLengths = [];
@@ -223,12 +224,17 @@ export default class Game {
             // Initialize DefenceManager
             if (this.defencesPath) {
                 // Pass the Game instance ('this') to the constructor
-                this.defenceManager = new DefenceManager(this); 
+                this.defenceManager = new DefenceManager(this);
                 // Call the renamed method loadDefinitions
-                await this.defenceManager.loadDefinitions(this.defencesPath); 
+                await this.defenceManager.loadDefinitions(this.defencesPath);
             } else {
                 console.error("Cannot initialize DefenceManager: defencesPath is missing from level data.");
             }
+
+            // --- ADDED: Initialize StrikeManager ---
+            this.strikeManager = new StrikeManager(this);
+            await this.strikeManager.loadConfig(); // Load its configuration
+            // ------------------------------------
 
             // --- Calculate initial break-even alpha factor --- 
             // Moved EARLIER: Needs WaveManager (f), EnemyManager (s_min), PathStats (L), LevelConfig (w)
@@ -266,8 +272,13 @@ export default class Game {
             // *** NOW Calculate Wear Parameters (Needs Alpha and Costs) ***
             if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this.getAlpha() !== null) {
                 await this.defenceManager.calculateWearParameters();
+                // --- ADDED: Calculate Bomb Strength AFTER wear params are done ---
+                if (this.strikeManager?.isConfigLoaded()) { // Check if strike manager is ready
+                    this.strikeManager.calculateBombStrength();
+                }
+                // --- END ADDED ---
             } else {
-                console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this.getAlpha()}`);
+                 console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this.getAlpha()}`);
             }
             
             // Draw background (Path drawing is now part of render loop)
@@ -640,6 +651,12 @@ export default class Game {
                 console.error("Error in game update listener:", error);
             }
         }
+
+        // --- ADDED: Update StrikeManager ---
+        if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded before updating
+            this.strikeManager.calculateZBuffer();
+        }
+        // ---------------------------------
     }
     
     createLayer(className, zIndex) {
@@ -695,6 +712,11 @@ export default class Game {
         if (this.placementPreview) {
             this.renderPlacementPreview(this.fgCtx);
         }
+        // --- ADDED: Render StrikeManager Z-Buffer ---
+        if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded
+            this.strikeManager.renderZBuffer(this.fgCtx);
+        }
+        // -------------------------------------------
         // ADD UI Manager Render Call
         // if (this.uiManager) { // Assuming you have a UIManager
         //     this.uiManager.draw(this.fgCtx);

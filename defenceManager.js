@@ -165,6 +165,18 @@ export default class DefenceManager extends EventTarget {
         
         // Create and add the defence
         const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite, this.game);
+
+        // --- ADDED: Calculate and store grid coordinates for StrikeManager ---
+        if (this.game.strikeManager?.isConfigLoaded()) {
+            const gridPos = this.game.strikeManager._world2grid(newDefence.x, newDefence.y);
+            newDefence.gridCol = gridPos.col;
+            newDefence.gridRow = gridPos.row;
+            //console.log(`DEBUG: Assigned grid pos (${gridPos.col}, ${gridPos.row}) to ${defenceId}`); // Optional debug log
+        } else {
+            console.warn(`DefenceManager: StrikeManager not ready when placing ${defenceId}. Grid position not set.`);
+        }
+        // --- END ADDED ---
+
         this.activeDefences.push(newDefence);
         //console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
         return newDefence; // Return the created instance
