@@ -1,11 +1,12 @@
 import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
 
 export default class DefenceEntity {
-    constructor(id, definition, position, spriteDefinition, gameInstance) {
+    constructor(id, definition, position, spriteDefinition, gameInstance, instanceId) {
         if (!gameInstance) {
              throw new Error("DefenceEntity requires a valid Game instance.");
         }
         this.id = id; // e.g., 'laser_tower'
+        this.instanceId = instanceId; // <-- ADDED: Store the unique instance ID
         this.definition = definition; // The raw data from defences.json
         this.game = gameInstance; // <-- STORE game instance
         this.x = position.x;
