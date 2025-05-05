@@ -270,7 +270,7 @@ export default class WaveManager extends EventTarget {
         }
         // --- END ADDED ---
         this.dispatchEvent(new CustomEvent('statusUpdated')); // Wave number changed
-        console.log(`WaveManager: Wave ${this.currentWaveNumber} ready with ${this.currentWaveSchedule.length} scheduled spawns.`);
+        //console.log(`WaveManager: Wave ${this.currentWaveNumber} ready with ${this.currentWaveSchedule.length} scheduled spawns.`);
 
         // REMOVED: Critical check (now handled implicitly by moving schedules)
         // REMOVED: Calculation for current wave (now done above or moved from next)

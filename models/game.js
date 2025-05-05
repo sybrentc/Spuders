@@ -46,6 +46,7 @@ export default class Game {
         this.currencyScale = null;
         this.strikeManager = null;
         this.controller = null; // <-- Controller will be set later
+        this.showStrikeManagerHeatmap = false; // <-- ADDED: Flag to control heatmap rendering
         // Path metrics - loaded from path-stats.json
         this.totalPathLength = null;
         this.segmentLengths = [];
@@ -741,11 +742,14 @@ export default class Game {
         if (this.placementPreview) {
             this.renderPlacementPreview(this.fgCtx);
         }
-        // --- ADDED: Render StrikeManager Z-Buffer ---
-        if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded
-            this.strikeManager.renderZBuffer(this.fgCtx);
-        }
-        // -------------------------------------------
+        // --- Render StrikeManager Z-Buffer (Heatmap) ---
+        if (this.showStrikeManagerHeatmap) { // <-- ADDED check
+            // --- Original block, now conditional ---
+            if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded
+                this.strikeManager.renderZBuffer(this.fgCtx);
+            }
+            // -------------------------------------------
+        } // <-- ADDED closing brace
         // ADD UI Manager Render Call
         // if (this.uiManager) { // Assuming you have a UIManager
         //     this.uiManager.draw(this.fgCtx);

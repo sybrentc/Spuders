@@ -509,7 +509,7 @@ export default class StrikeManager {
             return;
         }
 
-        console.log(`StrikeManager: Received start signal for Wave ${waveNumber} at ${timestamp.toFixed(0)}ms`);
+        //console.log(`StrikeManager: Received start signal for Wave ${waveNumber} at ${timestamp.toFixed(0)}ms`);
 
         this.currentWaveNumber = waveNumber;
         this.currentWaveStartTime = timestamp;
@@ -529,7 +529,7 @@ export default class StrikeManager {
         // Calculate and store dn for the new wave
         this.currentDn = this._calculateDn(this.currentWaveNumber);
 
-        console.log(`  -> Stored R_n(0)=${this.currentWaveStartTotalR.toFixed(4)}, dn=${this.currentDn.toFixed(4)}`);
+        //console.log(`  -> Stored R_n(0)=${this.currentWaveStartTotalR.toFixed(4)}, dn=${this.currentDn.toFixed(4)}`);
     }
     // --- END ADDED ---
 
@@ -576,7 +576,7 @@ export default class StrikeManager {
      * @param {number} clearTime - The timestamp (ms) when the last enemy of this wave was cleared.
      */
     finalizeWaveDamage(waveNumber, startTime, clearTime) {
-        console.log(`StrikeManager: Received finalize signal for Wave ${waveNumber}. Start: ${startTime.toFixed(0)}, Clear: ${clearTime.toFixed(0)}`);
+        //console.log(`StrikeManager: Received finalize signal for Wave ${waveNumber}. Start: ${startTime.toFixed(0)}, Clear: ${clearTime.toFixed(0)}`);
 
         // Ensure the data we are finalizing *matches* the wave StrikeManager *thought* was running.
         // This is a safety check, though normally they should align perfectly.
@@ -611,9 +611,9 @@ export default class StrikeManager {
 
         if (isFinite(finalDeltaR) && finalDeltaR > 0) {
             this.totalAccumulatedTargetDamageR += finalDeltaR;
-            console.log(`  -> Wave ${waveNumber} Final DeltaR: ${finalDeltaR.toFixed(4)} (Duration: ${effectiveDurationSec.toFixed(2)}s). New Accumulated Total: ${this.totalAccumulatedTargetDamageR.toFixed(4)}`);
+            //console.log(`  -> Wave ${waveNumber} Final DeltaR: ${finalDeltaR.toFixed(4)} (Duration: ${effectiveDurationSec.toFixed(2)}s). New Accumulated Total: ${this.totalAccumulatedTargetDamageR.toFixed(4)}`);
         } else {
-            console.log(`  -> Wave ${waveNumber} Final DeltaR calculation resulted in zero or invalid value (${finalDeltaR.toFixed(4)}). Accumulator unchanged.`);
+            //console.log(`  -> Wave ${waveNumber} Final DeltaR calculation resulted in zero or invalid value (${finalDeltaR.toFixed(4)}). Accumulator unchanged.`);
             // No change needed to totalAccumulatedTargetDamageR
         }
     }
