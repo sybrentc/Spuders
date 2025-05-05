@@ -112,6 +112,29 @@ export default class DefenceManager extends EventTarget {
         }
     }
 
+    // --- ADDED: Setup method to be called after all managers are ready ---
+    /**
+     * Sets up listeners and performs initial calculations after dependent managers are loaded.
+     * Typically called from Game after PriceManager is ready.
+     */
+    setupAfterLoad() {
+         if (!this.game.priceManager) {
+             console.error("DefenceManager.setupAfterLoad: PriceManager not available on game instance.");
+             return;
+         }
+
+        // Listen for cost updates from PriceManager
+        this.game.priceManager.addEventListener('costsUpdated', () => {
+            // console.log("DefenceManager: Received costsUpdated event, updating earning rates."); // Optional log
+            this.updateDefenderEarningRates();
+        });
+
+        // Perform initial calculation
+        // console.log("DefenceManager: Performing initial earning rate calculation."); // Optional log
+        this.updateDefenderEarningRates();
+    }
+    // --- END ADDED ---
+
     createDefence(defenceId, position) {
         // TODO: Logic to create an instance of a specific defence
         //console.log(`DefenceManager: Attempting to create defence ${defenceId} at`, position);
@@ -516,6 +539,82 @@ export default class DefenceManager extends EventTarget {
     // --- ADDED: Method to get a single definition by ID ---
     getDefinition(id) {
         return this.defenceDefinitions ? this.defenceDefinitions[id] : undefined;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Calculate and Store Earning Rate per Type ---
+    /**
+     * Calculates the earning rate (Ri = Ci / alpha) for each defence type
+     * and stores it in the definition's stats.
+     */
+    updateDefenderEarningRates() {
+        const alpha = this.game.getAlpha();
+        const costs = this.game.priceManager?.getStoredCosts(); // Use optional chaining
+
+        if (alpha === null || alpha <= 0) {
+            console.error("DefenceManager.updateDefenderEarningRates: Cannot calculate rates, invalid alpha:", alpha);
+            // Optionally clear existing rates?
+            // for (const defenceId in this.defenceDefinitions) { ... delete stats.earningRate ... }
+            return;
+        }
+        if (!costs) {
+            console.error("DefenceManager.updateDefenderEarningRates: Cannot calculate rates, costs not available from PriceManager.");
+            return;
+        }
+
+        // console.log(`DEBUG: Updating earning rates with alpha = ${alpha}`); // Optional log
+
+        for (const defenceId in this.defenceDefinitions) {
+            const def = this.defenceDefinitions[defenceId];
+            const cost = costs[defenceId];
+
+            if (def && def.stats) { // Ensure stats object exists
+                if (cost !== undefined && cost !== null && cost !== Infinity && cost >= 0) {
+                    const earningRate = cost / alpha;
+                    def.stats.earningRate = isFinite(earningRate) ? earningRate : 0; // Store, handle potential Infinity if cost>0, alpha=0
+                    // console.log(`  -> ${defenceId}: Cost=${cost.toFixed(2)}, Rate=${def.stats.earningRate.toFixed(4)}`); // Optional log
+                } else {
+                    // If cost is invalid, set rate to 0 or undefined
+                    def.stats.earningRate = 0;
+                    // console.log(`  -> ${defenceId}: Invalid cost (${cost}), Rate set to 0`); // Optional log
+                }
+            } else if (def) {
+                 // Handle case where stats object might be missing
+                 def.stats = { earningRate: 0 }; // Create stats with rate 0
+                 console.warn(`DefenceManager: Definition ${defenceId} was missing stats object. Initialized with earningRate 0.`);
+            }
+        }
+        //console.log("DefenceManager: Defender earning rates updated.");
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Get Earning Rate for a specific type ---
+    /**
+     * Returns the stored earning rate for a specific defence type.
+     * @param {string} defenceId - The ID of the defence type.
+     * @returns {number} The calculated earning rate, or 0 if not found/invalid.
+     */
+    getEarningRateForType(defenceId) {
+        return this.defenceDefinitions[defenceId]?.stats?.earningRate ?? 0;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Calculate total earning rate of active defenders ---
+    /**
+     * Calculates the sum of earning rates for all currently active defenders.
+     * @returns {number} The total earning rate.
+     */
+    getCurrentTotalEarningRate() {
+        let totalR = 0;
+        // No need for activeCounts map if we just sum directly
+        for (const defence of this.activeDefences) {
+             // Directly use the stored rate from the definition
+             const rate = this.getEarningRateForType(defence.id); 
+             if (rate > 0 && isFinite(rate)) { // Check validity
+                totalR += rate;
+             }
+        }
+        return totalR;
     }
     // --- END ADDED ---
 }

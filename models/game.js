@@ -273,6 +273,14 @@ export default class Game {
             }
             // --------------------------
 
+            // --- ADDED: Call DefenceManager setup after PriceManager is ready --- 
+            if (this.defenceManager && typeof this.defenceManager.setupAfterLoad === 'function') {
+                 this.defenceManager.setupAfterLoad();
+            } else {
+                 console.error("Game Initialize: DefenceManager or setupAfterLoad method missing.");
+            }
+            // --- END ADDED ---
+
             // *** NOW Calculate Wear Parameters (Needs Alpha and Costs) ***
             if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this.getAlpha() !== null) {
                 await this.defenceManager.calculateWearParameters();

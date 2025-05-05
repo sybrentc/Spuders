@@ -260,8 +260,7 @@ class PriceManager extends EventTarget {
     }
 
     /**
-     * Recalculates all defence costs, stores them internally,
-     * and dispatches an event.
+     * Recalculates and stores the cost for all defence types.
      */
     async recalculateAndStoreCosts() {
         // Use the existing calculation logic
@@ -269,7 +268,7 @@ class PriceManager extends EventTarget {
         this.cachedCosts = costs;
         // Dispatch an event to notify listeners
         this.dispatchEvent(new CustomEvent('costsUpdated'));
-        // console.log("PriceManager: Costs recalculated and event dispatched.", this.cachedCosts); // Optional debug log
+        //console.log("PriceManager: Costs recalculated and event dispatched.");
     }
 
     /**

@@ -261,8 +261,16 @@ export default class WaveManager extends EventTarget {
         // Common logic (set start time, reset index, dispatch update)
         this.waveStartTime = timestamp;
         this.scheduleIndex = 0;
+        // --- ADDED: Notify StrikeManager about the new wave start --- 
+        if (this.game.strikeManager && typeof this.game.strikeManager.startWave === 'function') {
+            this.game.strikeManager.startWave(this.currentWaveNumber, timestamp);
+        } else {
+             // Log warning if StrikeManager or method is missing - this might be expected temporarily
+             // console.warn(`WaveManager: StrikeManager.startWave not found when starting wave ${this.currentWaveNumber}.`);
+        }
+        // --- END ADDED ---
         this.dispatchEvent(new CustomEvent('statusUpdated')); // Wave number changed
-        //console.log(`WaveManager: Wave ${this.currentWaveNumber} ready with ${this.currentWaveSchedule.length} scheduled spawns.`);
+        console.log(`WaveManager: Wave ${this.currentWaveNumber} ready with ${this.currentWaveSchedule.length} scheduled spawns.`);
 
         // REMOVED: Critical check (now handled implicitly by moving schedules)
         // REMOVED: Calculation for current wave (now done above or moved from next)
@@ -516,12 +524,23 @@ export default class WaveManager extends EventTarget {
         // State 1: Waiting for screen to clear
         if (this.waitingForClear) {
             if (this.enemyManager && typeof this.enemyManager.getActiveEnemies === 'function' && this.enemyManager.getActiveEnemies().length === 0) {
-                // Screen is clear!
+                // --- Screen is clear! ---
+                const clearTime = timestamp;
                 //console.log(`WaveManager: Screen cleared after Wave ${this.currentWaveNumber} at ${timestamp.toFixed(0)}ms.`);
                 // Calculate average death distance for the wave that just cleared
                 if (typeof this.enemyManager.calculateAverageDeathDistance === 'function') {
                     this.lastAverageDeathDistance = this.enemyManager.calculateAverageDeathDistance(); // Log is inside the function
                 }
+
+                // --- ADDED: Trigger StrikeManager final calculation --- 
+                if (this.game.strikeManager && typeof this.game.strikeManager.finalizeWaveDamage === 'function') {
+                    this.game.strikeManager.finalizeWaveDamage(this.currentWaveNumber, this.waveStartTime, clearTime);
+                } else {
+                     // Log warning if StrikeManager or method is missing - might be expected temporarily
+                     // console.warn(`WaveManager: StrikeManager.finalizeWaveDamage not found when clearing wave ${this.currentWaveNumber}.`);
+                }
+                // --- END ADDED ---
+                
                 this.waitingForClear = false; // *** Transition OUT of Waiting State ***
                 
                 // Start the timer for the next wave
