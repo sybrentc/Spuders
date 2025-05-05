@@ -34,6 +34,11 @@ export default class StrikeManager {
         this.totalAccumulatedTargetDamageR = 0; // Delta R accumulated *before* the current wave
         this.currentDn = 0; // Store the calculated dn for the current wave
         // --- END ADDED ---
+
+        // --- ADDED: Impact Randomization --- 
+        this.impactStdDevPixels = null; // Standard deviation for impact inaccuracy
+        this._spareNormal = null; // Re-add spare value for Box-Muller
+        // --- END ADDED ---
     }
 
     async loadConfig(path = 'assets/strike.json') {
@@ -58,6 +63,20 @@ export default class StrikeManager {
             this.zBufferResolution = config.zBufferResolution;
             this.stampMapResolution = config.stampMapResolution;
             this.bombStrengthA = null; // Explicitly null, calculated later
+
+            // --- ADDED: Load and calculate impact deviation --- 
+            if (typeof config.impactStdDevPercentWidth !== 'number' || config.impactStdDevPercentWidth < 0) {
+                console.warn(`StrikeManager: Invalid or missing impactStdDevPercentWidth in config. Defaulting to 0 (no spread).`);
+                this.impactStdDevPixels = 0;
+            } else {
+                 // Get map dimensions from game canvas (needs to be done before this)
+                 this.mapWidth = this.game.canvas.width;
+                 this.mapHeight = this.game.canvas.height;
+
+                 this.impactStdDevPixels = config.impactStdDevPercentWidth * this.mapWidth;
+                 //console.log(`StrikeManager: Impact std deviation set to ${this.impactStdDevPixels.toFixed(2)} pixels (${config.impactStdDevPercentWidth * 100}% of width).`);
+            }
+            // --- END ADDED ---
 
             // Get map dimensions from game canvas
             this.mapWidth = this.game.canvas.width;
@@ -616,6 +635,74 @@ export default class StrikeManager {
             //console.log(`  -> Wave ${waveNumber} Final DeltaR calculation resulted in zero or invalid value (${finalDeltaR.toFixed(4)}). Accumulator unchanged.`);
             // No change needed to totalAccumulatedTargetDamageR
         }
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Normal Random Number Generation (Box-Muller) ---
+    /**
+     * Generates a normally distributed random number.
+     * Uses the Box-Muller transform.
+     * @param {number} mean - The mean of the distribution.
+     * @param {number} stdDev - The standard deviation of the distribution.
+     * @returns {number} A random number from the specified normal distribution.
+     */
+    _generateNormalRandom(mean, stdDev) {
+        // Use Box-Muller transform
+        // Check if we have a spare value from the previous calculation
+        if (this._spareNormal !== null) {
+            const result = mean + stdDev * this._spareNormal;
+            this._spareNormal = null; // Consume the spare value
+            return result;
+        }
+
+        // No spare value, generate two new standard normals
+        let u1, u2;
+        do {
+            // Math.random() gives [0, 1). We need (0, 1) for log().
+            u1 = Math.random();
+        } while (u1 === 0);
+        u2 = Math.random(); // This one can be 0
+
+        const radius = Math.sqrt(-2.0 * Math.log(u1));
+        const angle = 2.0 * Math.PI * u2;
+
+        const standardNormal1 = radius * Math.cos(angle);
+        const standardNormal2 = radius * Math.sin(angle);
+
+        // Store the second value for the next call
+        this._spareNormal = standardNormal2;
+
+        // Return the first value, scaled and shifted
+        return mean + stdDev * standardNormal1;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Calculate Impact Coordinates --- 
+    /**
+     * Calculates the randomized impact coordinates based on target coordinates
+     * using a normal distribution for inaccuracy.
+     * @param {object} targetCoords - The intended target {x, y}.
+     * @returns {object} The calculated impact coordinates {x, y}, clamped to map bounds.
+     */
+    _calculateImpactCoordinates(targetCoords) {
+        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
+            console.error("StrikeManager._calculateImpactCoordinates: Invalid targetCoords provided.", targetCoords);
+        }
+
+        if (this.impactStdDevPixels === null || this.impactStdDevPixels < 0) {
+            console.warn("StrikeManager._calculateImpactCoordinates: Impact standard deviation not properly configured. Returning target coordinates.");
+            return { ...targetCoords }; // Return original target if no spread
+        }
+
+        // Generate random offsets using normal distribution (mean 0)
+        const offsetX = this._generateNormalRandom(0, this.impactStdDevPixels);
+        const offsetY = this._generateNormalRandom(0, this.impactStdDevPixels);
+
+        // Calculate impact coordinates
+        let impactX = targetCoords.x + offsetX;
+        let impactY = targetCoords.y + offsetY;
+
+        return { x: impactX, y: impactY };
     }
     // --- END ADDED ---
 } 
