@@ -1,453 +1,375 @@
 import Game from './models/game.js';
 
-// State variables for defence placement
+// State variables for defence placement (potentially move into Controller later)
 let selectedDefenceType = null;
 let isPlacingDefence = false;
 let placementPreviewPos = null; // {x, y} in canvas coordinates
 
-// Create and start game
-window.addEventListener('DOMContentLoaded', async () => {
-    // --- State Variable ---
-    let isGameActive = false;
-
-    // --- DOM Element References ---
-    const overlay = document.getElementById('gameOverlay');
-    const popupTitle = document.getElementById('popupTitle');
-    const difficultyButtons = document.querySelectorAll('.difficulty-button');
-
-    // --- Initialize Game and Defence Menu --- 
-    const gameInstance = new Game();
-    // Expose game instance for debugging/testing scalar changes
-    window.game = gameInstance; 
-
-    try {
-        // Wait for the game to fully initialize (loads assets, calculates alpha_0, etc.)
-        await gameInstance.ready(); 
-        //console.log("Controller: Game initialization complete.");
-        
-        // Wait for DefenceMenu to load data (fetch definitions, price etc.)
-        // await defenceMenu.initialize(); // Ensure menu initializes and fetches data
-        //console.log("Controller: Defence Menu initialization complete.");
-
-    } catch (error) {
-        console.error("Controller: Error during initialization:", error);
-        // Handle initialization error (e.g., display message to user)
-        if (overlay) {
-            popupTitle.textContent = "Initialization Failed!";
-            overlay.classList.remove('hidden'); // Show overlay with error
-        } else {
-            alert("Critical error during game initialization. Please check the console.");
-        }
-        return; // Stop further execution
+// Define the Controller class
+class Controller {
+    constructor() {
+        // Initialize properties that will hold references
+        this.gameInstance = null;
+        this.overlay = null;
+        this.popupTitle = null;
+        this.difficultyButtons = null;
+        this.fundsDisplay = null;
+        this.waveInfoDisplay = null;
+        this.targetDamageDisplay = null;
+        this.defenceMenuElement = null;
+        this.gameCanvas = null;
     }
 
-    // --- Add Event Listeners to Difficulty Buttons ---
-    difficultyButtons.forEach(button => {
+    async initialize(gameInstance) {
+        this.gameInstance = gameInstance;
+
+        // --- Get DOM Element References ---
+        this.overlay = document.getElementById('gameOverlay');
+        this.popupTitle = document.getElementById('popupTitle');
+        this.difficultyButtons = document.querySelectorAll('.difficulty-button');
+        this.fundsDisplay = document.getElementById('fundsDisplay');
+        this.waveInfoDisplay = document.getElementById('waveInfoDisplay');
+        this.targetDamageDisplay = document.getElementById('targetDamageDisplay');
+        this.defenceMenuElement = document.getElementById('defenceMenu');
+        this.gameCanvas = this.gameInstance.layers.foreground?.canvas;
+
+        // Basic validation
+        if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement || !this.gameCanvas) {
+            console.error("Controller Initialize: One or more required UI elements not found!");
+            return; // Stop initialization if critical elements are missing
+        }
+
+        // --- Add Event Listeners ---
+        this._setupDifficultyButtons();
+        this._setupGameOverListener();
+        this._setupCanvasListeners();
+        this._setupDefenceMenu();
+    }
+
+    _setupDifficultyButtons() {
+        this.difficultyButtons.forEach(button => {
         button.addEventListener('click', (event) => {
-            // Check if the overlay is currently visible (meaning game is paused or over)
-            const isOverlayVisible = !overlay.classList.contains('hidden');
+                const isOverlayVisible = !this.overlay.classList.contains('hidden');
+                const isGameActive = this.gameInstance.isGameActive; // Use game state
             
             if (isOverlayVisible && !isGameActive) {
-                 // --- Game Over / Restart Logic --- 
-                 //console.log("Restart requested after game over...");
-                 // 1. Reset the game state
-                 gameInstance.reset();
-                 // 2. Reset overlay visuals (remove red tint)
-                 overlay.classList.remove('game-over');
-                 // 3. Update title back to default (optional, or set by listener)
-                 // popupTitle.textContent = 'Choose your destiny'; 
-                 // 4. Fall through to set difficulty and start new game
+                    this.gameInstance.reset();
+                    this.overlay.classList.remove('game-over', 'fade-in');
+                    this.overlay.style.opacity = '';
             } else if (isGameActive) {
-                // If game is active, button click shouldn't do anything (or maybe pause?)
                 console.log("Difficulty button clicked while game active. Ignoring.");
                 return; 
             }
-            // --- Initial Difficulty Selection Logic --- 
+
             const selectedDifficulty = event.target.dataset.difficulty;
-            // REMOVED: const scalar = DIFFICULTY_SCALARS[selectedDifficulty];
-            // --- Read scalar from config --- 
             let scalar;
-            if (gameInstance.gameConfig && gameInstance.gameConfig.difficultyScalars) {
-                 scalar = gameInstance.gameConfig.difficultyScalars[selectedDifficulty];
+                if (this.gameInstance.gameConfig && this.gameInstance.gameConfig.difficultyScalars) {
+                    scalar = this.gameInstance.gameConfig.difficultyScalars[selectedDifficulty];
             } else {
                  console.error("Game config or difficulty scalars not loaded! Cannot set difficulty.");
-                 // Fallback or return? Returning for now.
                  return;
             }
-            // --- End read scalar --- 
-
             if (scalar === undefined) {
                 console.error(`Invalid difficulty selected: ${selectedDifficulty}`);
                 return;
             }
 
-            // Set the difficulty scalar in the game instance
-            gameInstance.setDifficultyScalar(scalar);
+                this.gameInstance.setDifficultyScalar(scalar);
 
-            // --- Start Music & Set Volume ---
-            if (gameInstance.backgroundMusic) { // Check if music object exists
-                 // Attempt to play only if the flag indicates it hasn't started
-                 if (!gameInstance.isMusicPlaying) {
-                      //console.log("Attempting to start background music for the first time...");
-                      const playPromise = gameInstance.backgroundMusic.play();
+                if (this.gameInstance.backgroundMusic) {
+                    if (!this.gameInstance.isMusicPlaying) {
+                        const playPromise = this.gameInstance.backgroundMusic.play();
                       if (playPromise !== undefined) {
-                           playPromise.then(_ => {
-                                // Successfully started playing
-                                //console.log("Background music successfully started.");
-                                gameInstance.isMusicPlaying = true; // Set flag *after* successful start
-                           }).catch(error => {
-                                // Autoplay failed or other error
-                                console.error("Background music play failed:", error);
-                                // Keep isMusicPlaying false, maybe log a warning?
-                                // The volume set below will still apply if the object exists.
+                            playPromise.then(() => { this.gameInstance.isMusicPlaying = true; })
+                                     .catch(error => { console.error("Background music play failed:", error); });
+                        } else {
+                            this.gameInstance.isMusicPlaying = true;
+                        }
+                    }
+                    this.gameInstance.backgroundMusic.volume = 1.0;
+                } else {
+                    console.warn("Cannot control music: gameInstance.backgroundMusic is null.");
+                }
+
+                this.gameInstance.startGame();
+                this.overlay.classList.add('hidden');
+                this.overlay.classList.remove('game-over', 'fade-in');
+                this.overlay.style.opacity = '';
+            });
+        });
+    }
+
+    _setupGameOverListener() {
+        if (this.gameInstance.base) {
+            this.gameInstance.base.addEventListener('gameOver', () => {
+                this.gameInstance.startGameOverSequence();
+                this.popupTitle.textContent = 'Try again?';
+                this.overlay.classList.add('game-over');
+                this.overlay.style.opacity = '0';
+                this.overlay.classList.remove('hidden');
+                void this.overlay.offsetWidth;
+                this.overlay.classList.add('fade-in');
+                this.overlay.style.opacity = '1';
                            });
                       } else {
-                           // Fallback for browsers not returning a promise (less likely)
-                           console.warn("Audio play() did not return a promise. Assuming interaction allows play.");
-                           gameInstance.isMusicPlaying = true; // Assume it worked due to interaction
-                      }
-                 }
-                 // Always set volume to full when difficulty is clicked
-                 gameInstance.backgroundMusic.volume = 1.0; // Use 1.0 directly for full volume
-                 // console.log(`Music volume set to 1.0`); // Optional log
-            } else {
-                 console.warn("Cannot control music: gameInstance.backgroundMusic is null.");
+            console.error("Controller: Cannot add gameOver listener, gameInstance.base not available!");
+        }
+    }
+
+    _setupCanvasListeners() {
+        this.gameCanvas.addEventListener('mousemove', (event) => {
+            if (!isPlacingDefence) return;
+            const rect = this.gameCanvas.getBoundingClientRect();
+            const scaleX = this.gameCanvas.width / rect.width;
+            const scaleY = this.gameCanvas.height / rect.height;
+            placementPreviewPos = { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
+            let definition = null;
+            if (selectedDefenceType && this.gameInstance.defenceManager) {
+                definition = this.gameInstance.defenceManager.getDefinition(selectedDefenceType);
             }
-            // --- End Music Logic ---
-
-            // Update game state and UI
-            gameInstance.startGame(); // Tell the game instance to start updating
-            overlay.classList.add('hidden'); // Use display: none for instant hide
-            // REMOVED: gameInstance.increaseMusicVolumeToFull();
-            // Ensure fade-in class is removed if it was added during game over
-            overlay.classList.remove('fade-in');
-            overlay.classList.remove('game-over');
-            overlay.style.opacity = ''; // Remove inline opacity style
-
-            //console.log(`Difficulty set to: ${selectedDifficulty} (scalar: ${scalar}). Game active.`);
+            if (placementPreviewPos && definition) {
+                this.gameInstance.setPlacementPreview(placementPreviewPos, definition);
+            } else {
+                this.gameInstance.setPlacementPreview(null, null);
+                placementPreviewPos = null;
+            }
         });
-    });
 
-    // --- Game Over Listener --- 
-    // Assuming gameInstance.base exists after initialization
-    if (gameInstance.base) { 
-        gameInstance.base.addEventListener('gameOver', () => {
-            //console.log("Controller received game over event.");
-            gameInstance.startGameOverSequence(); // Initiate slow-mo and pause logic
-            popupTitle.textContent = 'Try again?'; // Change popup title
-            
-            // --- Game Over Fade-in Logic --- 
-            overlay.classList.add('game-over'); // Add red tint class first
-            overlay.style.opacity = '0'; // Start transparent
-            overlay.classList.remove('hidden'); // Make it visible (display: flex)
-            
-            // Force browser reflow to apply opacity 0 before adding transition class
-            void overlay.offsetWidth; 
-            
-            overlay.classList.add('fade-in'); // Add class to enable transition
-            overlay.style.opacity = '1'; // Trigger fade to full opacity
-            // --- End Game Over Fade-in Logic ---
-            
-            // TODO: Add logic for slow-motion if desired (e.g., set a flag game.update checks)
+        this.gameCanvas.addEventListener('click', async (event) => {
+            const currentPreview = this.gameInstance.getPlacementPreview();
+            if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) return;
+
+            if (this.gameInstance.defenceManager) {
+                await this.gameInstance.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
+            }
+            const selectedButton = document.querySelector(`.defence-button[data-defence-id="${selectedDefenceType}"]`);
+            if (selectedButton) selectedButton.classList.remove('selected');
+            selectedDefenceType = null;
+            isPlacingDefence = false;
+            placementPreviewPos = null;
+            this.gameInstance.setPlacementPreview(null, null);
+        });
+    }
+
+    _setupDefenceMenu() {
+        if (this.gameInstance.defenceManager && this.gameInstance.defenceManager.isLoaded && this.gameInstance.priceManager) {
+            this._updateDefenceMenuDOM(this.gameInstance.defenceManager.getDefinitions());
+
+            this.gameInstance.defenceManager.addEventListener('definitionsUpdated', () => {
+                const currentSelectedId = selectedDefenceType;
+                this._updateDefenceMenuDOM(this.gameInstance.defenceManager.getDefinitions());
+                if (currentSelectedId) {
+                    const selectedButton = document.querySelector(`.defence-button[data-defence-id="${currentSelectedId}"]`);
+                    if (selectedButton) selectedButton.classList.add('selected');
+                }
+                // No need to call updateUI, game loop does it
+            });
+
+            this.gameInstance.priceManager.addEventListener('costsUpdated', () => {
+                // No need to call updateUI, game loop does it. Price update happens within updateUI.
+            });
+
+            if (this.gameInstance.base) {
+                this.gameInstance.base.addEventListener('fundsUpdated', () => {
+                    // No need to call updateUI, game loop does it
         });
     } else {
-        console.error("Controller: Cannot add gameOver listener, gameInstance.base not available!");
+                console.error("Controller: Cannot add fundsUpdated listener, game.base is not available.");
     }
 
-    // Get menu and canvas elements
-    const gameCanvas = gameInstance.layers.foreground?.canvas; 
-    // Get UI display elements
-    const fundsDisplay = document.getElementById('fundsDisplay');
-    const waveInfoDisplay = document.getElementById('waveInfoDisplay');
-
-    if (!gameCanvas) {
-        console.error("Foreground canvas not found!");
-        return; // Stop if canvas is missing
-    }
-
-    // Function to create/update menu buttons (NOW SORTS BY PRICE)
-    /*async*/ function updateDefenceMenu(definitions) { // <-- REMOVE async
-        // console.log('DEBUG: Entering updateDefenceMenu'); // Optional log
-        // --- Detailed Guard Clause Check ---
-        if (!gameInstance.priceManager) {
-            console.error("updateDefenceMenu: PriceManager not available!");
-            // Get the actual menu element here
-            const menuElement = document.getElementById('defenceMenu');
-            if(menuElement) menuElement.innerHTML = '<p style="color:red;">Error: Prices unavailable.</p>';
-            return;
+            if (this.gameInstance.waveManager) {
+                this.gameInstance.waveManager.addEventListener('statusUpdated', () => {
+                    // No need to call updateUI, game loop does it
+                });
+            } else {
+                console.error("Controller: Cannot add statusUpdated listener, game.waveManager is not available.");
+            }
+        } else {
+            console.error('Could not initially populate defence menu or set up listener (DefenceManager or PriceManager missing/not loaded).');
         }
+    }
 
-        // Get the actual menu element here too
-        const menuElement = document.getElementById('defenceMenu');
-        menuElement.innerHTML = ''; // Clear existing content
-        // Use cached costs instead of recalculating
-        const calculatedCosts = gameInstance.priceManager.getStoredCosts();
+    // Helper to update the DOM for the defence menu
+    _updateDefenceMenuDOM(definitions) {
+        if (!this.defenceMenuElement || !this.gameInstance?.priceManager) return;
 
-        // --- Sort defences by cached cost --- 
+        this.defenceMenuElement.innerHTML = '';
+        const calculatedCosts = this.gameInstance.priceManager.getStoredCosts();
         const sortedDefences = Object.entries(definitions)
-            .filter(([id, def]) => calculatedCosts[id] !== undefined && calculatedCosts[id] !== Infinity) // Filter out invalid costs before sorting
+            .filter(([id, def]) => calculatedCosts[id] !== undefined && calculatedCosts[id] !== Infinity)
             .sort(([idA], [idB]) => calculatedCosts[idA] - calculatedCosts[idB]);
-        // --------------------------------------
 
-        // --- Create buttons from sorted list --- 
         for (const [id, def] of sortedDefences) {
-            // Cost is already calculated and validated during sorting
             const cost = calculatedCosts[id]; 
-
-            // Check only for name, as cost validity checked in filter
             if (def && def.name) { 
                 const button = document.createElement('button');
                 button.classList.add('defence-button');
                 button.dataset.defenceId = id;
-
                 button.addEventListener('click', () => {
-                    handleDefenceSelection(id, button);
+                    this._handleDefenceSelection(id, button);
                 });
-
                 const nameSpan = document.createElement('span');
                 nameSpan.classList.add('name');
                 nameSpan.textContent = def.name;
-
                 const priceSpan = document.createElement('span');
                 priceSpan.classList.add('price');
-                priceSpan.textContent = `${cost}G`; // Use calculated cost
-
+                priceSpan.textContent = `${cost}G`;
                 button.appendChild(nameSpan);
                 button.appendChild(priceSpan);
-                
-                // Append to the actual menu element
-                menuElement.appendChild(button);
+                this.defenceMenuElement.appendChild(button);
             } 
-            // Removed else block - warnings handled by filter implicitly
         }
-        // --- End button creation ---
     }
 
-    // Function to handle defence selection
-    function handleDefenceSelection(defenceId, clickedButton) {
-        let definition = null; // Store definition here
+    // Helper to handle defence selection logic
+    _handleDefenceSelection(defenceId, clickedButton) {
+        let definition = null;
         if (selectedDefenceType === defenceId) {
-            // Deselect if clicking the same button again
             selectedDefenceType = null;
             isPlacingDefence = false;
             placementPreviewPos = null;
             clickedButton.classList.remove('selected');
-            // Clear preview in game state
-            gameInstance.setPlacementPreview(null, null); // <-- Pass null for definition too
+            this.gameInstance.setPlacementPreview(null, null);
         } else {
-            // Select new defence type
             selectedDefenceType = defenceId;
             isPlacingDefence = true;
-            
-            // --- Get the definition --- 
-            if (gameInstance.defenceManager) {
-                 definition = gameInstance.defenceManager.getDefinition(defenceId);
+            if (this.gameInstance.defenceManager) {
+                definition = this.gameInstance.defenceManager.getDefinition(defenceId);
                  if (!definition) {
                      console.error(`Controller: Could not find definition for selected defence ID: ${defenceId}`);
-                     // Handle error - maybe deselect?
                      selectedDefenceType = null;
                      isPlacingDefence = false;
                      return;
                  }
             } else {
                  console.error("Controller: DefenceManager not available to get definition.");
-                 return; // Cannot proceed
+                return;
             }
-            // --- End Get definition --- 
-
-            // Update button styling
-            // Get the actual menu element here
             document.querySelectorAll('#defenceMenu .defence-button.selected').forEach(btn => btn.classList.remove('selected'));
             clickedButton.classList.add('selected');
         }
-        // Update game state for rendering preview
-        // If selecting, pass definition but null position (mousemove will set position)
-        // If deselecting, definition is already null from above
-        gameInstance.setPlacementPreview(placementPreviewPos, definition); // <-- Pass definition
+        this.gameInstance.setPlacementPreview(placementPreviewPos, definition);
     }
 
-    // Canvas Mouse Move Listener
-    gameCanvas.addEventListener('mousemove', (event) => {
-        if (!isPlacingDefence) return;
-
-        const rect = gameCanvas.getBoundingClientRect();
-        const scaleX = gameCanvas.width / rect.width;
-        const scaleY = gameCanvas.height / rect.height;
-        
-        placementPreviewPos = {
-            x: (event.clientX - rect.left) * scaleX,
-            y: (event.clientY - rect.top) * scaleY
-        };
-        // Update game state for rendering preview
-        // --- Pass definition along with position --- 
-        let definition = null;
-        if (selectedDefenceType && gameInstance.defenceManager) {
-            definition = gameInstance.defenceManager.getDefinition(selectedDefenceType);
-        } // If definition isn't found, setPlacementPreview will handle null gracefully
-
-        // ONLY set preview if we have a valid position AND definition
-        if (placementPreviewPos && definition) {
-             gameInstance.setPlacementPreview(placementPreviewPos, definition);
-        } else {
-             // If no definition found (or mouse moved out, etc.), clear the preview
-             gameInstance.setPlacementPreview(null, null); 
-             // Clear the controller's position cache too, as it's no longer relevant
-             placementPreviewPos = null;
-        }
-        // --- End Pass definition --- 
-    });
-
-    // Canvas Click Listener
-    gameCanvas.addEventListener('click', async (event) => {
-        // Check placement state AND validity from the game model
-        const currentPreview = gameInstance.getPlacementPreview(); 
-        if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) {
-           // If not placing, no type selected, or preview doesn't exist or is invalid, do nothing
-           // console.log("Placement attempt ignored: Invalid state or location."); // Optional debug log
+    // UI Update Method (called by Game loop)
+    updateUI() {
+        // Guard clauses for necessary components
+        if (!this.gameInstance || !this.gameInstance.base || !this.gameInstance.waveManager || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.gameInstance.priceManager || !this.defenceMenuElement) {
+            // Optional: Log warning if called too early
+            // console.warn("updateUI called before controller/game fully initialized.");
            return;
         }
 
-        // If we reach here, placement is attempted on a valid spot
-        
-        // Tell DefenceManager to place the defence (it now trusts the position is valid)
-        if (gameInstance.defenceManager) {
-            // Pass the known valid position from the preview object
-            await gameInstance.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
-        }
+        // Update Funds Display
+        const currencySuffix = this.gameInstance.gameConfig?.ui?.currencySuffix || 'G';
+        this.fundsDisplay.textContent = `${this.gameInstance.base.currentFunds}${currencySuffix}`;
 
-        // Clear selection state (only if placement was attempted, successful or not)
-        const selectedButton = document.querySelector(`.defence-button[data-defence-id="${selectedDefenceType}"]`);
-        if (selectedButton) selectedButton.classList.remove('selected');
-        
-        selectedDefenceType = null;
-        isPlacingDefence = false;
-        placementPreviewPos = null; // Clear the controller's cached position
-        // Update game state to remove preview
-        gameInstance.setPlacementPreview(null, null); // <-- CORRECT CALL with null definition
-    });
-
-    // Initial population and setup listener for updates
-    if (gameInstance.defenceManager && gameInstance.defenceManager.isLoaded && gameInstance.priceManager) { // Check priceManager here too
-        updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // Update uses cached costs now
-        // Listen for definition updates from DefenceManager (keeps current logic)
-        gameInstance.defenceManager.addEventListener('definitionsUpdated', /*async*/ () => { // <-- REMOVE async
-            const currentSelectedId = selectedDefenceType;
-            // await updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // <-- REMOVE await
-            updateDefenceMenu(gameInstance.defenceManager.getDefinitions()); // Rebuild the menu
-            if (currentSelectedId) {
-                const selectedButton = document.querySelector(`.defence-button[data-defence-id="${currentSelectedId}"]`);
-                if (selectedButton) selectedButton.classList.add('selected');
-            }
-            updateUI(); // <-- ADD call to update affordability of new buttons
-        });
-        // ADD listener for cost updates from PriceManager
-        gameInstance.priceManager.addEventListener('costsUpdated', () => {
-            // console.log("Controller: Received costsUpdated event. Running updateUI."); // Optional debug
-            updateUI(); // Trigger UI update when costs change
-        });
-        // ADD listener for funds updates from Base
-        if (gameInstance.base) { // Ensure base exists before adding listener
-            gameInstance.base.addEventListener('fundsUpdated', () => {
-                // console.log("Controller: Received fundsUpdated event. Running updateUI."); // Optional debug
-                updateUI(); // Trigger UI update when funds change
-            });
-        } else {
-             console.error("Controller: Cannot add fundsUpdated listener, game.base is not available.");
-        }
-        // ADD listener for wave status updates
-        if (gameInstance.waveManager) { // Ensure waveManager exists
-            gameInstance.waveManager.addEventListener('statusUpdated', () => {
-                // console.log("Controller: Received wave statusUpdated event. Running updateUI."); // Optional debug
-                updateUI(); // Trigger UI update when wave status changes
-            });
-        } else {
-            console.error("Controller: Cannot add statusUpdated listener, game.waveManager is not available.");
-        }
-    } else {
-        console.error('Could not initially populate defence menu or set up listener (DefenceManager or PriceManager missing/not loaded).');
-    }
-
-    // --- UI Update Function (Handles Text and Button States) ---
-    /*async*/ function updateUI() { // <-- REMOVE async
-        // REMOVED: console.log('DEBUG: Entering updateUI function');
-        
-        // --- Detailed Guard Clause Check --- 
-        if (!gameInstance.base) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.base is missing");*/
-        if (!gameInstance.waveManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.waveManager is missing");*/
-        if (!fundsDisplay) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - fundsDisplay element is missing");*/
-        if (!waveInfoDisplay) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - waveInfoDisplay element is missing");*/
-        if (!gameInstance.defenceManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.defenceManager is missing");*/
-        if (!defenceMenu) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - defenceMenu element is missing");*/
-        if (!gameInstance.priceManager) { return; } // REMOVED: /*console.log("DEBUG: updateUI exiting - game.priceManager is missing");*/
-        // --- End Detailed Check --- 
-
-        // Original Guard Clause (now redundant because of above checks)
-        // if (!game.base || !game.waveManager || !fundsDisplay || !waveInfoDisplay || !defenceManager || !defenceMenu || !priceManager) return;
-
-        // --- Update Text Displays ---
-        const currencySuffix = gameInstance.gameConfig?.ui?.currencySuffix || 'G'; // Use config, fallback to 'G'
-        fundsDisplay.textContent = `${gameInstance.base.currentFunds}${currencySuffix}`; 
-
+        // Update Wave Info Display
         let waveText = '';
-        if (gameInstance.waveManager.isFinished) {
+        if (this.gameInstance.waveManager.isFinished) {
             waveText = "All Waves Complete!";
-        } else if (gameInstance.waveManager.timeUntilNextWave > 0) {
-            const seconds = Math.ceil(gameInstance.waveManager.timeUntilNextWave / 1000);
+        } else if (this.gameInstance.waveManager.timeUntilNextWave > 0) {
+            const seconds = Math.ceil(this.gameInstance.waveManager.timeUntilNextWave / 1000);
             waveText = `Next wave in ${seconds}s`;
-        } else if (gameInstance.waveManager.currentWaveNumber > 0) {
-            waveText = `Wave ${gameInstance.waveManager.currentWaveNumber}`;
+        } else if (this.gameInstance.waveManager.currentWaveNumber > 0) {
+            waveText = `Wave ${this.gameInstance.waveManager.currentWaveNumber}`;
         } else {
             waveText = "Get Ready!";
         }
-        waveInfoDisplay.textContent = waveText;
+        this.waveInfoDisplay.textContent = waveText;
 
-        // --- Update Button Affordability AND Price Text ---
-        const currentFunds = gameInstance.base.currentFunds;
-        // Use cached costs instead of recalculating
-        const calculatedCosts = gameInstance.priceManager.getStoredCosts();
-        const buttons = defenceMenu.querySelectorAll('.defence-button');
+        // Update Target Damage Display
+        if (this.gameInstance.strikeManager) {
+            const timestamp = performance.now();
+            const targetDeltaR = this.gameInstance.strikeManager.getCumulativeTargetDamageR(timestamp);
+            this.targetDamageDisplay.textContent = `Target ΔR: ${targetDeltaR.toFixed(2)}`;
+        } else {
+            this.targetDamageDisplay.textContent = `Target ΔR: N/A`;
+        }
+
+        // Update Button Affordability AND Price Text
+        const currentFunds = this.gameInstance.base.currentFunds;
+        const calculatedCosts = this.gameInstance.priceManager.getStoredCosts();
+        const buttons = this.defenceMenuElement.querySelectorAll('.defence-button');
 
         buttons.forEach(button => {
             const defenceId = button.dataset.defenceId;
             const cost = calculatedCosts[defenceId]; // UNROUNDED cost
+            const priceSpan = button.querySelector('.price');
 
-            // --- Update Price Text --- 
-            const priceSpan = button.querySelector('.price'); // Find the price span inside the button
             if (priceSpan && cost !== undefined && cost !== Infinity) {
-                // Round cost for display based on config
                 let displayCost;
-                const roundingDecimals = gameInstance.gameConfig?.ui?.priceRoundingDecimals ?? 0; // Default to 0 decimals
+                const roundingDecimals = this.gameInstance.gameConfig?.ui?.priceRoundingDecimals ?? 0;
                 if (roundingDecimals >= 0) {
                     const factor = Math.pow(10, roundingDecimals);
                     displayCost = Math.round(cost * factor) / factor;
                 } else {
-                    displayCost = Math.round(cost); // Fallback to integer rounding
+                    displayCost = Math.round(cost);
                 }
-                priceSpan.textContent = `${displayCost}${currencySuffix}`; // Use rounded cost and suffix
+                priceSpan.textContent = `${displayCost}${currencySuffix}`;
             } else if (priceSpan) {
-                priceSpan.textContent = `---${currencySuffix}`; // Indicate invalid/missing cost with suffix
+                priceSpan.textContent = `---${currencySuffix}`;
             }
-            // ------------------------
 
             if (cost === undefined || cost === Infinity) { 
                 button.classList.add('disabled'); 
                 return;
             }
 
-            // --- Update Affordability --- 
-            // Compare against the UNROUNDED cost for accuracy
             if (currentFunds >= cost) {
                 button.classList.remove('disabled');
             } else {
                 button.classList.add('disabled');
                 if (selectedDefenceType === defenceId) {
-                    handleDefenceSelection(defenceId, button); 
+                    // Auto-deselect if player becomes unable to afford the selected defence
+                    this._handleDefenceSelection(defenceId, button);
                 }
             }
-            // --------------------------
         });
     }
+}
 
-    // Initial UI update after menu population
-    updateUI(); 
+
+// Create and start game
+window.addEventListener('DOMContentLoaded', async () => {
+
+    // Create Game instance first (no controller needed in constructor anymore if we adjust Game)
+    const gameInstance = new Game(); // Assumes Game constructor doesn't strictly NEED controller
+    window.game = gameInstance; // Expose for debugging
+
+    // Create Controller instance
+    const controllerInstance = new Controller();
+
+    try {
+        // Wait for the game to fully initialize (loads assets, etc.)
+        await gameInstance.ready();
+
+        // Initialize Controller AFTER game is ready, passing gameInstance
+        await controllerInstance.initialize(gameInstance);
+
+        // --- Assign controller to game instance AFTER both are initialized (Alternative approach) ---
+        // Requires Game class to allow setting controller after construction
+        if (typeof gameInstance.setController === 'function') { 
+            gameInstance.setController(controllerInstance); 
+        } else {
+             console.warn("Game class does not have setController method. UI updates might rely on direct call from game loop.")
+             // If Game loop calls controllerInstance.updateUI() directly, this is okay.
+        }
+        // -------------------------------------------------------------------------------------
+
+    } catch (error) {
+        console.error("Controller: Error during initialization:", error);
+        const overlay = document.getElementById('gameOverlay'); // Get overlay directly for error
+        const popupTitle = document.getElementById('popupTitle'); // Get title directly for error
+        if (overlay && popupTitle) {
+            popupTitle.textContent = "Initialization Failed!";
+            overlay.classList.remove('hidden');
+        } else {
+            alert("Critical error during game initialization. Check console or element IDs.");
+        }
+        return;
+    }
+
+    // REMOVED: All the setup logic is now inside Controller.initialize
+
 });

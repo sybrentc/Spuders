@@ -14,8 +14,11 @@ const INITIAL_MUSIC_VOLUME = 0.2; // Low volume for fade target
 const FULL_MUSIC_VOLUME = 1.0;    // Full volume
 const MUSIC_PATH = 'assets/music/bach-menuet-frenchsuite3.mp3'; // Path to music
 
+// Forward declare Controller if not using modules or circular dependencies exist
+// class Controller {}; 
+
 export default class Game {
-    constructor() {
+    constructor() { // Controller can be set later
         this.container = document.getElementById('gameContainer');
         this.layers = {}; // Store layers by name
         this.config = null;
@@ -41,7 +44,8 @@ export default class Game {
         this.priceManager = null; // Initialize as null
         this.difficulty = null;
         this.currencyScale = null;
-        this.strikeManager = null; // <-- ADDED: Initialize strikeManager property
+        this.strikeManager = null;
+        this.controller = null; // <-- Controller will be set later
         // Path metrics - loaded from path-stats.json
         this.totalPathLength = null;
         this.segmentLengths = [];
@@ -652,11 +656,28 @@ export default class Game {
             }
         }
 
-        // --- ADDED: Update StrikeManager ---
-        if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded before updating
-            this.strikeManager.calculateZBuffer();
+        // --- ADDED: Trigger StrikeManager update calculation --- 
+        if (this.strikeManager) {
+            // Call the getter which internally calls the update calculation
+            this.strikeManager.getCumulativeTargetDamageR(timestamp); 
+            // We don't need the return value here, just triggering the update
         }
-        // ---------------------------------
+        // --- END ADDED ---
+
+        // --- MOVED: Update StrikeManager Z-Buffer Calculation ---
+        // Moved slightly earlier, but could stay here too.
+        if (this.strikeManager?.isConfigLoaded()) {
+            this.strikeManager.calculateZBuffer(); 
+        }
+        // --- END MOVED ---
+
+        // --- ADDED: Call Controller UI Update ---
+        if (this.controller && typeof this.controller.updateUI === 'function') {
+             this.controller.updateUI();
+        } else {
+             console.warn("Game loop: Controller or controller.updateUI is missing.");
+        }
+        // --- END ADDED ---
     }
     
     createLayer(className, zIndex) {
@@ -1118,6 +1139,16 @@ export default class Game {
             this.backgroundMusic = null; // Ensure it's null if creation fails
         }
     }
+
+    // --- ADDED: Method to set controller after initialization ---
+    setController(controllerInstance) {
+        if (controllerInstance && typeof controllerInstance.updateUI === 'function') {
+            this.controller = controllerInstance;
+        } else {
+            console.error("Game.setController: Invalid controller instance provided.");
+        }
+    }
+    // --- END ADDED ---
 }
 
 // --- Standalone Path Utility Function --- 

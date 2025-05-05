@@ -26,6 +26,14 @@ export default class StrikeManager {
         this.stampMap = null;
         this.stampMapCenterCol = 0;
         this.stampMapCenterRow = 0;
+
+        // --- ADDED: Properties for Target Damage Calculation ---
+        this.currentWaveNumber = 0;
+        this.currentWaveStartTime = 0; // Timestamp (ms) when the current wave started
+        this.currentWaveStartTotalR = 0; // Total R at the start of the current wave
+        this.totalAccumulatedTargetDamageR = 0; // Delta R accumulated *before* the current wave
+        this.currentDn = 0; // Store the calculated dn for the current wave
+        // --- END ADDED ---
     }
 
     async loadConfig(path = 'assets/strike.json') {
@@ -373,6 +381,196 @@ export default class StrikeManager {
 
         // console.log(`StrikeManager.findOptimalTarget: Found ${optimalCells.length} optimal cell(s) with z=${maxZ}. Selected [${selectedCell.col}, ${selectedCell.row}] -> World (${targetWorldCoords.x.toFixed(1)}, ${targetWorldCoords.y.toFixed(1)})`); // Optional log
         return targetWorldCoords;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Method to calculate required damage rate dn ---
+    /**
+     * Calculates the required fractional damage rate (dn) for a given wave number.
+     * Uses Eq. 32: dn = ((f - 1) / T0) + (1 / Tn) * (1 - (f / gamma_n))
+     * where gamma_n = Tn+1 / Tn and T0 = L / s_min.
+     * @param {number} waveNumber - The wave number (n) to calculate dn for.
+     * @returns {number} The calculated dn, or 0 if calculation fails or dn < 0.
+     * @private
+     */
+    _calculateDn(waveNumber) {
+        if (!this.game || !this.game.waveManager || !this.game.enemyManager) {
+            console.error("StrikeManager._calculateDn: Missing required game managers.");
+            return 0;
+        }
+
+        // 1. Get Parameters
+        const f = this.game.waveManager.getDifficultyIncreaseFactor();
+        const L = this.game.getTotalPathLength();
+        const s_min = this.game.enemyManager.getMinimumEnemySpeed();
+        const Tn = this.game.waveManager.getWaveDurationSeconds(waveNumber);
+        const Tn_plus_1 = this.game.waveManager.getWaveDurationSeconds(waveNumber + 1);
+
+        // 2. Validate Parameters
+        if (f === undefined || f === null || f <= 1) {
+            console.error(`StrikeManager._calculateDn: Invalid difficulty increase factor (f=${f}). Must be > 1.`);
+            return 0;
+        }
+        if (L === undefined || L === null || L <= 0) {
+            console.error(`StrikeManager._calculateDn: Invalid total path length (L=${L}). Must be > 0.`);
+            return 0;
+        }
+        if (s_min === undefined || s_min === null || s_min <= 0) {
+            console.error(`StrikeManager._calculateDn: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
+            return 0;
+        }
+        if (Tn === undefined || Tn === null || Tn <= 1e-6) { // Use epsilon for duration check
+            console.warn(`StrikeManager._calculateDn: Invalid duration Tn (${Tn}) for wave ${waveNumber}. Cannot calculate dn.`);
+            return 0;
+        }
+        if (Tn_plus_1 === undefined || Tn_plus_1 === null) {
+            console.warn(`StrikeManager._calculateDn: Duration Tn+1 not available for wave ${waveNumber}. Cannot calculate dn.`);
+            // Potentially use dn = (f-1)/T0 as fallback? Returning 0 for now.
+            return 0;
+        }
+        // Check Tn+1 specifically for <= 0, as gamma calculation needs positive divisor
+        if (Tn_plus_1 <= 1e-6) {
+             console.warn(`StrikeManager._calculateDn: Invalid duration Tn+1 (${Tn_plus_1}) for wave ${waveNumber}. Cannot calculate dn.`);
+             return 0;
+        }
+
+        // 3. Calculate Intermediate Values
+        const T0 = L / s_min;
+        if (T0 <= 0) {
+            console.error(`StrikeManager._calculateDn: Calculated T0 (${T0}) is not positive.`);
+            return 0;
+        }
+
+        const gamma_n = Tn_plus_1 / Tn;
+        // Check gamma_n validity (redundant due to Tn/Tn+1 checks, but safe)
+        if (!isFinite(gamma_n) || gamma_n <= 0) {
+            console.error(`StrikeManager._calculateDn: Invalid gamma_n (${gamma_n}) calculated for wave ${waveNumber}.`);
+            return 0;
+        }
+
+        // 4. Calculate dn using Eq. 32
+        const term1 = (f - 1) / T0;
+        const term2_bracket = 1 - (f / gamma_n);
+        const term2 = (1 / Tn) * term2_bracket;
+        const dn = term1 + term2;
+
+        // Ensure dn is not negative
+        const final_dn = Math.max(0, dn);
+        
+        // Optional log for debugging
+         //console.log(`_calculateDn(wave=${waveNumber}): f=${f.toFixed(2)}, T0=${T0.toFixed(2)}, Tn=${Tn.toFixed(2)}, Tn+1=${Tn_plus_1.toFixed(2)}, gamma_n=${gamma_n.toFixed(2)} => dn=${final_dn.toFixed(4)}`);
+
+        return final_dn;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Method to update target damage calculation ---
+    /**
+     * Updates the cumulative target damage based on the current wave and time.
+     * Should be called periodically (e.g., every frame or few seconds).
+     * @param {number} timestamp - The current high-resolution timestamp (performance.now()).
+     */
+    updateTargetDamageCalculation(timestamp) {
+        if (!this.game || !this.game.waveManager || !this.game.defenceManager || !this.configLoaded) {
+            // console.warn("StrikeManager.updateTargetDamage: Missing dependencies or not ready.");
+            return; // Not ready yet
+        }
+
+        const latestWaveNum = this.game.waveManager.currentWaveNumber;
+
+        // --- Wave Change Detection ---
+        if (latestWaveNum !== this.currentWaveNumber && this.currentWaveNumber > 0) {
+            // Calculate final Delta R for the completed wave (this.currentWaveNumber)
+            const completedWaveNumber = this.currentWaveNumber;
+            // Request the duration of the completed wave using the updated getter
+            const completedWaveDuration = this.game.waveManager.getWaveDurationSeconds(completedWaveNumber);
+            const previousDn = this.currentDn; // Use the dn calculated for the previous wave
+
+            if (completedWaveDuration !== null && completedWaveDuration > 0 && previousDn !== null) {
+                const finalDeltaR_completedWave = this.currentWaveStartTotalR * (1 - Math.exp(-previousDn * completedWaveDuration));
+                
+                if (isFinite(finalDeltaR_completedWave) && finalDeltaR_completedWave > 0) {
+                    this.totalAccumulatedTargetDamageR += finalDeltaR_completedWave;
+                    // console.log(`StrikeManager: Wave ${completedWaveNumber} ended. Final DeltaR=${finalDeltaR_completedWave.toFixed(2)}. Total Acc DeltaR=${this.totalAccumulatedTargetDamageR.toFixed(2)}`);
+                } else {
+                    // console.warn(`StrikeManager: Invalid final DeltaR calculated for wave ${completedWaveNumber}. Not adding to total.`);
+                }
+            } else {
+                console.warn(`StrikeManager: Could not calculate final DeltaR for wave ${completedWaveNumber}. Duration=${completedWaveDuration}, dn=${previousDn}`);
+            }
+        }
+
+        // --- Update State for Current/New Wave ---
+        if (latestWaveNum !== this.currentWaveNumber || this.currentWaveNumber === 0 && latestWaveNum > 0) {
+            // This is the start of a new wave (or the very first wave)
+            if (latestWaveNum > 0) { // Only proceed if it's a valid wave number
+                this.currentWaveNumber = latestWaveNum;
+                this.currentWaveStartTime = timestamp; // Record the start time of THIS wave
+                
+                // --- TODO: Get R_n(0) - Placeholder for now --- 
+                // This will be implemented in Step 2/3
+                // For now, use a placeholder or 0
+                this.currentWaveStartTotalR = this.game.defenceManager.getCurrentTotalEarningRate ? this.game.defenceManager.getCurrentTotalEarningRate() : 0; // Placeholder - call will fail until Step 2
+                // --------------------------------------------
+                
+                // Calculate and store dn for THIS wave
+                this.currentDn = this._calculateDn(this.currentWaveNumber);
+                 // console.log(`StrikeManager: Wave ${this.currentWaveNumber} started. R_start=${this.currentWaveStartTotalR.toFixed(2)}, Calculated dn=${this.currentDn.toFixed(4)}`);
+            } else {
+                 // Handle transition back to 0 (e.g., game reset), reset calculation state
+                 this.currentWaveNumber = 0;
+                 this.currentWaveStartTime = 0;
+                 this.currentWaveStartTotalR = 0;
+                 this.totalAccumulatedTargetDamageR = 0;
+                 this.currentDn = 0;
+            }
+        }
+
+        // --- Calculate Current Target (Using currently stored dn) ---
+        let currentTargetDeltaR = 0;
+        if (this.currentWaveNumber > 0 && this.currentDn !== null && this.currentDn >= 0) {
+            const t_seconds = Math.max(0, (timestamp - this.currentWaveStartTime) / 1000.0);
+            const deltaR_thisWave = this.currentWaveStartTotalR * (1 - Math.exp(-this.currentDn * t_seconds));
+            
+            if (isFinite(deltaR_thisWave)) {
+                currentTargetDeltaR = this.totalAccumulatedTargetDamageR + deltaR_thisWave;
+            } else {
+                // If calculation fails, just use the accumulated value from previous waves
+                currentTargetDeltaR = this.totalAccumulatedTargetDamageR; 
+            }
+        }
+        
+        // We don't store currentTargetDeltaR persistently, it's calculated on demand by getCumulativeTargetDamageR
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Getter for the calculated target damage ---
+    /**
+     * Returns the total cumulative target damage (Delta R) up to the given timestamp.
+     * It internally calls updateTargetDamageCalculation to ensure the value is current.
+     * @param {number} timestamp - The current high-resolution timestamp (performance.now()).
+     * @returns {number} The total target damage Delta R.
+     */
+    getCumulativeTargetDamageR(timestamp) {
+        this.updateTargetDamageCalculation(timestamp); // Ensure calculations are up-to-date
+
+        // Recalculate the current target based on the updated state
+        let currentTargetDeltaR = 0;
+        if (this.currentWaveNumber > 0 && this.currentDn !== null && this.currentDn >= 0 && this.currentWaveStartTotalR > 0) {
+            const t_seconds = Math.max(0, (timestamp - this.currentWaveStartTime) / 1000.0);
+            const deltaR_thisWave = this.currentWaveStartTotalR * (1 - Math.exp(-this.currentDn * t_seconds));
+            
+            if (isFinite(deltaR_thisWave)) {
+                currentTargetDeltaR = this.totalAccumulatedTargetDamageR + deltaR_thisWave;
+            } else {
+                currentTargetDeltaR = this.totalAccumulatedTargetDamageR;
+            }
+        } else {
+             // If not in a wave or calculation failed, return only previously accumulated damage
+             currentTargetDeltaR = this.totalAccumulatedTargetDamageR;
+        }
+        
+        return Math.max(0, currentTargetDeltaR); // Ensure non-negative
     }
     // --- END ADDED ---
 } 
