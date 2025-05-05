@@ -212,19 +212,50 @@ export default class StrikeManager {
 
         const defenders = this.defenceManager.getActiveDefences();
 
+        // --- Optimization: Sort defenders by ID to minimize earning rate lookups --- 
+        defenders.sort((a, b) => {
+            if (a.id < b.id) return -1;
+            if (a.id > b.id) return 1;
+            return 0;
+        });
+        // --- End Optimization ---
+
+        // --- State for optimization ---
+        let currentDefenderTypeId = null;
+        let currentEarningRate = 0;
+        // --- End State ---
+
         // Clear the Z-buffer (fill with zeros)
         for (let r = 0; r < this.gridHeight; r++) {
             this.zBuffer[r].fill(0);
         }
 
         // Iterate through each active defender
-        for (const defender of defenders) {
+        for (const defender of defenders) { // Looping through SORTED defenders
             const hp = defender.hp; // This is the scaled health
             const defenderGridCol = defender.gridCol;
             const defenderGridRow = defender.gridRow;
 
             // Skip if defender has no health, no grid position yet, OR if wear is not enabled
-            if (hp <= 0 || defenderGridCol === null || !defender.wearEnabled) {
+            if (hp <= 0 || defenderGridCol === null /*|| !defender.wearEnabled*/) {
+                continue;
+            }
+
+            // --- Optimization: Check if defender type changed ---
+            if (defender.id !== currentDefenderTypeId) {
+                currentDefenderTypeId = defender.id;
+                // Look up earning rate ONCE per type change
+                currentEarningRate = this.defenceManager.getEarningRateForType(currentDefenderTypeId);
+                // Validate the fetched rate
+                if (!currentEarningRate || currentEarningRate <= 0 || !isFinite(currentEarningRate)) {
+                     // console.warn(`StrikeManager: Invalid earning rate (${currentEarningRate}) for type ${currentDefenderTypeId}. Skipping its Z-buffer contribution.`); // Optional log
+                     currentEarningRate = 0; // Set to 0 to skip processing below
+                }
+            }
+            // --- End Optimization Check ---
+
+            // Skip processing if this defender type has no valid earning rate
+            if (currentEarningRate <= 0) {
                 continue;
             }
 
@@ -268,7 +299,8 @@ export default class StrikeManager {
 
                     // Compare distance and increment Z-buffer if within radius
                     if (distanceFromStamp <= wipeoutRadius) {
-                        this.zBuffer[targetRow][targetCol]++;
+                        // Add the cached earning rate for this defender type
+                        this.zBuffer[targetRow][targetCol] += currentEarningRate; 
                     }
                 }
             }
