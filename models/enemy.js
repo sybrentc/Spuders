@@ -164,13 +164,11 @@ export default class Enemy {
     
     hit(damage) {
         if (this.isDead) return;
-        // --- MODIFIED: Scale incoming damage ---
-        const scaledDamage = damage * this.healthScaleFactor;
-        this.hp -= scaledDamage;
-        // --- END MODIFIED ---
+        this.hp -= damage; // Subtract damage directly (already in correct units)
         this.isFlashing = true;
         this.lastFlashTime = performance.now();
         if (this.hp <= 0) {
+            this.hp = 0; // Ensure hp doesn't go negative visually
             this.die();
         }
     }

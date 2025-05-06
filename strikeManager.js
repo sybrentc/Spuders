@@ -705,4 +705,80 @@ export default class StrikeManager {
         return { x: impactX, y: impactY };
     }
     // --- END ADDED ---
+
+    // --- ADDED: Bomb Explosion Logic ---
+    /**
+     * Executes a bomb explosion, calculating damage to defenders and, if real, to enemies.
+     * @param {object} impactCoords - The {x, y} coordinates of the bomb's impact.
+     * @param {Array<DefenceEntity>} targetDefenders - An array of defender entities to target.
+     * @param {Array<EnemyEntity>} targetEnemies - An array of enemy entities to target (collateral for real bombs).
+     * @param {boolean} isReal - True if this is a real bomb, false if it's a simulation.
+     * @returns {number} The total Delta R (damage dealt to defenders).
+     */
+    executeBombExplosion(impactCoords, targetDefenders, targetEnemies, isReal) {
+        // 1. Input Validation & Setup
+        if (!impactCoords || typeof impactCoords.x !== 'number' || typeof impactCoords.y !== 'number') {
+            console.error("StrikeManager.executeBombExplosion: Invalid impactCoords provided.", impactCoords);
+            return 0;
+        }
+
+        if (this.bombStrengthA === null || typeof this.bombStrengthA !== 'number' || this.bombStrengthA <= 0) {
+            console.error("StrikeManager.executeBombExplosion: Bomb strength (bombStrengthA) is not configured or invalid.", this.bombStrengthA);
+            return 0;
+        }
+
+        let totalDeltaRFromDefenders = 0;
+        const MIN_EFFECTIVE_DISTANCE = 1.0; // Prevent division by zero/extreme damage
+
+        // 2. Process Defenders
+        if (targetDefenders && Array.isArray(targetDefenders)) {
+            for (const defender of targetDefenders) {
+                // Skip already destroyed defenders
+                if (defender.isDestroyed) {
+                    continue;
+                }
+
+                // Calculate distance and potential damage
+                const distance = this._distance(defender.x, defender.y, impactCoords.x, impactCoords.y);
+                const effectiveDistance = Math.max(distance, MIN_EFFECTIVE_DISTANCE);
+                const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
+
+                // Apply damage via the defender's hit method
+                if (potentialDamage > 0) {
+                    const damageTaken = defender.hit(potentialDamage);
+                    totalDeltaRFromDefenders += damageTaken;
+                }
+            }
+        }
+
+        // 3. Process Enemies (Collateral Damage for Real Bombs)
+        if (isReal === true && targetEnemies && Array.isArray(targetEnemies)) {
+            for (const enemy of targetEnemies) {
+                // Skip already dead enemies
+                if (enemy.isDead) {
+                    continue;
+                }
+
+                // Determine enemy position
+                const enemyPos = enemy.getCurrentPosition ? enemy.getCurrentPosition() : { x: enemy.x, y: enemy.y };
+                if (!enemyPos || typeof enemyPos.x !== 'number' || typeof enemyPos.y !== 'number') {
+                    console.warn("StrikeManager.executeBombExplosion: Could not determine valid position for an enemy. Skipping it.", enemy);
+                    continue;
+                }
+
+                // Calculate distance and potential damage
+                const distance = this._distance(enemyPos.x, enemyPos.y, impactCoords.x, impactCoords.y);
+                const effectiveDistance = Math.max(distance, MIN_EFFECTIVE_DISTANCE);
+                const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
+
+                // Apply damage via the enemy's hit method (return value not used for Delta R)
+                if (potentialDamage > 0) {
+                    enemy.hit(potentialDamage);
+                }
+            }
+        }
+
+        return totalDeltaRFromDefenders;
+    }
+    // --- END ADDED ---
 } 

@@ -151,11 +151,21 @@ export default class DefenceEntity {
         
         // Apply direct damage if applicable
         if (this.attackStrength > 0) {
-            this.target.hit(this.attackStrength);
+            // --- ADDED: Calculate and apply SCALED damage --- 
+            const targetEnemy = this.target; // Get the target
+            if (targetEnemy && typeof targetEnemy.healthScaleFactor === 'number') {
+                // Calculate scaled damage using the enemy's own scale factor
+                const scaledAttackDamage = this.attackStrength * targetEnemy.healthScaleFactor;
+                // Call hit with the correctly scaled damage value
+                targetEnemy.hit(scaledAttackDamage);
+            } else {
+                // Log a warning if target or scale factor is missing (shouldn't happen if target is valid)
+                console.warn(`Defender ${this.id}: Could not apply damage. Target invalid or missing healthScaleFactor.`);
+            }
+            // --- END ADDED --- 
+
             // --- Deplete Wear (HP) --- 
             if (this.wearEnabled && this.wearDecrement > 0) {
-                // REMOVED: this.remainingHits--;
-                // REMOVED: this.hp -= this.wearDecrement;
                 this.hit(this.wearDecrement); // Call the new hit method for wear
             }
             // --- End Deplete Wear ---
