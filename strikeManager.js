@@ -1,3 +1,6 @@
+import { distanceBetween } from '../utils/geometryUtils.js';
+import Striker from '../models/striker.js';
+
 export default class StrikeManager {
     constructor(game) {
         if (!game) {
@@ -33,6 +36,10 @@ export default class StrikeManager {
         this.currentWaveStartTotalR = 0; // Total R at the start of the current wave
         this.totalAccumulatedTargetDamageR = 0; // Delta R accumulated *before* the current wave
         this.currentDn = 0; // Store the calculated dn for the current wave
+        // --- END ADDED ---
+
+        // --- ADDED: Tracker for bomb damage dealt ---
+        this.totalBombDamageDealtR = 0; // Initialize tracker
         // --- END ADDED ---
 
         // --- ADDED: Impact Randomization --- 
@@ -181,14 +188,6 @@ export default class StrikeManager {
         return { x: worldX, y: worldY };
     }
 
-    // --- ADDED: Helper for distance --- 
-    _distance(x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-    // --- END ADDED ---
-
     _precomputeStampMap() {
         if (!this.stampMapResolution || !this.configLoaded) {
             console.error("StrikeManager._precomputeStampMap: Cannot precompute stamp map, config not loaded or resolution missing.");
@@ -215,7 +214,7 @@ export default class StrikeManager {
         for (let r = 0; r < stampHeight; r++) {
             for (let c = 0; c < stampWidth; c++) {
                 const currentWorldPos = this._grid2world(c, r);
-                const dist = this._distance(originWorldPos.x, originWorldPos.y, currentWorldPos.x, currentWorldPos.y);
+                const dist = distanceBetween(originWorldPos, currentWorldPos);
                 this.stampMap[r][c] = dist;
             }
         }
@@ -706,79 +705,58 @@ export default class StrikeManager {
     }
     // --- END ADDED ---
 
-    // --- ADDED: Bomb Explosion Logic ---
+    // --- ADDED: Method to track damage dealt by bombs ---
     /**
-     * Executes a bomb explosion, calculating damage to defenders and, if real, to enemies.
-     * @param {object} impactCoords - The {x, y} coordinates of the bomb's impact.
-     * @param {Array<DefenceEntity>} targetDefenders - An array of defender entities to target.
-     * @param {Array<EnemyEntity>} targetEnemies - An array of enemy entities to target (collateral for real bombs).
-     * @param {boolean} isReal - True if this is a real bomb, false if it's a simulation.
-     * @returns {number} The total Delta R (damage dealt to defenders).
+     * Adds the given amount to the total bomb damage dealt tracker.
+     * @param {number} amount - The amount of damage (Delta R) to add.
      */
-    executeBombExplosion(impactCoords, targetDefenders, targetEnemies, isReal) {
-        // 1. Input Validation & Setup
-        if (!impactCoords || typeof impactCoords.x !== 'number' || typeof impactCoords.y !== 'number') {
-            console.error("StrikeManager.executeBombExplosion: Invalid impactCoords provided.", impactCoords);
+    addDamageDealtToTracker(amount) {
+        if (typeof amount === 'number' && amount > 0) {
+            this.totalBombDamageDealtR += amount;
+            // console.log(`StrikeManager: Bomb damage dealt: ${amount.toFixed(4)}. Total bomb damage: ${this.totalBombDamageDealtR.toFixed(4)}`);
+        } else if (typeof amount !== 'number') {
+            console.warn("StrikeManager.addDamageDealtToTracker: Invalid amount type received.", amount);
+        }
+        // No log if amount is 0 or negative
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Orchestration for a single real bomb drop ---
+    /**
+     * Triggers a single real bomb drop at the given impact coordinates.
+     * @param {object} impactCoords - The {x, y} coordinates for the bomb's impact.
+     * @returns {number} The Delta R (damage dealt to defenders) from this bomb, or 0 if failed.
+     */
+    triggerSingleBombDrop(impactCoords) {
+        if (!this.game) {
+            console.error("StrikeManager.triggerSingleBombDrop: Game instance not available.");
             return 0;
         }
-
         if (this.bombStrengthA === null || typeof this.bombStrengthA !== 'number' || this.bombStrengthA <= 0) {
-            console.error("StrikeManager.executeBombExplosion: Bomb strength (bombStrengthA) is not configured or invalid.", this.bombStrengthA);
+            console.error("StrikeManager.triggerSingleBombDrop: Bomb strength (bombStrengthA) is not configured or invalid.");
             return 0;
         }
 
-        let totalDeltaRFromDefenders = 0;
-        const MIN_EFFECTIVE_DISTANCE = 1.0; // Prevent division by zero/extreme damage
+        // For now, we assume a real strike. Simulation path will be handled later.
+        const isReal = true; 
 
-        // 2. Process Defenders
-        if (targetDefenders && Array.isArray(targetDefenders)) {
-            for (const defender of targetDefenders) {
-                // Skip already destroyed defenders
-                if (defender.isDestroyed) {
-                    continue;
-                }
-
-                // Calculate distance and potential damage
-                const distance = this._distance(defender.x, defender.y, impactCoords.x, impactCoords.y);
-                const effectiveDistance = Math.max(distance, MIN_EFFECTIVE_DISTANCE);
-                const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
-
-                // Apply damage via the defender's hit method
-                if (potentialDamage > 0) {
-                    const damageTaken = defender.hit(potentialDamage);
-                    totalDeltaRFromDefenders += damageTaken;
-                }
-            }
+        const striker = new Striker(impactCoords, this.bombStrengthA, this.game);
+        
+        if (!striker.valid) {
+            console.error("StrikeManager.triggerSingleBombDrop: Failed to create a valid Striker instance.");
+            return 0;
         }
 
-        // 3. Process Enemies (Collateral Damage for Real Bombs)
-        if (isReal === true && targetEnemies && Array.isArray(targetEnemies)) {
-            for (const enemy of targetEnemies) {
-                // Skip already dead enemies
-                if (enemy.isDead) {
-                    continue;
-                }
+        // For a real strike, the Striker will fetch live defenders and enemies internally.
+        // We pass null for optionalClonedDefenders as it's not a simulation.
+        const damageDealt = striker.applyExplosionDamage(isReal, null);
 
-                // Determine enemy position
-                const enemyPos = enemy.getCurrentPosition ? enemy.getCurrentPosition() : { x: enemy.x, y: enemy.y };
-                if (!enemyPos || typeof enemyPos.x !== 'number' || typeof enemyPos.y !== 'number') {
-                    console.warn("StrikeManager.executeBombExplosion: Could not determine valid position for an enemy. Skipping it.", enemy);
-                    continue;
-                }
+        this.addDamageDealtToTracker(damageDealt); // Update the tracker
 
-                // Calculate distance and potential damage
-                const distance = this._distance(enemyPos.x, enemyPos.y, impactCoords.x, impactCoords.y);
-                const effectiveDistance = Math.max(distance, MIN_EFFECTIVE_DISTANCE);
-                const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
+        // In the future, this is where we would create and add an animated Striker effect to Game.activeEffects
+        // For now, the Striker instance is temporary and its job is done after applyExplosionDamage.
 
-                // Apply damage via the enemy's hit method (return value not used for Delta R)
-                if (potentialDamage > 0) {
-                    enemy.hit(potentialDamage);
-                }
-            }
-        }
-
-        return totalDeltaRFromDefenders;
+        return damageDealt;
     }
     // --- END ADDED ---
 } 
