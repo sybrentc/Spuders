@@ -1,12 +1,11 @@
 import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
 
 export default class DefenceEntity {
-    constructor(id, definition, position, spriteDefinition, gameInstance, instanceId) {
+    constructor(id, definition, position, spriteDefinition, gameInstance) {
         if (!gameInstance) {
              throw new Error("DefenceEntity requires a valid Game instance.");
         }
         this.id = id; // e.g., 'laser_tower'
-        this.instanceId = instanceId; // <-- ADDED: Store the unique instance ID
         this.definition = definition; // The raw data from defences.json
         this.game = gameInstance; // <-- STORE game instance
         this.x = position.x;
@@ -62,6 +61,29 @@ export default class DefenceEntity {
         this.frameTimeAccumulator = 0; // Accumulator for animation timing
         // --- End Display Properties ---
     }
+
+    // --- ADDED: hit(damageAmount) method ---
+    /**
+     * Applies damage to the defender, updates its health, and flags it as destroyed if HP reaches zero.
+     * @param {number} damageAmount - The amount of damage to apply.
+     * @returns {number} The actual amount of damage taken, capped by current health.
+     */
+    hit(damageAmount) {
+        if (this.isDestroyed) {
+            return 0; // Cannot damage a destroyed entity
+        }
+
+        const actualDamageTaken = Math.min(damageAmount, this.hp);
+        this.hp -= actualDamageTaken;
+        this.hp = Math.max(0, this.hp); // Ensure HP doesn't go negative
+
+        if (this.hp <= 0) {
+            this.isDestroyed = true;
+        }
+
+        return actualDamageTaken;
+    }
+    // --- END ADDED ---
 
     findTarget(enemies) {
         // Basic target finding: closest enemy in range
@@ -133,7 +155,8 @@ export default class DefenceEntity {
             // --- Deplete Wear (HP) --- 
             if (this.wearEnabled && this.wearDecrement > 0) {
                 // REMOVED: this.remainingHits--;
-                this.hp -= this.wearDecrement;
+                // REMOVED: this.hp -= this.wearDecrement;
+                this.hit(this.wearDecrement); // Call the new hit method for wear
             }
             // --- End Deplete Wear ---
         }
@@ -142,13 +165,13 @@ export default class DefenceEntity {
 
     update(timestamp, deltaTime, enemies) {
         // --- Check for Wear Destruction --- 
-        // if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
-        if (this.wearEnabled && this.hp <= 0 && !this.isDestroyed) { // Check HP instead of hits
-            this.isDestroyed = true;
-            //console.log(`Defender ${this.id} worn out!`); // Optional log
-            // TODO: Trigger removal logic? (Handled by Manager filter for now)
-            return; // Stop further updates if destroyed by wear
-        }
+        // REMOVED: if (this.wearEnabled && this.remainingHits <= 0 && !this.isDestroyed) {
+        // REMOVED: if (this.wearEnabled && this.hp <= 0 && !this.isDestroyed) { // Check HP instead of hits
+        // REMOVED:     this.isDestroyed = true;
+        // REMOVED:     //console.log(`Defender ${this.id} worn out!`); // Optional log
+        // REMOVED:     // TODO: Trigger removal logic? (Handled by Manager filter for now)
+        // REMOVED:     return; // Stop further updates if destroyed by wear
+        // REMOVED: }
         // --- End Check ---
 
         // 1. Find a target if we don't have one (or current one is dead)

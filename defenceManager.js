@@ -78,7 +78,6 @@ export default class DefenceManager extends EventTarget {
         this.activeDefences = []; // Array to hold active instances
         this.isLoaded = false;
         this.dataPath = './assets/defences.json'; // Assume default path or get from game config if needed
-        this.nextInstanceId = 0; // <-- ADDED: Counter for unique instance IDs
     }
 
     async loadDefinitions(dataPath = this.dataPath) { // Renamed from load for clarity
@@ -187,13 +186,8 @@ export default class DefenceManager extends EventTarget {
              return null;
         }
         
-        // --- ADDED: Assign unique instance ID ---
-        const instanceId = this.nextInstanceId; // Get current ID
-        this.nextInstanceId++; // Increment for the next one
-        // --- END ADDED ---
-
         // Create and add the defence
-        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite, this.game, instanceId); // <-- ADD instanceId
+        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite, this.game); // REMOVED instanceId argument
 
         // --- ADDED: Calculate and store grid coordinates for StrikeManager ---
         if (this.game.strikeManager?.isConfigLoaded()) {
