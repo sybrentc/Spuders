@@ -46,6 +46,18 @@ export default class StrikeManager {
         this.impactStdDevPixels = null; // Standard deviation for impact inaccuracy
         this._spareNormal = null; // Re-add spare value for Box-Muller
         // --- END ADDED ---
+
+        // --- ADDED: Explosion Animation Properties ---
+        this.explosionAnimationConfig = null; // To store the raw config object
+        this.explosionFrames = []; // To store loaded Image objects for frames
+        this.explosionFrameWidth = 0; // Width of a single animation frame
+        this.explosionFrameHeight = 0; // Height of a single animation frame
+        this.explosionFrameDuration = 0; // Duration each frame is displayed
+        this.explosionScale = 1.0; // Display scale of the explosion
+        this.explosionAnchorX = 0.5; // Horizontal anchor
+        this.explosionAnchorY = 0.5; // Vertical anchor
+        this.loadedAnimationData = null; // Will hold all processed animation data
+        // --- END ADDED ---
     }
 
     async loadConfig(path = 'assets/strike.json') {
@@ -62,8 +74,23 @@ export default class StrikeManager {
             }
             if (config.targetMaxWipeoutRadiusPercent <= 0 || config.targetMaxWipeoutRadiusPercent > 1) {
                  console.warn(`StrikeManager: targetMaxWipeoutRadiusPercent (${config.targetMaxWipeoutRadiusPercent}) should be between 0 and 1. Clamping or using as is? Using as is for now.`);
-                 // Consider clamping: this.targetMaxWipeoutRadiusPercent = Math.max(0.01, Math.min(config.targetMaxWipeoutRadiusPercent, 1.0));
             }
+
+            // --- ADDED: Load Explosion Animation Config ---
+            if (!config.explosionAnimation) {
+                throw new Error("Strike config file is missing 'explosionAnimation' object.");
+            }
+            const animConfig = config.explosionAnimation;
+            if (!animConfig.folderPath || typeof animConfig.frameDuration !== 'number' || typeof animConfig.scale !== 'number' || typeof animConfig.anchorX !== 'number' || typeof animConfig.anchorY !== 'number') {
+                throw new Error("Strike config 'explosionAnimation' is missing required fields (folderPath, frameDuration, scale, anchorX, anchorY) or they are of incorrect type.");
+            }
+            this.explosionAnimationConfig = animConfig; // Store the raw config
+            this.explosionFrameDuration = animConfig.frameDuration;
+            this.explosionScale = animConfig.scale;
+            this.explosionAnchorX = animConfig.anchorX;
+            this.explosionAnchorY = animConfig.anchorY;
+            // Note: explosionFrames, explosionFrameWidth, explosionFrameHeight will be populated by a separate method after this.
+            // --- END ADDED ---
 
             // Store loaded config values
             this.targetMaxWipeoutRadiusPercent = config.targetMaxWipeoutRadiusPercent;
@@ -105,6 +132,10 @@ export default class StrikeManager {
             // --- Call stamp map precomputation ---
             this._precomputeStampMap();
             // --- END Call ---
+
+            // --- ADDED: Call to load explosion frames ---
+            await this._loadExplosionFrames(); 
+            // --- END ADDED ---
 
         } catch (error) {
             console.error("StrikeManager: Failed to load configuration:", error);
@@ -757,6 +788,130 @@ export default class StrikeManager {
         // For now, the Striker instance is temporary and its job is done after applyExplosionDamage.
 
         return damageDealt;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Getter for loaded animation data ---
+    getLoadedAnimationData() {
+        if (!this.loadedAnimationData && this.configLoaded && this.explosionAnimationConfig) {
+            // This is a placeholder. In a real scenario, _loadExplosionFrames would populate this.
+            // For now, we'll construct it if the base elements are there.
+            // This assumes _loadExplosionFrames has been called and populated the frame-specific details.
+             if (this.explosionFrames.length > 0 && this.explosionFrameWidth > 0 && this.explosionFrameHeight > 0) {
+                this.loadedAnimationData = {
+                    frames: this.explosionFrames,
+                    frameWidth: this.explosionFrameWidth,
+                    frameHeight: this.explosionFrameHeight,
+                    frameDuration: this.explosionFrameDuration,
+                    scale: this.explosionScale,
+                    anchorX: this.explosionAnchorX,
+                    anchorY: this.explosionAnchorY,
+                    totalFrames: this.explosionFrames.length
+                };
+             } else {
+                // console.warn("StrikeManager.getLoadedAnimationData: Explosion frames not loaded or dimensions undetermined.");
+                return null;
+             }
+        }
+        return this.loadedAnimationData;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Method to load explosion frame images ---
+    async _loadExplosionFrames() {
+        if (!this.explosionAnimationConfig || !this.explosionAnimationConfig.folderPath) {
+            console.error("StrikeManager._loadExplosionFrames: Explosion animation folderPath not configured.");
+            return;
+        }
+        if (typeof this.explosionAnimationConfig.frameCount !== 'number' || this.explosionAnimationConfig.frameCount <= 0) {
+            console.error("StrikeManager._loadExplosionFrames: Invalid or missing frameCount in explosionAnimation config.");
+            return;
+        }
+        if (typeof this.explosionAnimationConfig.digitsForZeroPadding !== 'number' || this.explosionAnimationConfig.digitsForZeroPadding <= 0) {
+            console.error("StrikeManager._loadExplosionFrames: Invalid or missing digitsForZeroPadding in explosionAnimation config.");
+            return;
+        }
+
+        const folderPath = this.explosionAnimationConfig.folderPath;
+        const frameCount = this.explosionAnimationConfig.frameCount;
+        const digits = this.explosionAnimationConfig.digitsForZeroPadding;
+        const fileSuffix = '.png'; // Assuming .png, could be made configurable if needed
+
+        try {
+            let fileNames = [];
+            for (let i = 1; i <= frameCount; i++) {
+                const frameNumberStr = i.toString().padStart(digits, '0');
+                fileNames.push(frameNumberStr + fileSuffix);
+            }
+
+            // Actual image loading logic (conceptual for now, replace with real JS Image loading)
+            // In your actual JS environment, this.explosionFrames should end up as an array of Image objects.
+            this.explosionFrames = []; // Reset before loading
+            const imagePromises = fileNames.map(fileName => {
+                const fullPath = folderPath + fileName; // Ensure folderPath ends with '/'
+                // In real JS:
+                return new Promise((resolve) => { // Simplified error handling for clarity, real version might reject or resolve with null
+                    const img = new Image();
+                    img.onload = () => {
+                        // console.log(`Successfully loaded image: ${fullPath}`);
+                        resolve(img);
+                    };
+                    img.onerror = () => {
+                        console.error(`Failed to load image: ${fullPath}`);
+                        resolve(null); // Resolve with null on error to not break Promise.all
+                    };
+                    img.src = fullPath;
+                });
+                // return Promise.resolve(fullPath); // Placeholder: resolves with path for now, representing successful load intent
+            });
+
+            const loadedImages = await Promise.all(imagePromises);
+            // Filter out any nulls from failed loads and ensure they are Image objects
+            this.explosionFrames = loadedImages.filter(img => img instanceof Image);
+
+            if (this.explosionFrames.length > 0) {
+                const firstImage = this.explosionFrames[0];
+                // Ensure the first image is actually loaded and has dimensions
+                if (firstImage.complete && firstImage.naturalWidth > 0 && firstImage.naturalHeight > 0) {
+                    this.explosionFrameWidth = firstImage.naturalWidth;
+                    this.explosionFrameHeight = firstImage.naturalHeight;
+                } else {
+                    // This case might happen if the first image object exists but its data isn't ready
+                    // or it failed to load in a way not caught by onerror (less common)
+                    // Or if it's a 0x0 image.
+                    console.error("StrikeManager._loadExplosionFrames: First frame image not fully loaded or has no dimensions. Using config/defaults.");
+                    this.explosionFrameWidth = this.explosionAnimationConfig.frameWidth || 64; // Fallback
+                    this.explosionFrameHeight = this.explosionAnimationConfig.frameHeight || 64; // Fallback
+                }
+            } else {
+                console.error("StrikeManager._loadExplosionFrames: No explosion frames were successfully loaded as Image objects.");
+                // Keep width/height as 0 or default from config if needed elsewhere
+                this.explosionFrameWidth = this.explosionAnimationConfig.frameWidth || 0;
+                this.explosionFrameHeight = this.explosionAnimationConfig.frameHeight || 0;
+            }
+
+            // Populate loadedAnimationData once frames are processed
+            if (this.explosionFrames.length > 0 && this.explosionFrameWidth > 0 && this.explosionFrameHeight > 0) {
+                this.loadedAnimationData = {
+                    frames: this.explosionFrames, // Array of Image objects (or paths for now)
+                    frameWidth: this.explosionFrameWidth,
+                    frameHeight: this.explosionFrameHeight,
+                    frameDuration: this.explosionFrameDuration,
+                    scale: this.explosionScale,
+                    anchorX: this.explosionAnchorX,
+                    anchorY: this.explosionAnchorY,
+                    totalFrames: this.explosionFrames.length
+                };
+            } else {
+                 this.loadedAnimationData = null; // Ensure it's null if loading fails
+                 // Error already logged if no frames were loaded, or if dimensions are zero.
+            }
+
+        } catch (error) {
+            console.error(`StrikeManager._loadExplosionFrames: Error processing explosion frames from ${folderPath}:`, error);
+            this.explosionFrames = [];
+            this.loadedAnimationData = null;
+        }
     }
     // --- END ADDED ---
 } 
