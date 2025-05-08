@@ -44,7 +44,6 @@ export default class StrikeManager {
 
         // --- ADDED: Impact Randomization --- 
         this.impactStdDevPixels = null; // Standard deviation for impact inaccuracy
-        this._spareNormal = null; // Re-add spare value for Box-Muller
         // --- END ADDED ---
 
         // --- ADDED: Explosion Animation Properties ---
@@ -57,6 +56,10 @@ export default class StrikeManager {
         this.explosionAnchorX = 0.5; // Horizontal anchor
         this.explosionAnchorY = 0.5; // Vertical anchor
         this.loadedAnimationData = null; // Will hold all processed animation data
+        // --- END ADDED ---
+
+        // --- ADDED: bombPayload (Plan I.2b) ---
+        this.bombPayload = null;
         // --- END ADDED ---
     }
 
@@ -182,6 +185,28 @@ export default class StrikeManager {
         // Calculate A = r^2 * h_min (where h_min is minWearDecrement)
         const calculatedA = targetRadiusPx * targetRadiusPx * minWearDecrement;
         this.bombStrengthA = Math.max(0, calculatedA); // Ensure non-negative
+
+        // --- ADDED: Initialize bombPayload (Plan I.2b) ---
+        if (this.bombStrengthA !== null && this.bombStrengthA > 0) { 
+            const animationData = this.getLoadedAnimationData();
+            // Ensure impactStdDevPixels is a number (it could be 0 for no spread)
+            if (animationData && typeof this.impactStdDevPixels === 'number') {
+                 this.bombPayload = {
+                    strengthA: this.bombStrengthA,
+                    animation: animationData,
+                    impactStdDevPixels: this.impactStdDevPixels
+                };
+                // console.log("StrikeManager: bombPayload initialized.", this.bombPayload); // Optional log for verification
+            } else {
+                console.warn("StrikeManager: Could not initialize bombPayload. Missing animation data or impactStdDevPixels is not set.", 
+                             { animationDataReady: !!animationData, impactStdDevPixels: this.impactStdDevPixels });
+            }
+        } else {
+            // If bombStrengthA is 0 or null, bombPayload remains null, which is fine.
+            // dispatchStriker should later check if bombPayload is ready.
+            // console.warn("StrikeManager: bombStrengthA is not valid (<=0 or null), bombPayload not initialized."); // Optional log
+        }
+        // --- END ADDED ---
 
         //console.log(`StrikeManager: Calculated Bomb Strength A = ${this.bombStrengthA.toFixed(2)} (using minWearDecrement=${minWearDecrement.toFixed(4)}, targetRadius=${targetRadiusPx.toFixed(1)}px)`);
 
@@ -668,126 +693,87 @@ export default class StrikeManager {
     }
     // --- END ADDED ---
 
-    // --- ADDED: Normal Random Number Generation (Box-Muller) ---
-    /**
-     * Generates a normally distributed random number.
-     * Uses the Box-Muller transform.
-     * @param {number} mean - The mean of the distribution.
-     * @param {number} stdDev - The standard deviation of the distribution.
-     * @returns {number} A random number from the specified normal distribution.
-     */
-    _generateNormalRandom(mean, stdDev) {
-        // Use Box-Muller transform
-        // Check if we have a spare value from the previous calculation
-        if (this._spareNormal !== null) {
-            const result = mean + stdDev * this._spareNormal;
-            this._spareNormal = null; // Consume the spare value
-            return result;
-        }
-
-        // No spare value, generate two new standard normals
-        let u1, u2;
-        do {
-            // Math.random() gives [0, 1). We need (0, 1) for log().
-            u1 = Math.random();
-        } while (u1 === 0);
-        u2 = Math.random(); // This one can be 0
-
-        const radius = Math.sqrt(-2.0 * Math.log(u1));
-        const angle = 2.0 * Math.PI * u2;
-
-        const standardNormal1 = radius * Math.cos(angle);
-        const standardNormal2 = radius * Math.sin(angle);
-
-        // Store the second value for the next call
-        this._spareNormal = standardNormal2;
-
-        // Return the first value, scaled and shifted
-        return mean + stdDev * standardNormal1;
-    }
-    // --- END ADDED ---
-
-    // --- ADDED: Calculate Impact Coordinates --- 
-    /**
-     * Calculates the randomized impact coordinates based on target coordinates
-     * using a normal distribution for inaccuracy.
-     * @param {object} targetCoords - The intended target {x, y}.
-     * @returns {object} The calculated impact coordinates {x, y}, clamped to map bounds.
-     */
-    _calculateImpactCoordinates(targetCoords) {
-        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
-            console.error("StrikeManager._calculateImpactCoordinates: Invalid targetCoords provided.", targetCoords);
-        }
-
-        if (this.impactStdDevPixels === null || this.impactStdDevPixels < 0) {
-            console.warn("StrikeManager._calculateImpactCoordinates: Impact standard deviation not properly configured. Returning target coordinates.");
-            return { ...targetCoords }; // Return original target if no spread
-        }
-
-        // Generate random offsets using normal distribution (mean 0)
-        const offsetX = this._generateNormalRandom(0, this.impactStdDevPixels);
-        const offsetY = this._generateNormalRandom(0, this.impactStdDevPixels);
-
-        // Calculate impact coordinates
-        let impactX = targetCoords.x + offsetX;
-        let impactY = targetCoords.y + offsetY;
-
-        return { x: impactX, y: impactY };
-    }
-    // --- END ADDED ---
-
-    // --- ADDED: Method to track damage dealt by bombs ---
-    /**
-     * Adds the given amount to the total bomb damage dealt tracker.
-     * @param {number} amount - The amount of damage (Delta R) to add.
-     */
-    addDamageDealtToTracker(amount) {
-        if (typeof amount === 'number' && amount > 0) {
-            this.totalBombDamageDealtR += amount;
-            // console.log(`StrikeManager: Bomb damage dealt: ${amount.toFixed(4)}. Total bomb damage: ${this.totalBombDamageDealtR.toFixed(4)}`);
-        } else if (typeof amount !== 'number') {
-            console.warn("StrikeManager.addDamageDealtToTracker: Invalid amount type received.", amount);
-        }
-        // No log if amount is 0 or negative
-    }
-    // --- END ADDED ---
-
     // --- ADDED: Orchestration for a single real bomb drop ---
     /**
      * Triggers a single real bomb drop at the given impact coordinates.
      * @param {object} impactCoords - The {x, y} coordinates for the bomb's impact.
      * @returns {number} The Delta R (damage dealt to defenders) from this bomb, or 0 if failed.
      */
-    triggerSingleBombDrop(impactCoords) {
-        if (!this.game) {
-            console.error("StrikeManager.triggerSingleBombDrop: Game instance not available.");
+    async dispatchStriker(targetCoords, strikeContext) {
+        if (!this.game) { 
+            console.error("StrikeManager.dispatchStriker: Game instance not available.");
             return 0;
         }
-        if (this.bombStrengthA === null || typeof this.bombStrengthA !== 'number' || this.bombStrengthA <= 0) {
-            console.error("StrikeManager.triggerSingleBombDrop: Bomb strength (bombStrengthA) is not configured or invalid.");
+        if (!this.bombPayload) {
+            console.error("StrikeManager.dispatchStriker: bombPayload is not initialized. Cannot dispatch striker.");
+            return 0;
+        }
+        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
+            console.error("StrikeManager.dispatchStriker: Invalid targetCoords provided.", targetCoords);
+            return 0;
+        }
+        if (!strikeContext) {
+            console.error("StrikeManager.dispatchStriker: strikeContext (game or clonedDefenders) not provided.");
             return 0;
         }
 
-        // For now, we assume a real strike. Simulation path will be handled later.
-        const isReal = true; 
+        const striker = new Striker(this.bombPayload, targetCoords, strikeContext);
 
-        const striker = new Striker(impactCoords, this.bombStrengthA, this.game);
+        // Striker's constructor will set up and start an async operation.
+        // It needs to expose: 
+        // 1. A synchronous way to check if initial setup was okay (e.g., isInitializedSuccessfully())
+        // 2. A promise that resolves with the strike result (e.g., completionPromise)
         
-        if (!striker.valid) {
-            console.error("StrikeManager.triggerSingleBombDrop: Failed to create a valid Striker instance.");
-            return 0;
+        // --- START OF BLOCK TO REMOVE ---
+        // --- DETAILED CHECK FOR STRIKER INITIALIZATION ---
+        // console.log("[StrikeManager] Checking striker instance:", striker);
+        // if (!striker) {
+        //     console.error("[StrikeManager] dispatchStriker: Striker instance is null or undefined after creation.");
+        //     return 0;
+        // }
+        // console.log(`[StrikeManager] typeof striker.isInitializedSuccessfully: ${typeof striker.isInitializedSuccessfully}`);
+
+        // let initialized = false;
+        // if (typeof striker.isInitializedSuccessfully === 'function') {
+        //     try {
+        //         initialized = striker.isInitializedSuccessfully();
+        //         console.log(`[StrikeManager] striker.isInitializedSuccessfully() returned: ${initialized}`);
+        //     } catch (e) {
+        //         console.error("[StrikeManager] Error calling striker.isInitializedSuccessfully():", e);
+        //         return 0; // Critical error
+        //     }
+        // } else {
+        //     console.error("[StrikeManager] dispatchStriker: striker.isInitializedSuccessfully is NOT a function.");
+        //     return 0;
+        // }
+
+        // if (!initialized) {
+        //     console.error("[StrikeManager] dispatchStriker: Striker reported it was not initialized successfully.");
+        //     return 0; 
+        // }
+        // --- END DETAILED CHECK ---
+        // --- END OF BLOCK TO REMOVE ---
+
+        // Reverting to the cleaner check, now that the underlying issue is fixed.
+        if (!striker || typeof striker.isInitializedSuccessfully !== 'function' || !striker.isInitializedSuccessfully()) {
+            console.error("StrikeManager.dispatchStriker: Striker could not be initialized successfully.");
+            return 0; 
         }
 
-        // For a real strike, the Striker will fetch live defenders and enemies internally.
-        // We pass null for optionalClonedDefenders as it's not a simulation.
-        const damageDealt = striker.applyExplosionDamage(isReal, null);
-
-        this.addDamageDealtToTracker(damageDealt); // Update the tracker
-
-        // In the future, this is where we would create and add an animated Striker effect to Game.activeEffects
-        // For now, the Striker instance is temporary and its job is done after applyExplosionDamage.
-
-        return damageDealt;
+        try {
+            // striker.completionPromise is a property/getter on the Striker instance,
+            // set/managed by its constructor/internal async logic, resolving to the damage dealt.
+            // This will be implemented in Striker.js
+            if (typeof striker.completionPromise?.then !== 'function') {
+                console.error("StrikeManager.dispatchStriker: Striker.completionPromise is not a valid promise.");
+                return 0;
+            }
+            const damageDealtR = await striker.completionPromise;
+            return damageDealtR;
+        } catch (error) {
+            console.error("StrikeManager.dispatchStriker: Error during strike execution:", error);
+            return 0; // Or handle error more specifically, e.g., return Promise.reject(error)
+        }
     }
     // --- END ADDED ---
 
@@ -911,6 +897,44 @@ export default class StrikeManager {
             console.error(`StrikeManager._loadExplosionFrames: Error processing explosion frames from ${folderPath}:`, error);
             this.explosionFrames = [];
             this.loadedAnimationData = null;
+        }
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Test function to trigger a strike ---
+    async strike() {
+        if (!this.isConfigLoaded()) {
+            console.error("StrikeManager.strike(): Cannot strike, config not loaded.");
+            return;
+        }
+        if (!this.bombPayload) {
+            console.error("StrikeManager.strike(): Cannot strike, bombPayload not ready.");
+            return;
+        }
+
+        //console.log("StrikeManager.strike(): Attempting to find optimal target...");
+        const targetCoords = this.findOptimalTarget();
+
+        if (targetCoords) {
+            //console.log(`StrikeManager.strike(): Optimal target found at (${targetCoords.x.toFixed(1)}, ${targetCoords.y.toFixed(1)}). Dispatching striker...`);
+            try {
+                // dispatchStriker is async and returns a promise that resolves with damageDealtR
+                const deltaR = await this.dispatchStriker(targetCoords, this.game);
+                console.log(`StrikeManager.strike(): Strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
+                
+                // If you need to update the totalBombDamageDealtR for real strikes, this is where it would happen
+                // (though the plan moved this responsibility outside dispatchStriker)
+                // For this test function, we're just logging.
+                // if (typeof deltaR === 'number' && deltaR > 0) {
+                //     this.totalBombDamageDealtR += deltaR;
+                //     console.log(`   Updated totalBombDamageDealtR: ${this.totalBombDamageDealtR.toFixed(4)}`);
+                // }
+
+            } catch (error) {
+                console.error("StrikeManager.strike(): Error during dispatchStriker or strike execution:", error);
+            }
+        } else {
+            console.log("StrikeManager.strike(): No optimal target found. Strike aborted.");
         }
     }
     // --- END ADDED ---
