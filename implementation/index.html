@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strike Mechanism Architecture Summary</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 2em; max-width: 800px; margin: auto; }
+        h1, h2 { margin-top: 1.5em; }
+        code { background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px; font-family: monospace; } /* Keep code for filenames */
+    </style>
+</head>
+<body>
+
+<h1>Strike Mechanism Architecture Summary</h1>
+
+<p>The game's strike capability (e.g., bombing runs) is implemented using a two-component architecture designed for clear separation of responsibilities: a central manager (<code>StrikeManager.js</code>) and an autonomous strike executor (<code>Striker.js</code>).</p>
+
+<h2>The Manager (<code>StrikeManager.js</code>)</h2>
+<p>This component acts as the strategic control center for strikes. It holds the definitive configuration for the game's standard bomb type, including its destructive power, associated visual effect data, and parameters defining its targeting inaccuracy. It bundles these fixed properties into a standard payload description.</p> 
+<p>The manager's primary action is to initiate a strike mission. It determines the intended target coordinates and provides the operational context – specifically, whether the strike should impact the live game state (affecting active defenders and enemies) or run as a simulation against a provided set of hypothetical defender entities. To launch the mission, it creates a dedicated executor instance, passing it the standard bomb payload description, the intended target, and the operational context.</p>
+<p>Once the executor is dispatched, the manager asynchronously awaits notification of the mission's completion. The executor autonomously handles all aspects of the strike and eventually reports back the primary result: the total calculated R-value damage inflicted on the affected defenders. The manager receives this result; how it uses this information (e.g., updating game-wide damage counters for live strikes, or logging results for simulations) is determined by the logic that invoked the strike, not by the manager component itself.</p>
+
+<h2>The Executor (<code>Striker.js</code>)</h2>
+<p>This component represents a single, self-contained strike operation. It is designed to be autonomous: once created with valid mission parameters, it carries out the entire strike sequence independently.</p>
+<p>Upon creation, the executor receives the standard bomb payload description, the intended target coordinates, and the operational context (indicating a real or simulated strike and providing either access to the live game or a list of simulated entities). It begins by validating these inputs. If the inputs are valid, it immediately starts the strike execution process asynchronously, managing an internal completion signal (a promise).</p>
+<p>The core execution involves several steps. First, it calculates the actual point of impact. This is done by taking the intended target coordinates and applying a random offset derived from a normal distribution (internally using the Box-Muller method technique), governed by the inaccuracy parameter specified in the bomb payload. Next, it identifies the entities within its area of effect, adhering to the operational context – either querying the live game state for active defenders and enemies (for a real strike) or using the provided list of simulated defenders (for a simulation; enemies are ignored in this case). Damage is then applied to these entities based on an inverse square law relative to the actual impact point, ensuring a minimum effective distance is used to avoid infinite damage calculations. Throughout this process, it specifically calculates and aggregates the total R-value damage inflicted upon the affected defenders.</p>
+<p>Once the damage calculations are complete, the executor signals its completion and provides the aggregated defender R-value damage as the result, resolving the promise that the manager was awaiting.</p>
+
+</body>
+</html>
