@@ -120,6 +120,17 @@ body {
     /* margin: auto; Add this if centering within the flex space is desired */
 }
 
+/* Style the canvas created by PixiJS */
+#gameContainer canvas {
+    max-width: 100%;
+    max-height: 100%;
+    /* The following are important for maintaining aspect ratio within a flex container */
+    /* Let the browser determine width/height based on intrinsic aspect ratio up to the max values */
+    width: auto;
+    height: auto;
+    display: block; /* Removes extra space below canvas if it behaves like an inline element */
+}
+
 .game-layer {
     position: absolute;
     top: 0;

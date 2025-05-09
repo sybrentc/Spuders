@@ -1,3 +1,4 @@
+import { Application, Assets, Sprite } from 'pixi.js';
 import WaveManager from '../waveManager.js'; // Import the WaveManager
 import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
@@ -20,7 +21,7 @@ const MUSIC_PATH = 'assets/music/bach-menuet-frenchsuite3.mp3'; // Path to music
 export default class Game {
     constructor() { // Controller can be set later
         this.container = document.getElementById('gameContainer');
-        this.layers = {}; // Store layers by name
+        this.app = null; // Will hold the PixiJS application
         this.config = null;
         this.levelData = null;
         this.pathDataPath = null; // Store the path string to the extended CSV
@@ -157,8 +158,34 @@ export default class Game {
             this.tuningManager = new TuningManager(tuningInterval);
             //console.log(`Game: Initialized TuningManager with interval: ${tuningInterval}ms`);
 
-            // Load level data FIRST (paths for enemies, waves, base)
-            await this.loadLevel(1);
+            // Load level data FIRST (paths for enemies, waves, base, canvas dimensions, map image)
+            await this.loadLevel(1); // This will now also handle Pixi App creation and background
+
+            // *** Create PixiJS Application ***
+            // Ensure this.canvas.width and this.canvas.height are set by loadLevel
+            if (!this.canvas || !this.canvas.width || !this.canvas.height) {
+                throw new Error("Game Initialize: Canvas dimensions not loaded by loadLevel.");
+            }
+            this.app = new Application();
+            await this.app.init({
+                width: this.canvas.width,
+                height: this.canvas.height,
+                backgroundColor: 0x000000 // Default background, will be covered by map
+            });
+
+            this.container.appendChild(this.app.canvas); // Use .canvas and ensure it's after init
+            // Background image is loaded and added in loadLevel AFTER app is created.
+            // This ordering is a bit tricky. loadLevel needs to know about this.app
+            // OR loadLevel prepares the path, and we load image here.
+            // Let's adjust loadLevel to load the image path, then load the actual image here.
+
+            if (this.bgImagePath) { // bgImagePath should be set in loadLevel
+                const texture = await Assets.load(this.bgImagePath);
+                const backgroundSprite = Sprite.from(texture);
+                backgroundSprite.width = this.app.screen.width;
+                backgroundSprite.height = this.app.screen.height;
+                this.app.stage.addChild(backgroundSprite);
+            }
 
             // *** Load Path Coverage Data AFTER loadLevel sets the path ***
             if (this.pathCoverageDataPath) {
@@ -166,16 +193,6 @@ export default class Game {
             } else {
                 throw new Error("Game Initialize: pathCoverageDataPath missing, cannot load coverage data.");
             }
-            
-            // Create game layers
-            this.layers.background = this.createLayer('background-layer', 0);
-            this.layers.foreground = this.createLayer('foreground-layer', 1);
-            
-            // Set up convenient references to commonly used layers
-            this.bgCanvas = this.layers.background.canvas;
-            this.bgCtx = this.layers.background.ctx;
-            this.fgCanvas = this.layers.foreground.canvas;
-            this.fgCtx = this.layers.foreground.ctx;           
             
             // Initialize Base FIRST (as EnemyManager needs it)
             if (!this.baseDataPath) {
@@ -293,9 +310,6 @@ export default class Game {
             } else {
                  console.error(`Cannot calculate wear parameters - managers/data not ready. Def: ${this.defenceManager?.isLoaded}, Cov: ${this.pathCoverageLoaded}, Price: ${!!this.priceManager}, Alpha: ${this.getAlpha()}`);
             }
-            
-            // Draw background (Path drawing is now part of render loop)
-            this.drawBackground();
             
             // Start game loop
             this.startGameLoop();
@@ -432,8 +446,14 @@ export default class Game {
                     bgImage.src = this.levelData.mapImage;
                     bgImage.onload = () => {
                         this.bgImage = bgImage; // Store the image for later drawing
+                        this.bgImagePath = this.levelData.mapImage; // Store path for Pixi
                         resolve();
                     };
+                    bgImage.onerror = () => { // Handle error
+                        console.error("Failed to load background image:", this.levelData.mapImage);
+                        this.bgImagePath = null;
+                        resolve(); // Resolve anyway so game doesn't hang
+                    }
                 });
             }
             
@@ -566,7 +586,10 @@ export default class Game {
             // -----------------------------
 
             this.update(timestamp, clampedDeltaTime); // <-- Use clampedDeltaTime for update
-            this.render();
+            // PixiJS app.ticker will handle rendering.
+            // If we need to tie our update to Pixi's ticker:
+            // this.app.ticker.add(delta => this.update(performance.now(), delta * (1000 / PIXI.settings.TARGET_FPMS) ));
+            // For now, keeping existing requestAnimationFrame loop for update logic, Pixi renders separately.
             requestAnimationFrame(gameLoop);
         };
         
@@ -689,75 +712,16 @@ export default class Game {
         // --- END ADDED ---
     }
     
-    createLayer(className, zIndex) {
-        const canvas = document.createElement('canvas');
-        // Set canvas size from level data
-        canvas.width = this.canvas.width;
-        canvas.height = this.canvas.height;
-        canvas.classList.add('game-layer', className);
-        canvas.style.zIndex = zIndex;
-        const ctx = canvas.getContext('2d');
-        this.container.appendChild(canvas);
-        return { canvas, ctx };
-    }
-    
     render() {
-        // Clear foreground canvas
-        this.fgCtx.clearRect(0, 0, this.fgCanvas.width, this.fgCanvas.height);
-        
-        // 1. Render UNDERLAY effects (e.g., puddles) first
-        if (this.defenceManager) {
-            this.defenceManager.renderEffects(this.fgCtx); 
-        }
-
-        // 2. Gather all entities for Y-sorting
-        let renderables = [];
-        if (this.base && !this.base.isDestroyed()) { 
-            renderables.push(this.base);
-        }
-        if (this.enemyManager) {
-            renderables = renderables.concat(this.enemyManager.getActiveEnemies()); 
-        }
-        if (this.defenceManager) {
-            renderables = renderables.concat(this.defenceManager.getActiveDefences());
-        }
-        // TODO: Add towerManager entities if needed
-
-        // 3. Sort the renderables by their Y coordinate (ascending)
-        renderables.sort((a, b) => a.y - b.y);
-
-        // 4. Render the sorted entities by calling their respective methods
-        renderables.forEach(entity => {
-            if (typeof entity.render === 'function') {
-                entity.render(this.fgCtx, this.gameConfig?.ui?.healthBar); 
-            } else if (typeof entity.draw === 'function') {
-                 // Fallback for entities like Base that might use 'draw'
-                entity.draw(this.fgCtx); 
-            } else {
-                console.warn("Renderable entity missing recognized render/draw method:", entity);
-            }
-        });
-
-        // 5. Render OVERLAY effects / UI previews last
-        if (this.placementPreview) {
-            this.renderPlacementPreview(this.fgCtx);
-        }
-        // --- Render StrikeManager Z-Buffer (Heatmap) ---
-        if (this.showStrikeManagerHeatmap) { // <-- ADDED check
-            // --- Original block, now conditional ---
-            if (this.strikeManager?.isConfigLoaded()) { // Check if config loaded
-                this.strikeManager.renderZBuffer(this.fgCtx);
-            }
-            // -------------------------------------------
-        } // <-- ADDED closing brace
-        // ADD UI Manager Render Call
-        // if (this.uiManager) { // Assuming you have a UIManager
-        //     this.uiManager.draw(this.fgCtx);
-        // }
+        // This method is now gutted as PixiJS handles rendering.
+        // All direct drawing calls (e.g., this.fgCtx.clearRect) are removed.
+        // Calls to manager.render() are removed.
+        // Entity rendering will be handled by entities updating their PIXI.Sprite properties,
+        // and those sprites being on the PIXI.stage.
     }
 
     // --- ADD method to render preview --- 
-    renderPlacementPreview(ctx) {
+    renderPlacementPreview(ctx) { // This will be refactored to use PIXI.Graphics later
         if (!this.placementPreview) return;
 
         // --- DETAILED DEBUG LOGGING --- 

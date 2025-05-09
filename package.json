@@ -1,0 +1,23 @@
+{
+  "name": "spuders",
+  "version": "1.0.0",
+  "main": "controller.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sybrentc/spuders.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sybrentc/spuders/issues"
+  },
+  "homepage": "https://github.com/sybrentc/spuders#readme",
+  "description": "",
+  "dependencies": {
+    "pixi.js": "^8.9.2"
+  }
+}

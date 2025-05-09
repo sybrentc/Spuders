@@ -31,18 +31,33 @@ class Controller {
         this.waveInfoDisplay = document.getElementById('waveInfoDisplay');
         this.targetDamageDisplay = document.getElementById('targetDamageDisplay');
         this.defenceMenuElement = document.getElementById('defenceMenu');
-        this.gameCanvas = this.gameInstance.layers.foreground?.canvas;
+        this.gameCanvas = this.gameInstance.app?.canvas;
 
         // Basic validation
-        if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement || !this.gameCanvas) {
-            console.error("Controller Initialize: One or more required UI elements not found!");
-            return; // Stop initialization if critical elements are missing
+        if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement /*|| !this.gameCanvas*/) {
+            // Temporarily remove gameCanvas from this check as it might not exist if gameInstance.app is not ready
+            // Or, ensure gameInstance is fully initialized (including app) before controller initializes.
+            // For now, let's assume gameInstance.app will be ready.
+            if (!this.gameCanvas) {
+                 console.warn("Controller Initialize: PixiJS game canvas (gameInstance.app.canvas) not found yet!");
+                 // Decide if this is fatal or if listeners can be set up later.
+                 // For now, we will let it proceed, but listeners might fail if canvas is null.
+            }
+            if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement) {
+                 console.error("Controller Initialize: One or more required UI elements not found!");
+                 return; // Stop initialization if critical UI elements are missing
+            }
         }
 
         // --- Add Event Listeners ---
         this._setupDifficultyButtons();
         this._setupGameOverListener();
-        this._setupCanvasListeners();
+        // Conditionally setup canvas listeners if gameCanvas is available
+        if (this.gameCanvas) {
+            this._setupCanvasListeners();
+        } else {
+            console.warn("Controller Initialize: Skipping canvas listeners as gameCanvas is not available.");
+        }
         this._setupDefenceMenu();
     }
 
