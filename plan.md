@@ -2,6 +2,41 @@
 
 This plan outlines the steps to refactor the game's rendering pipeline to use PixiJS.
 
+## In Progress
+
+**Rendering `spider_normal` (Enemy PixiJS Rendering - Part 1)**
+
+This task focuses on getting the `spider_normal` enemy type to render and animate using PixiJS. It's a precursor to fully refactoring all enemy rendering and then integrating `HealthBarDisplay` for enemies.
+
+*   **A. Asset Preparation (`EnemyManager.js`):**
+    1.  Modify `EnemyManager.loadSprite(path)` to use `await PIXI.Assets.load(path)` and return the PixiJS asset.
+    2.  In `EnemyManager.load()`, after loading the sprite sheet asset for `spider_normal`:
+        *   Extract `PIXI.Texture[]` for each animation frame using `enemies.json` sprite details.
+        *   Store this texture array in `this.enemyTypes["spider_normal"].pixiTextures`.
+*   **B. Enemy Entity Setup (`models/enemy.js`):**
+    1.  Modify `Enemy.js` constructor:
+        *   Import `PIXI.Container`, `PIXI.AnimatedSprite`.
+        *   Add `this.pixiContainer = new PIXI.Container();` and `this.pixiSprite = null;`.
+        *   Ensure `gameInstance` is passed and stored if needed for other Pixi setups.
+        *   Create `this.pixiSprite = new PIXI.AnimatedSprite(enemyDef.pixiTextures);` (where `enemyDef` now contains `pixiTextures`).
+        *   Configure `this.pixiSprite` (anchor, scale, animationSpeed, play).
+        *   Add `this.pixiSprite` to `this.pixiContainer`.
+        *   Set initial `this.pixiContainer.x/y` from enemy's logical `this.x/y`.
+*   **C. Integration & Stage Management (`EnemyManager.js`, `Game.js`):**
+    1.  Modify `EnemyManager.createEnemy("spider_normal")`:
+        *   If `EnemyManager` doesn't have its own layer, ensure it adds `enemy.pixiContainer` to `this.game.app.stage` (or an `enemyLayer` container that is on the stage).
+    2.  Modify `Enemy.js -> update()`:
+        *   Update `this.pixiContainer.x = this.x;` and `this.pixiContainer.y = this.y;`.
+    3.  Modify `EnemyManager.update()` for enemy removal:
+        *   When a `spider_normal` enemy is removed, remove its `enemy.pixiContainer` from the stage/layer.
+        *   Call a new `enemy.destroyPixiObjects();`.
+    4.  Add `Enemy.js -> destroyPixiObjects()` to destroy its `pixiContainer` and `pixiSprite`.
+*   **D. Cleanup (Old Rendering for `spider_normal`):**
+    1.  Remove `Enemy.draw(ctx)` method (or at least the part that draws `spider_normal`).
+    2.  Modify or remove `EnemyManager.render(ctx)` if it's no longer drawing `spider_normal`.
+
+---
+
 ## Tasks To Do
 
 ### Phase 2: Asset Loading & Entity Rendering
@@ -11,7 +46,7 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 9.  **Centralized Asset Loading (Further Refinement):**
     *   Refactor remaining image loading (enemies, defenders, effects) to use `PIXI.Assets.load()`.
     *   Store loaded `PIXI.Texture` objects, potentially in a dedicated asset manager or within respective entity managers.
-10. **Enemy Rendering (`Enemy.js`, `EnemyManager.js`):**
+10. **Enemy Rendering (`Enemy.js`, `EnemyManager.js`):** (Partially addressed by "In Progress" `spider_normal` task above)
     *   `Enemy.js`:
         *   Store `PIXI.Texture` instead of `Image` (or arrays of Textures for animations).
         *   Create and manage a `PIXI.Sprite` (or `PIXI.AnimatedSprite`) within a `PIXI.Container`.

@@ -2,11 +2,11 @@
   "id": "main_base",
   "name": "Main Base",
   "position": {
-    "x": 200,
-    "y": 200
+    "x": 970,
+    "y": 785
   },
   "stats": {
-    "hp": 300,
+    "hp": 1000,
     "money": 500
   },
   "display": {

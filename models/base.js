@@ -219,9 +219,9 @@ export default class Base extends EventTarget {
             }
             this._isDestroyed = true;
             this.die();
-            // Manage visibility for NEW health bar
-            if (this.healthBarDisplay) {
-                this.healthBarDisplay.setVisible(false);
+            // Hide the entire base container (sprite + health bar)
+            if (this.pixiContainer) {
+                this.pixiContainer.visible = false;
             }
         }
     }
@@ -290,17 +290,18 @@ export default class Base extends EventTarget {
      * Resets the base to its initial state (full HP, starting funds).
      */
     reset() {
+        // Make the base container visible again
+        if (this.pixiContainer) {
+            this.pixiContainer.visible = true;
+        }
         this.currentHp = this.maxHp;
         this.currentFunds = this.startingFunds;
         this._isDestroyed = false;
         this.dispatchEvent(new CustomEvent('fundsUpdated')); 
-        // Manage visibility for NEW health bar
+        // Update the health bar display (its internal logic will show/hide based on HP)
         if (this.healthBarDisplay) {
-            this.healthBarDisplay.setVisible(true); // Should become visible if HP is not full/zero after reset
-            // And update it, as HP might be full (which hides it automatically via its internal logic)
             this.healthBarDisplay.update(this.currentHp, this.maxHp); 
         }
-        // if (this.pixiContainer) this.pixiContainer.visible = true; // Ensure container is visible on reset
     }
 
     /**
