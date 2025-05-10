@@ -1,4 +1,5 @@
 import Enemy from './models/enemy.js'; // EnemyManager needs to know about Enemy
+import * as PIXI from 'pixi.js'; // Import PIXI
 
 // Helper function for distance calculation
 function distanceBetween(point1, point2) {
@@ -52,8 +53,8 @@ export default class EnemyManager {
                 }
 
                 try {
-                    const sprite = await this.loadSprite(enemyDef.sprite.path);
-                    this.enemySprites[enemyDef.id] = sprite;
+                    const spriteAsset = await this.loadSprite(enemyDef.sprite.path); // Renamed to spriteAsset for clarity
+                    this.enemySprites[enemyDef.id] = spriteAsset; // Store the loaded asset (could be TextureSource or Spritesheet)
 
                     // --- MODIFIED: Store only the BASE definition initially ---
                     // Store a clean version of the definition, keeping original HP
@@ -66,6 +67,32 @@ export default class EnemyManager {
                         bounty: 0
                     };
                     // --- END MODIFIED ---
+
+                    // --- ADDED: Extract PixiJS textures for spider_normal animation ---
+                    if (enemyDef.id === "spider_normal" && spriteAsset) {
+                        const textures = [];
+                        // Ensure we have a base texture to work with.
+                        // PIXI.Assets.load() for a simple image path returns a Texture.
+                        // If it were a spritesheet definition, it might return a Spritesheet object.
+                        // For now, we assume spriteAsset is or contains a TextureSource.
+                        const baseTexture = spriteAsset; // Assuming spriteAsset is a PIXI.Texture
+
+                        if (baseTexture && baseTexture.source) { // Check if baseTexture and its source are valid
+                            for (let i = 0; i < enemyDef.sprite.totalFrames; i++) {
+                                const frameX = (i % enemyDef.sprite.framesPerRow) * enemyDef.sprite.frameWidth;
+                                const frameY = Math.floor(i / enemyDef.sprite.framesPerRow) * enemyDef.sprite.frameHeight;
+                                textures.push(new PIXI.Texture({
+                                    source: baseTexture.source, // Use the source from the loaded asset
+                                    frame: new PIXI.Rectangle(frameX, frameY, enemyDef.sprite.frameWidth, enemyDef.sprite.frameHeight)
+                                }));
+                            }
+                            this.enemyTypes["spider_normal"].pixiTextures = textures;
+                            console.log(`EnemyManager: Extracted ${textures.length} PixiJS textures for spider_normal.`);
+                        } else {
+                            console.error(`EnemyManager: Could not get baseTexture or baseTexture.source for spider_normal. Path: ${enemyDef.sprite.path}`, baseTexture);
+                        }
+                    }
+                    // --- END ADDED ---
 
                 } catch (spriteError) {
                      console.error(`Failed to load sprite for ${enemyDef.id}:`, spriteError);
@@ -99,13 +126,14 @@ export default class EnemyManager {
     }
 
     // Method to load sprites
-    loadSprite(path) {
-        return new Promise((resolve, reject) => {
-            const sprite = new Image();
-            sprite.onload = () => resolve(sprite);
-            sprite.onerror = (e) => reject(new Error(`EnemyManager: Failed to load sprite: ${path}`));
-            sprite.src = path;
-        });
+    async loadSprite(path) { // Make async
+        try {
+            const asset = await PIXI.Assets.load(path); // Use PIXI.Assets.load
+            return asset;
+        } catch (error) {
+            // It's good practice to wrap the original error for better debugging
+            throw new Error(`EnemyManager: Failed to load sprite using PIXI.Assets: ${path}. ${error.message}`);
+        }
     }
 
     // Factory method to create enemies
@@ -259,10 +287,6 @@ export default class EnemyManager {
         // Create a map for efficient lookup of new definitions by ID
         const newDefinitionsMap = new Map(newEnemyDefinitions.map(def => [def.id, def]));
 
-        // --- Store a copy of old definitions for comparison (Keep this for general change detection) ---
-        const oldEnemyTypesString = JSON.stringify(this.enemyTypes);
-        // -----------------------------------------------------
-
         // --- Process ALL incoming definitions --- 
         newDefinitionsMap.forEach((newDef, enemyId) => {
             const existingDef = this.enemyTypes[enemyId];
@@ -328,18 +352,15 @@ export default class EnemyManager {
         });
         // ----------------------------------------------------------------
 
-        // --- ADDED: Recalculate defender durability ONLY if enemy stats ACTUALLY changed (KEEP THIS LOGIC) ---
-        const newEnemyTypesString = JSON.stringify(this.enemyTypes);
-        if (oldEnemyTypesString !== newEnemyTypesString) { // Compare before/after strings
-            if (this.game.defenceManager?.isLoaded) {
-                //console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
-                // TODO: Check if calculateWearParameters needs await in the future
-                this.game.defenceManager.calculateWearParameters(); 
-            } else {
-                 console.warn("EnemyManager: Cannot trigger defender wear recalculation - DefenceManager not ready.");
-            }
+        // --- Recalculate defender durability if DefenceManager is loaded ---
+        if (this.game.defenceManager?.isLoaded) {
+            //console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
+            // TODO: Check if calculateWearParameters needs await in the future
+            this.game.defenceManager.calculateWearParameters(); 
+        } else {
+             console.warn("EnemyManager: Cannot trigger defender wear recalculation - DefenceManager not ready.");
         }
-        // --- END ADDED ---
+        // --- END ---
     }
 
     // Helper to expose the data path 

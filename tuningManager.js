@@ -1,3 +1,11 @@
+async function calculateSHA256(message) {
+    const msgBuffer = new TextEncoder().encode(message); // encode as UTF-8
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer); // hash the message
+    const hashArray = Array.from(new Uint8Array(hashBuffer)); // convert buffer to byte array
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join(''); // convert bytes to hex string
+    return hashHex;
+}
+
 export default class TuningManager {
     constructor(updateIntervalMs = 5000) { // Default to 5 seconds, configurable
         this.updateIntervalMs = updateIntervalMs;
@@ -22,7 +30,7 @@ export default class TuningManager {
              console.error(`Manager being registered with TuningManager requires a valid dataPath.`);
              return;
         }
-        this.registeredManagers.push({ manager, dataPath });
+        this.registeredManagers.push({ manager, dataPath, previousRawContent: null });
         //console.log(`TuningManager: Registered manager for data path: ${dataPath}`);
     }
 
@@ -78,8 +86,7 @@ export default class TuningManager {
 
         for (const registration of this.registeredManagers) {
             try {
-                // Add cache-busting query parameter to fetch
-                const cacheBustingUrl = `${registration.dataPath}?t=${Date.now()}`;
+                const cacheBustingUrl = registration.dataPath;
 
                 const response = await fetch(cacheBustingUrl);
                 
@@ -88,10 +95,20 @@ export default class TuningManager {
                     continue;
                 }
 
-                const newData = await response.json();
-                
-                // Call the specific manager's update method
-                registration.manager.applyParameterUpdates(newData);
+                const currentRawContent = await response.text();
+                // const currentFileHash = await calculateSHA256(currentRawContent); // No longer needed
+
+                if (currentRawContent !== registration.previousRawContent) { // Compare raw content
+                    //console.log(`TuningManager: Detected change in ${registration.dataPath}`);
+                    registration.previousRawContent = currentRawContent; // Update stored raw content FIRST
+                    const newData = JSON.parse(currentRawContent);
+                    
+                    // Now, attempt to apply the update. If this fails, TuningManager has still noted the file change.
+                    registration.manager.applyParameterUpdates(newData);
+                } else {
+                    // Optional: log that no change was detected (raw content matched previous)
+                    // console.log(`TuningManager: No change detected in ${registration.dataPath} (raw content matched previous)`);
+                }
 
             } catch (error) {
                 console.error(`TuningManager: Error processing updates from ${registration.dataPath}:`, error);
