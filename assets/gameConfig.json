@@ -22,8 +22,8 @@
     },
     "healthBar": {
       "height": 5,
-      "padding": 2,
       "width": 40,
+      "borderThickness": 2,
       "borderColor": "#000000",
       "healthyColor": "#00CC00",
       "damagedColor": "#550000"

@@ -1,4 +1,6 @@
-import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+import { Assets, Texture, Sprite, Rectangle, Graphics, Container, TextureSource } from 'pixi.js';
+// import { drawHealthBar } from '../utils/renderUtils.js'; // REMOVED OLD IMPORT
+import HealthBarDisplay from '../healthBar.js'; // Import the new HealthBarDisplay class
 
 /**
  * Represents the player's main base.
@@ -7,9 +9,10 @@ export default class Base extends EventTarget {
     /**
      * Static factory method to create and initialize a Base instance from a config file path.
      * @param {string} path - The path to the base configuration JSON file.
+     * @param {Game} gameInstance - The main game instance.
      * @returns {Promise<Base>} A promise that resolves with the initialized Base instance.
      */
-    static async createFromPath(path) {
+    static async createFromPath(path, gameInstance) {
         //console.log(`Base: Attempting to create from path: ${path}`);
         // 1. Fetch the configuration data
         const response = await fetch(path);
@@ -19,13 +22,11 @@ export default class Base extends EventTarget {
         const config = await response.json();
         //console.log(`Base: Config fetched successfully.`);
 
-        // 2. Instantiate the base using the fetched config
-        // Note: Constructor now primarily validates and assigns properties.
-        const baseInstance = new Base(config);
+        // 2. Instantiate the base using the fetched config, passing gameInstance
+        const baseInstance = new Base(config, gameInstance);
         //console.log(`Base: Instance created from config.`);
 
         // 3. Load necessary assets (like the sprite)
-        // This is kept separate from constructor for async operations.
         await baseInstance.loadAssets();
         //console.log(`Base: Assets loaded.`);
         
@@ -38,9 +39,11 @@ export default class Base extends EventTarget {
      * Should primarily focus on validating and setting properties from config.
      * Avoid async operations here if possible (use loadAssets for that).
      * @param {object} baseConfig - Configuration object (expected to be valid).
+     * @param {Game} gameInstance - The main game instance.
      */
-    constructor(baseConfig) {
+    constructor(baseConfig, gameInstance) {
         super(); // Call EventTarget constructor
+        this.game = gameInstance; // Store the game instance
         // Validate required configuration fields
         if (!baseConfig) throw new Error("Base constructor requires a configuration object.");
         if (!baseConfig.stats?.hp) throw new Error("Base config requires 'stats.hp'.");
@@ -69,7 +72,12 @@ export default class Base extends EventTarget {
         this.scale = baseConfig.display?.scale;
 
         // --- Sprite Information (requires loading) ---
-        this.spriteSheet = null; // Will hold the Image object
+        this.pixiSprite = null; // Will hold the PIXI.Sprite
+        this.textures = []; // Will hold individual frame Textures
+        // this.healthBarGraphic = null; // REMOVED OLD PROPERTY
+        this.healthBarDisplay = null; // Will hold HealthBarDisplay instance (NEW)
+        this.pixiContainer = null; // Will hold the main PIXI.Container for the base
+
         this.spritePath = baseConfig.sprite.path;
         this.frameWidth = baseConfig.sprite.frameWidth;
         this.frameHeight = baseConfig.sprite.frameHeight;
@@ -84,7 +92,68 @@ export default class Base extends EventTarget {
     async loadAssets() {
         // No sprite path check needed due to constructor validation
         try {
-            this.spriteSheet = await this.loadSprite(this.spritePath);
+            const loadedAsset = await Assets.load(this.spritePath);
+            let baseImageTextureSource = null;
+
+            // Determine the TextureSource from the loaded asset
+            if (loadedAsset instanceof Texture) {
+                baseImageTextureSource = loadedAsset.source;
+            } else if (loadedAsset.source && loadedAsset.source instanceof TextureSource) {
+                baseImageTextureSource = loadedAsset.source;
+            } else if (loadedAsset instanceof TextureSource) { // Assets.load might return TextureSource directly for some image types
+                baseImageTextureSource = loadedAsset;
+            } else {
+                console.error("Base: Loaded asset for spritesheet is not a Texture or does not have a usable TextureSource.", loadedAsset);
+                throw new Error("Base asset loading failed: Unexpected asset type for spritesheet processing.");
+            }
+
+            if (baseImageTextureSource) {
+                for (let i = 0; i < this.totalFrames; i++) {
+                    const frameX = i * this.frameWidth;
+                    const frameY = 0; // Assuming single row
+                    const frameRectangle = new Rectangle(frameX, frameY, this.frameWidth, this.frameHeight);
+                    try {
+                        // Create a new Texture for each frame
+                        this.textures.push(new Texture({
+                            source: baseImageTextureSource,
+                            frame: frameRectangle
+                        }));
+                    } catch (texError) {
+                        console.error(`Error creating texture for base frame ${i}:`, texError);
+                    }
+                }
+            }
+
+            if (this.textures.length === 0 && this.totalFrames > 0) { // Check if textures array is empty despite expecting frames
+                console.error(`Base: No textures were created from spritesheet ${this.spritePath}. totalFrames: ${this.totalFrames}`);
+                this.isLoaded = false;
+                throw new Error(`Base asset loading failed: no textures from ${this.spritePath}`);
+            }
+
+            // Create and Configure PIXI.Container
+            this.pixiContainer = new Container();
+            this.pixiContainer.x = this.x;
+            this.pixiContainer.y = this.y;
+
+            // Create and Configure PIXI.Sprite
+            if (this.textures.length > 0) {
+                this.pixiSprite = new Sprite(this.textures[0]);
+                this.pixiSprite.anchor.set(this.anchorX || 0.5, this.anchorY || 0.5);
+                this.pixiSprite.scale.set(this.scale || 1.0);
+                this.pixiContainer.addChild(this.pixiSprite);
+            } else {
+                console.error("Base: Cannot create pixiSprite, no textures loaded.");
+                this.isLoaded = false;
+                throw new Error("Base asset loading failed: Cannot create pixiSprite, no textures.");
+            }
+
+            // Initialize NEW HealthBarDisplay (NEW)
+            if (this.game && this.pixiContainer && this.pixiSprite) {
+                this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);
+            } else {
+                console.error("Base.loadAssets: Cannot initialize HealthBarDisplay. Game instance, pixiContainer, or pixiSprite is missing.");
+            }
+
             this.isLoaded = true;
             //console.log(`Base: Successfully loaded sprite from ${this.spritePath}`);
         } catch (error) {
@@ -96,87 +165,42 @@ export default class Base extends EventTarget {
     }
 
     /**
-     * Helper to load a sprite image.
-     * @param {string} path - The path to the image file.
-     * @returns {Promise<Image>} A promise that resolves with the loaded Image object.
-     */
-    loadSprite(path) {
-        return new Promise((resolve, reject) => {
-            const sprite = new Image();
-            sprite.onload = () => resolve(sprite);
-            sprite.onerror = (e) => reject(new Error(`Failed to load sprite: ${path}`));
-            sprite.src = path;
-        });
-    }
-
-    /**
      * Updates the base's state.
      * Currently placeholder - could be used for animations or passive effects.
      * @param {number} timestamp - The current high-resolution timestamp.
      * @param {number} deltaTime - The time elapsed since the last update (in milliseconds).
      */
     update(timestamp, deltaTime) {
-        if (!this.isLoaded || this._isDestroyed) {
-            return; // Don't update if not loaded or already destroyed
+        if (!this.isLoaded || this._isDestroyed || !this.pixiSprite || !this.textures || this.textures.length === 0) { 
+            return; 
         }
         // Determine currentFrame based on HP percentage and total frames
         const hpPercentage = this.currentHp / this.maxHp;
+        let newFrame = 0;
         if (hpPercentage > 0) {
-            this.currentFrame = this.totalFrames - Math.ceil(hpPercentage * this.totalFrames);
-        } 
-    }
-
-    /**
-     * Renders the base on the canvas.
-     */
-    render(ctx) {
-        // Don't render if destroyed
-        if (this._isDestroyed) {
-            return;
+            newFrame = this.totalFrames - Math.ceil(hpPercentage * this.totalFrames);
+        } else {
+            newFrame = this.totalFrames -1; // Show most damaged frame if HP is 0 or less
         }
 
-        // Check if assets are loaded and sprite dimensions are valid
-        if (!this.isLoaded || !this.spriteSheet || this.frameWidth <= 0 || this.frameHeight <= 0) {
-             // REMOVE DEBUG LOGGING FOR RENDER
-             // //console.log('Base Render: Skipping draw due to missing assets or invalid dimensions.');
-             return;
+        this.currentFrame = Math.max(0, Math.min(newFrame, this.textures.length - 1)); // Use textures.length for bounds
+
+        // Update the sprite's texture
+        if (this.textures[this.currentFrame]) { 
+            this.pixiSprite.texture = this.textures[this.currentFrame]; // Revert to assigning texture from array
+        } else {
+            console.warn(`Base.update: Texture not found for frame index ${this.currentFrame}`);
         }
 
-        // Calculate source x/y from the spritesheet based on currentFrame
-        // Assumes frames are laid out horizontally
-        const sourceX = this.currentFrame * this.frameWidth;
-        const sourceY = 0; // Assuming single row spritesheet for now
+        // --- REMOVED OLD Health Bar Drawing ---
+        // if (this.healthBarGraphic) { ... }
+        // --- END REMOVED OLD Health Bar Drawing ---
 
-        // Calculate destination position based on anchor point and scale
-        const drawWidth = this.frameWidth * this.scale;
-        const drawHeight = this.frameHeight * this.scale;
-        const drawX = this.x - (drawWidth * this.anchorX);
-        const drawY = this.y - (drawHeight * this.anchorY);
-        
-        // REMOVE DEBUG LOGGING FOR DRAW PARAMETERS
-        // //console.log(`Base Render Draw: sx=${sourceX}, sy=${sourceY}, sw=${this.frameWidth}, sh=${this.frameHeight}, dx=${drawX}, dy=${drawY}, dw=${drawWidth}, dh=${drawHeight}`);
-
-        // Draw the specific frame
-        try {
-            ctx.drawImage(
-                this.spriteSheet,
-                sourceX,
-                sourceY,
-                this.frameWidth,
-                this.frameHeight,
-                drawX,
-                drawY,
-                drawWidth,
-                drawHeight
-            );
-        } catch (e) {
-             // Keep this error reporting for actual draw errors
-             console.error("Error during Base ctx.drawImage:", e);
-             console.error("Draw arguments:", { spriteSheet: this.spriteSheet, sourceX, sourceY, frameWidth: this.frameWidth, frameHeight: this.frameHeight, drawX, drawY, drawWidth, drawHeight });
+        // --- NEW HealthBarDisplay Update (NEW) ---
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.update(this.currentHp, this.maxHp);
         }
-
-        // --- Draw Health Bar using utility function --- 
-        drawHealthBar(ctx, this.currentHp, this.maxHp, drawX, drawY, drawWidth, drawHeight);
+        // --- END NEW HealthBarDisplay Update ---
     }
 
     /**
@@ -185,21 +209,20 @@ export default class Base extends EventTarget {
      */
     takeDamage(amount) {
         if (this._isDestroyed) {
-            return; // Cannot damage a destroyed base
+            return;
         }
         this.currentHp -= amount;
-        //console.log(`Base took ${amount} damage, HP remaining: ${this.currentHp}/${this.maxHp}`);
         if (this.currentHp <= 0) {
             this.currentHp = 0;
-            // --- Dispatch gameOver event ONCE --- 
-            if (!this._isDestroyed) { // Check if not already destroyed
+            if (!this._isDestroyed) {
                 this.dispatchEvent(new CustomEvent('gameOver'));
-                //console.log("Base: Dispatched 'gameOver' event.");
             }
-            // ------------------------------------
             this._isDestroyed = true;
-            //console.log("Base has been destroyed!");
-            this.die(); // Call the die method
+            this.die();
+            // Manage visibility for NEW health bar
+            if (this.healthBarDisplay) {
+                this.healthBarDisplay.setVisible(false);
+            }
         }
     }
 
@@ -207,8 +230,16 @@ export default class Base extends EventTarget {
      * Placeholder method for when the base is destroyed.
      */
     die() {
-        // TODO: Implement base destruction logic (e.g., remove from game, trigger game over)
-        //console.log("Base die() method called.");
+        // console.log("Base die() method called.");
+        // If we want to hide the sprite itself, we can do:
+        // if (this.pixiContainer) this.pixiContainer.visible = false;
+        // The old health bar graphic (this.healthBarGraphic) is part of pixiContainer,
+        // so it would be hidden too. If we only want to hide the sprite but keep health bar:
+        // if (this.pixiSprite) this.pixiSprite.visible = false;
+
+        // For now, ensure the NEW health bar is explicitly hidden/destroyed if needed.
+        // setVisible(false) is handled in takeDamage. If die() means permanent removal,
+        // then destroy() would be more appropriate here, or in a separate cleanup method.
     }
 
     /**
@@ -259,12 +290,35 @@ export default class Base extends EventTarget {
      * Resets the base to its initial state (full HP, starting funds).
      */
     reset() {
-        //console.log("Base: Resetting state.");
         this.currentHp = this.maxHp;
         this.currentFunds = this.startingFunds;
         this._isDestroyed = false;
-        // Dispatch event to update UI display
         this.dispatchEvent(new CustomEvent('fundsUpdated')); 
+        // Manage visibility for NEW health bar
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.setVisible(true); // Should become visible if HP is not full/zero after reset
+            // And update it, as HP might be full (which hides it automatically via its internal logic)
+            this.healthBarDisplay.update(this.currentHp, this.maxHp); 
+        }
+        // if (this.pixiContainer) this.pixiContainer.visible = true; // Ensure container is visible on reset
+    }
+
+    /**
+     * Call this method when the Base instance is being permanently removed from the game.
+     */
+    destroySelf() {
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.destroy();
+            this.healthBarDisplay = null;
+        }
+        if (this.pixiContainer) {
+            this.pixiContainer.destroy({ children: true });
+            this.pixiContainer = null;
+        }
+        this.textures = [];
+        this.pixiSprite = null;
+        // this.healthBarGraphic = null; // REMOVED OLD PROPERTY CLEANUP
+        //console.log("Base: destroySelf() called and cleaned up.");
     }
 
     /**

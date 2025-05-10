@@ -199,9 +199,17 @@ export default class Game {
                  throw new Error("Game Initialize: Level data is missing required 'baseData' path.");
             }
             try {
-                // Call the static method on the Base class
-                this.base = await Base.createFromPath(this.baseDataPath);
+                // Call the static method on the Base class, passing the game instance
+                this.base = await Base.createFromPath(this.baseDataPath, this); // Pass `this` (game instance)
                 ////console.log("Game: Base initialized successfully via static method."); 
+
+                // Add the base's PIXI.Container to the stage
+                if (this.base && this.base.pixiContainer) {
+                    this.app.stage.addChild(this.base.pixiContainer);
+                } else {
+                    console.error("Game Initialize: Base or base.pixiContainer is not available after creation. Cannot add to stage.");
+                    // Potentially throw an error here if the base is critical for rendering
+                }
 
             } catch(baseError) {
                  // Catch errors from createFromPath (fetch, json, constructor, loadAssets)
@@ -1123,6 +1131,18 @@ export default class Game {
         } else {
             console.error("Game.setController: Invalid controller instance provided.");
         }
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Getter for Health Bar Config ---
+    getHealthBarConfig() {
+        if (this.gameConfig && this.gameConfig.ui && this.gameConfig.ui.healthBar) {
+            return this.gameConfig.ui.healthBar;
+        }
+        // Log an error and return null if the configuration is not found.
+        // The calling code will be responsible for handling a null config.
+        console.error("Game.getHealthBarConfig: Health bar configuration not found in gameConfig.json. Health bars may not render correctly.");
+        return null;
     }
     // --- END ADDED ---
 }
