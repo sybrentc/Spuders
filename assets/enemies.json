@@ -4,17 +4,11 @@
     "name": "Spider",
     "description": "Basic spider enemy that follows waypoints",
     "sprite": {
-      "path": "./assets/images/spider.png",
-      "frameWidth": 192,
-      "frameHeight": 192,
-      "framesPerRow": 4,
-      "totalFrames": 16,
-      "frameDuration": 150
+      "path": "./assets/images/spider.png"
     },
     "display": {
       "scale": 0.5,
-      "anchorX": 0.5,
-      "anchorY": 0.6
+      "frameDuration": 150
     },
     "stats": {
       "hp": 150,
@@ -23,9 +17,6 @@
       "attackStrength": 10,
       "attackRange": 50,
       "bounty": 15
-    },
-    "effects": {
-      "flashDuration": 100
     }
   },
   {
@@ -33,17 +24,11 @@
     "name": "Fast Spider",
     "description": "Faster but weaker spider variant",
     "sprite": {
-      "path": "./assets/images/spider-blue.png",
-      "frameWidth": 192,
-      "frameHeight": 192,
-      "framesPerRow": 4,
-      "totalFrames": 16,
-      "frameDuration": 60
+      "path": "./assets/images/spider-blue.png"
     },
     "display": {
       "scale": 0.3,
-      "anchorX": 0.5,
-      "anchorY": 0.6
+      "frameDuration": 60
     },
     "stats": {
       "hp": 100,
@@ -52,9 +37,6 @@
       "attackStrength": 8,
       "attackRange": 100,
       "bounty": 20
-    },
-    "effects": {
-      "flashDuration": 100
     }
   },
   {
@@ -62,17 +44,11 @@
     "name": "Tank Spider",
     "description": "Slower but more durable spider variant",
     "sprite": {
-      "path": "./assets/images/spider-red.png",
-      "frameWidth": 192,
-      "frameHeight": 192,
-      "framesPerRow": 4,
-      "totalFrames": 16,
-      "frameDuration": 400
+      "path": "./assets/images/spider-red.png"
     },
     "display": {
       "scale": 0.8,
-      "anchorX": 0.5,
-      "anchorY": 0.6
+      "frameDuration": 400
     },
     "stats": {
       "hp": 1500,
@@ -81,9 +57,6 @@
       "attackStrength": 15,
       "attackRange": 100,
       "bounty": 150
-    },
-    "effects": {
-      "flashDuration": 100
     }
   },
   {
@@ -91,17 +64,11 @@
     "name": "Super Tank",
     "description": "Faster and stronger spider variant",
     "sprite": {
-      "path": "./assets/images/spider-blue.png",
-      "frameWidth": 192,
-      "frameHeight": 192,
-      "framesPerRow": 4,
-      "totalFrames": 16,
-      "frameDuration": 400
+      "path": "./assets/images/spider-blue.png"
     },
     "display": {
       "scale": 0.8,
-      "anchorX": 0.5,
-      "anchorY": 0.6
+      "frameDuration": 150
     },
     "stats": {
       "hp": 1500,
@@ -110,9 +77,6 @@
       "attackStrength": 15,
       "attackRange": 100,
       "bounty": 150
-    },
-    "effects": {
-      "flashDuration": 100
     }
   }
 ]

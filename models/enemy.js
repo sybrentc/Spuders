@@ -1,4 +1,4 @@
-import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+import * as PIXI from 'pixi.js'; // Import PIXI
 
 export default class Enemy {
     constructor({
@@ -9,8 +9,10 @@ export default class Enemy {
         bounty, // This is the pre-calculated bounty
         healthScaleFactor, // The factor used for scaling
         speed, attackRate, attackStrength, attackRange,
-        flashDuration,
-        base
+        flashDuration, // This is the hit flash duration in MS
+        base,
+        pixiTextures, // Add pixiTextures to destructured parameters
+        hitTextures // Add hitTextures for the flash effect
     }) {
         // Identification
         this.id = id;
@@ -65,22 +67,86 @@ export default class Enemy {
         
         // State
         this.isDead = false;
-        this.isFlashing = false;
-        this.flashDuration = flashDuration;
-        this.lastFlashTime = 0;
+        this.isTakingDamageFlashing = false; // Renamed from isFlashing
+        this.flashDurationMs = flashDuration; // Renamed from flashDuration and stores the MS for texture flash
+        this.lastDamageFlashTime = 0; // Renamed from lastFlashTime
+
+        // Properties for hit flash effect (texture swapping)
+        this.hitAnimationFrames = hitTextures; // Store the textures for the hit flash
+        this.isHitFlashing = false;            // Is the enemy currently in "hit flash" (texture swapped) state?
+        this.hitFlashTimer = 0;                // Countdown timer for the hit flash duration
+
         this.isAttacking = false;
         this.targetTower = null;
         this.lastAttackTime = 0;
         this.speedModifier = 1.0;
         this.frameTimeAccumulator = 0; // Accumulator for animation timing
+
+        // PixiJS specific properties
+        this.pixiContainer = new PIXI.Container();
+        this.pixiSprite = null; 
+        this.pixiContainer.x = this.x; // Set initial position from logical x
+        this.pixiContainer.y = this.y; // Set initial position from logical y
+
+        // --- Setup PixiJS AnimatedSprite if pixiTextures are provided ---
+        if (pixiTextures && Array.isArray(pixiTextures) && pixiTextures.length > 0) {
+            this.normalAnimationFrames = pixiTextures; // Store for reverting after hit flash
+            this.pixiSprite = new PIXI.AnimatedSprite(this.normalAnimationFrames);
+            
+            // Configure the sprite (using existing properties from constructor where applicable)
+            this.pixiSprite.anchor.set(this.anchorX || 0.5, this.anchorY || 0.5); // Use existing anchors, default to 0.5 if not defined
+            this.pixiSprite.scale.set(this.scale || 1); // Use existing scale, default to 1 if not defined
+            // TODO: Make animationSpeed configurable, e.g., from enemyDef.sprite.frameDuration or a new property in enemies.json
+            // For now, derive a basic animation speed from frameDuration. Assuming frameDuration is in ms.
+            // A common pattern: animationSpeed = 1 / (frameDuration_in_seconds * frames_per_second_of_game_ticker)
+            // If ticker is 60fps, and frameDuration is 100ms (0.1s), then 1 / (0.1 * 60) = 1/6 = ~0.16. 
+            // Pixi's animationSpeed is a multiplier; 1.0 means 1 frame per ticker update.
+            // If frameDuration is the time one frame should be displayed, then we want X frames to play in Y seconds.
+            // Let's aim for the animation to complete its cycle based on totalFrames and frameDuration.
+            // If this.frameDuration is per frame, and totalFrames is N, total animation duration is N * this.frameDuration.
+            // Pixi's animationSpeed means it advances 'animationSpeed' frames per game tick.
+            // If game runs at 60FPS (approx 16.67ms per tick), and this.frameDuration is, say, 100ms.
+            // We want one animation frame to last 100ms / 16.67ms_per_tick = ~6 ticks.
+            // So, animationSpeed should be 1/6.
+            if (this.frameDuration && this.frameDuration > 0) {
+                 // Assuming 60 FPS for the ticker. (1000ms / 60fps = 16.66ms per tick)
+                const ticksPerFrame = this.frameDuration / (1000 / 60); 
+                this.pixiSprite.animationSpeed = ticksPerFrame > 0 ? 1 / ticksPerFrame : 0.1;
+            } else {
+                this.pixiSprite.animationSpeed = 0.1; // Fallback if frameDuration is not available
+            }
+
+            this.pixiSprite.play();
+            
+            this.pixiContainer.addChild(this.pixiSprite);
+        }
+        // --- End PixiJS AnimatedSprite Setup ---
     }
     
     update(timestamp, deltaTime, base) {
         if (this.isDead) return;
         
-        // Update flash effect
-        if (this.isFlashing && timestamp - this.lastFlashTime >= this.flashDuration) {
-            this.isFlashing = false;
+        // Update generic flash effect (renamed, not texture swap)
+        if (this.isTakingDamageFlashing && timestamp - this.lastDamageFlashTime >= this.flashDurationMs) {
+            this.isTakingDamageFlashing = false;
+        }
+
+        // Update Hit Flash Effect (Texture Swapping)
+        if (this.isHitFlashing) {
+            this.hitFlashTimer -= deltaTime;
+            if (this.hitFlashTimer <= 0) {
+                this.isHitFlashing = false;
+                this.hitFlashTimer = 0;
+                // Revert to normal textures if sprite and normal frames are available
+                if (this.pixiSprite && this.normalAnimationFrames) {
+                    // Only revert if currently showing hit frames
+                    if (this.pixiSprite.textures === this.hitAnimationFrames) {
+                        const currentFrameIndex = this.pixiSprite.currentFrame;
+                        this.pixiSprite.textures = this.normalAnimationFrames;
+                        this.pixiSprite.gotoAndPlay(currentFrameIndex);
+                    }
+                }
+            }
         }
 
         // --- Base Attack Logic --- 
@@ -133,6 +199,13 @@ export default class Enemy {
             // the loop will run again in the next frame, which is usually fine.
             // Or handle multiple frame skips in a loop here if needed for very low frame rates.
         }
+
+        // --- Update PixiJS container position ---
+        if (this.pixiContainer) {
+            this.pixiContainer.x = this.x;
+            this.pixiContainer.y = this.y;
+        }
+        // --- End Update PixiJS container position ---
     }
     
     applyUpdate(updatedDef) {
@@ -158,15 +231,35 @@ export default class Enemy {
         this.attackStrength = updatedDef.stats?.attackStrength ?? this.attackStrength;
         this.attackRange = updatedDef.stats?.attackRange ?? this.attackRange;
 
-        // Update effects directly
-        this.flashDuration = updatedDef.effects?.flashDuration ?? this.flashDuration;
+        // Update effects directly - flashDurationMs is now set at construction for hit flash
+        // If there was another type of flash configured by "effects", that would be separate.
+        // For now, assuming updatedDef.effects.flashDuration was for the generic flash.
+        // If it was intended for the hit flash, it's now handled.
+        // this.flashDuration = updatedDef.effects?.flashDuration ?? this.flashDuration;
     }
     
     hit(damage) {
         if (this.isDead) return;
         this.hp -= damage; // Subtract damage directly (already in correct units)
-        this.isFlashing = true;
-        this.lastFlashTime = performance.now();
+        
+        // Existing generic flash logic (can be reviewed/removed later if redundant)
+        this.isTakingDamageFlashing = true; 
+        this.lastDamageFlashTime = performance.now(); 
+
+        // New Hit Flash Logic (Texture Swapping)
+        if (this.pixiSprite && this.hitAnimationFrames && this.normalAnimationFrames && this.flashDurationMs > 0) {
+            this.isHitFlashing = true;
+            this.hitFlashTimer = this.flashDurationMs;
+
+            // Check if currently displaying normal frames before swapping to hit frames
+            // This prevents issues if hit() is called multiple times rapidly during a flash
+            if (this.pixiSprite.textures === this.normalAnimationFrames) {
+                const currentFrameIndex = this.pixiSprite.currentFrame;
+                this.pixiSprite.textures = this.hitAnimationFrames;
+                this.pixiSprite.gotoAndPlay(currentFrameIndex);
+            }
+        }
+
         if (this.hp <= 0) {
             this.hp = 0; // Ensure hp doesn't go negative visually
             this.die();
@@ -187,53 +280,15 @@ export default class Enemy {
         return { x: this.x, y: this.y };
     }
     
-    render(ctx, healthBarConfig) {
-        if (this.isDead) return;
-        
-        // Calculate source frame from spritesheet
-        const frameX = (this.currentFrame % this.framesPerRow) * this.frameWidth;
-        const frameY = Math.floor(this.currentFrame / this.framesPerRow) * this.frameHeight;
-        
-        // Calculate destination position and size using anchors
-        const drawWidth = this.frameWidth * this.scale;
-        const drawHeight = this.frameHeight * this.scale;
-        const drawX = this.x - drawWidth * this.anchorX; // Use anchorX
-        const drawY = this.y - drawHeight * this.anchorY; // Use anchorY
-
-        // --- Select the correct sprite based on flashing state --- 
-        let sourceImage = this.sprite; // Default to normal sprite
-        if (this.isFlashing && this.sharedHitSprite) {
-            sourceImage = this.sharedHitSprite;
-        } else if (this.isFlashing && !this.sharedHitSprite) {
-            // Optional: Fallback if hit sprite failed to load - maybe log warning?
-            // console.warn(`Enemy ${this.id}: Flashing but shared hit sprite is missing.`);
-            // Keep sourceImage = this.sprite
+    destroyPixiObjects() {
+        if (this.pixiSprite) {
+            this.pixiSprite.destroy();
+            this.pixiSprite = null;
         }
-        // --- End Sprite Selection --- 
-
-        ctx.save();
-        
-        // --- Draw the selected sprite --- 
-        if (sourceImage && sourceImage.complete) { // Check if image is loaded
-             ctx.drawImage(
-                sourceImage,         // Use the selected image
-                frameX,              // Source X from spritesheet
-                frameY,              // Source Y from spritesheet
-                this.frameWidth,     // Source Width
-                this.frameHeight,    // Source Height
-                drawX,               // Destination X on canvas
-                drawY,               // Destination Y on canvas
-                drawWidth,           // Destination Width
-                drawHeight           // Destination Height
-            );
-        } else {
-            // Optional: Add fallback rendering if selected image isn't ready
+        if (this.pixiContainer) {
+            // Passing { children: true } ensures all children (like the sprite if not already destroyed) are also destroyed.
+            this.pixiContainer.destroy({ children: true }); 
+            this.pixiContainer = null;
         }
-        // --- End Drawing --- 
-        
-        ctx.restore(); // Restore context state (e.g., transformations, composite operations if any)
-        
-        // --- Draw Health Bar using utility function --- 
-        drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, drawWidth, drawHeight, healthBarConfig);
     }
 }

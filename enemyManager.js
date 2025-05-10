@@ -1,5 +1,6 @@
 import Enemy from './models/enemy.js'; // EnemyManager needs to know about Enemy
 import * as PIXI from 'pixi.js'; // Import PIXI
+import { Texture, Rectangle } from 'pixi.js';
 
 // Helper function for distance calculation
 function distanceBetween(point1, point2) {
@@ -34,80 +35,125 @@ export default class EnemyManager {
         this.currentWaveDeathDistances = []; 
         this.lastDeathInfo = { distance: null, originalX: null, originalY: null }; 
         // -------------------------------------------------
+
+        // For PixiJS Refactor & Hit Flash
+        this.commonSpiderConfig = null;
+        this.allProcessedTextureArrays = [];
+    }
+
+    async _processSpritesheet(assetPath, frameConfig) {
+        if (!assetPath || !frameConfig) {
+            console.error("EnemyManager._processSpritesheet: Missing assetPath or frameConfig.", { assetPath, frameConfig });
+            return [];
+        }
+        try {
+            const loadedAsset = await PIXI.Assets.load(assetPath);
+
+            if (!loadedAsset || !loadedAsset.source) {
+                console.error(`EnemyManager._processSpritesheet: Failed to load asset or asset source is invalid for ${assetPath}.`, loadedAsset);
+                return [];
+            }
+
+            const textures = [];
+            const { frameWidth, frameHeight, totalFrames, framesPerRow } = frameConfig;
+
+            for (let i = 0; i < totalFrames; i++) {
+                const col = i % framesPerRow;
+                const row = Math.floor(i / framesPerRow);
+                const x = col * frameWidth;
+                const y = row * frameHeight;
+                const frameRectangle = new PIXI.Rectangle(x, y, frameWidth, frameHeight);
+                
+                const newTexture = new PIXI.Texture({ source: loadedAsset, frame: frameRectangle.clone() });
+
+                textures.push(newTexture);
+            }
+            return textures;
+        } catch (error) {
+            console.error(`EnemyManager._processSpritesheet: Error processing spritesheet ${assetPath}:`, error);
+            return [];
+        }
     }
 
     // Method to load initial data (Definitions and Sprites ONLY)
     async load() {
         try {
-            // 1. Load Enemy Definitions
-            const enemyResponse = await fetch(this.enemyDataPath);
-             if (!enemyResponse.ok) throw new Error(`HTTP error! status: ${enemyResponse.status} loading ${this.enemyDataPath}`);
-            const enemyDefinitions = await enemyResponse.json();
+            // Load common spider configuration first
+            const spiderConfigResponse = await fetch('assets/spiderConfig.json');
+            if (!spiderConfigResponse.ok) {
+                throw new Error(`HTTP error! status: ${spiderConfigResponse.status} while fetching spiderConfig.json`);
+            }
+            this.commonSpiderConfig = await spiderConfigResponse.json();
+
+            // Load and process common hit spritesheet
+            if (this.commonSpiderConfig && this.commonSpiderConfig.hit && this.commonSpiderConfig.hit.commonHitSpriteSheetPath && this.commonSpiderConfig.display) {
+                this.allProcessedTextureArrays[0] = await this._processSpritesheet(
+                    this.commonSpiderConfig.hit.commonHitSpriteSheetPath,
+                    this.commonSpiderConfig.display
+                );
+            } else {
+                console.error("EnemyManager: Cannot process common hit spritesheet due to missing config (hit.commonHitSpriteSheetPath or display).");
+                this.allProcessedTextureArrays[0] = []; // Ensure it's an empty array on failure
+            }
+
+            // Load main enemy definitions
+            const response = await fetch(this.enemyDataPath);
+             if (!response.ok) throw new Error(`HTTP error! status: ${response.status} loading ${this.enemyDataPath}`);
+            this.enemyDefinitions = await response.json();
+            //console.log("EnemyManager: Loaded enemy definitions:", this.enemyDefinitions);
 
             // Load sprites and store definitions
-            const spritePromises = enemyDefinitions.map(async (enemyDef) => {
+            // Ensure enemyDefinitions is an array before trying to map over it
+            if (!Array.isArray(this.enemyDefinitions)) {
+                throw new Error("EnemyManager: enemyDefinitions is not an array after loading from JSON.");
+            }
+
+            for (const enemyDef of this.enemyDefinitions) {
                 // Basic validation of enemy definition structure
                 if (!enemyDef || !enemyDef.id || !enemyDef.stats || typeof enemyDef.stats.hp !== 'number' || typeof enemyDef.stats.speed !== 'number') {
                     console.error('EnemyManager Load: Invalid enemy definition structure encountered:', enemyDef);
-                    return; // Skip this invalid definition
+                    continue; // Skip this invalid definition
                 }
 
                 try {
-                    const spriteAsset = await this.loadSprite(enemyDef.sprite.path); // Renamed to spriteAsset for clarity
-                    this.enemySprites[enemyDef.id] = spriteAsset; // Store the loaded asset (could be TextureSource or Spritesheet)
-
-                    // --- MODIFIED: Store only the BASE definition initially ---
-                    // Store a clean version of the definition, keeping original HP
+                    // Store the raw definition first (without processed textures yet)
                     this.enemyTypes[enemyDef.id] = {
                         ...enemyDef,
                         originalHp: enemyDef.stats.hp, // Explicitly store original HP
-                        // Initialize scaled values to null/zero or keep undefined until calculated
                         scaledMaxHp: null,
                         healthScaleFactor: null,
-                        bounty: 0
+                        bounty: 0,
+                        // pixiTextures: [] // This will be effectively replaced by normalTextureArrayIndex
+                        normalTextureArrayIndex: -1 // Initialize, will be set after processing
                     };
-                    // --- END MODIFIED ---
 
-                    // --- ADDED: Extract PixiJS textures for spider_normal animation ---
-                    if (enemyDef.id === "spider_normal" && spriteAsset) {
-                        const textures = [];
-                        // Ensure we have a base texture to work with.
-                        // PIXI.Assets.load() for a simple image path returns a Texture.
-                        // If it were a spritesheet definition, it might return a Spritesheet object.
-                        // For now, we assume spriteAsset is or contains a TextureSource.
-                        const baseTexture = spriteAsset; // Assuming spriteAsset is a PIXI.Texture
-
-                        if (baseTexture && baseTexture.source) { // Check if baseTexture and its source are valid
-                            for (let i = 0; i < enemyDef.sprite.totalFrames; i++) {
-                                const frameX = (i % enemyDef.sprite.framesPerRow) * enemyDef.sprite.frameWidth;
-                                const frameY = Math.floor(i / enemyDef.sprite.framesPerRow) * enemyDef.sprite.frameHeight;
-                                textures.push(new PIXI.Texture({
-                                    source: baseTexture.source, // Use the source from the loaded asset
-                                    frame: new PIXI.Rectangle(frameX, frameY, enemyDef.sprite.frameWidth, enemyDef.sprite.frameHeight)
-                                }));
-                            }
-                            this.enemyTypes["spider_normal"].pixiTextures = textures;
-                            console.log(`EnemyManager: Extracted ${textures.length} PixiJS textures for spider_normal.`);
+                    // Process normal animation frames for this enemy
+                    if (enemyDef.sprite && enemyDef.sprite.path && this.commonSpiderConfig && this.commonSpiderConfig.display) {
+                        const normalTextures = await this._processSpritesheet(
+                            enemyDef.sprite.path,
+                            this.commonSpiderConfig.display
+                        );
+                        if (normalTextures.length > 0) {
+                            this.allProcessedTextureArrays.push(normalTextures);
+                            this.enemyTypes[enemyDef.id].normalTextureArrayIndex = this.allProcessedTextureArrays.length - 1;
+                            // console.log(`EnemyManager: Processed ${normalTextures.length} normal textures for ${enemyDef.id}, stored at index ${this.enemyTypes[enemyDef.id].normalTextureArrayIndex}`);
                         } else {
-                            console.error(`EnemyManager: Could not get baseTexture or baseTexture.source for spider_normal. Path: ${enemyDef.sprite.path}`, baseTexture);
+                            console.warn(`EnemyManager: Could not process normal textures for ${enemyDef.id} from ${enemyDef.sprite.path}.`);
                         }
+                    } else {
+                        console.warn(`EnemyManager: Missing sprite path or common display config for ${enemyDef.id}. Cannot process normal textures.`);
                     }
-                    // --- END ADDED ---
+
+                    // The old this.enemySprites[enemyDef.id] = spriteAsset can be removed 
+                    // as _processSpritesheet now handles loading the asset directly from path.
+                    // We no longer need to store the raw spriteAsset in this.enemySprites if all processing is done here.
+                    // However, if any other part of your code relies on this.enemySprites holding the raw PIXI.Asset objects (e.g. Spritesheet instances)
+                    // then you might need to adjust. For now, assuming _processSpritesheet is the sole consumer of the raw asset for textures.
 
                 } catch (spriteError) {
                      console.error(`Failed to load sprite for ${enemyDef.id}:`, spriteError);
                 }
-            });
-            // --- Load the Shared Hit Sprite ---
-            try {
-                this.sharedHitSprite = await this.loadSprite('assets/images/spider-hit.png');
-            } catch (hitSpriteError) {
-                 console.error(`Failed to load shared hit sprite:`, hitSpriteError);
-                 this.sharedHitSprite = null;
             }
-            // --- End Load Shared Hit Sprite ---
-
-            await Promise.all(spritePromises); // Wait for all sprites to load (or fail)
 
             // --- Check if Game has loaded path data (optional sanity check) --- 
             if (this.game && this.game.getExtendedPathData().length === 0) {
@@ -147,74 +193,84 @@ export default class EnemyManager {
             console.error(`EnemyManager: Enemy type ${enemyTypeId} not found in enemyTypes.`);
             return null;
         }
-        // --- ADDED: Check if scaled values are calculated ---
         if (enemyDef.scaledMaxHp === null || enemyDef.healthScaleFactor === null) {
              console.error(`EnemyManager: Scaled health values not calculated for ${enemyTypeId}. Cannot create enemy.`);
-             // This might happen if calculateAndStoreScaledValues hasn't run successfully yet.
              return null;
         }
-        // --- END ADDED ---
-
-        let spriteOrPromise = this.enemySprites[enemyTypeId];
-
-        // --- Handle potential sprite loading promise --- 
-        let sprite;
-        if (spriteOrPromise instanceof Promise) {
-            //console.log(`EnemyManager: Waiting for sprite promise for ${enemyTypeId}...`);
-            try {
-                sprite = await spriteOrPromise;
-                // Store the resolved sprite for next time
-                this.enemySprites[enemyTypeId] = sprite; 
-            } catch (error) {
-                 console.error(`EnemyManager: Error resolving sprite promise for ${enemyTypeId}:`, error);
-                 return null; // Cannot create enemy if sprite failed
-            }
-        } else {
-            sprite = spriteOrPromise; // It was already loaded or null
-        }
-        // --------------------------------------------- 
-
-        if (!sprite) {
-            console.error(`EnemyManager: Sprite for enemy type ${enemyTypeId} not loaded or failed to load`);
+        if (!this.commonSpiderConfig || !this.commonSpiderConfig.display || !this.commonSpiderConfig.hit) {
+            console.error(`EnemyManager: commonSpiderConfig not loaded or incomplete. Cannot create enemy ${enemyTypeId}.`);
             return null;
         }
-         // Get path data from game
-         const extendedPathData = this.game.getExtendedPathData();
-         if (!extendedPathData || extendedPathData.length === 0) {
-             console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing from game instance.`);
-             return null;
-         }
 
-        // --- MODIFIED: Pass scaled HP, bounty, and scale factor ---
+        const normalTextureIndex = enemyDef.normalTextureArrayIndex;
+        if (normalTextureIndex === undefined || normalTextureIndex < 1 || !this.allProcessedTextureArrays[normalTextureIndex]) {
+            console.error(`EnemyManager: Invalid normalTextureArrayIndex or missing textures for ${enemyTypeId} at index ${normalTextureIndex}.`);
+            return null;
+        }
+        const normalTextures = this.allProcessedTextureArrays[normalTextureIndex];
+        
+        const frameCfg = this.commonSpiderConfig.display;
+        const specificScale = enemyDef.display?.scale || 1; // Use enemy-specific scale
+
+        // Get path data from game
+        const extendedPathData = this.game.getExtendedPathData();
+        if (!extendedPathData || extendedPathData.length === 0) {
+            console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing from game instance.`);
+            return null;
+        }
+
         const enemy = new Enemy({ 
             id: enemyTypeId,
             name: enemyDef.name,
-            extendedPath: extendedPathData, // Use path from game
-            sprite: sprite,
-            sharedHitSprite: this.sharedHitSprite, // <-- Pass the shared hit sprite
-            base: this.base, // Pass base 
-            frameWidth: enemyDef.sprite.frameWidth,
-            frameHeight: enemyDef.sprite.frameHeight,
-            framesPerRow: enemyDef.sprite.framesPerRow,
-            totalFrames: enemyDef.sprite.totalFrames,
-            frameDuration: enemyDef.sprite.frameDuration,
-            scale: enemyDef.display?.scale,
-            anchorX: enemyDef.display?.anchorX,
-            anchorY: enemyDef.display?.anchorY,
-            // --- Pass calculated/scaled values --- 
-            hp: enemyDef.scaledMaxHp,           // Pass scaled max HP as initial HP
-            bounty: enemyDef.bounty,             // Pass pre-calculated bounty
-            healthScaleFactor: enemyDef.healthScaleFactor, // Pass the factor itself
-            // --- Pass original stats (speed, attack etc.) ---
+            extendedPath: extendedPathData,
+            // sprite: sprite, // No longer passing raw sprite asset
+            // sharedHitSprite: null, // Deferring hit sprite logic
+            // frameWidth: frameCfg.frameWidth, // Passed via frameCfg below for Enemy.js constructor
+            // frameHeight: frameCfg.frameHeight,
+            // framesPerRow: frameCfg.framesPerRow,
+            // totalFrames: frameCfg.totalFrames,
+            // frameDuration: frameCfg.frameDuration,
+            // scale: specificScale, 
+            // anchorX: frameCfg.anchorX,
+            // anchorY: frameCfg.anchorY,
+
+            // Pass according to Enemy.js constructor expectation
+            pixiTextures: normalTextures,
+            frameWidth: frameCfg.frameWidth,
+            frameHeight: frameCfg.frameHeight,
+            framesPerRow: frameCfg.framesPerRow,
+            totalFrames: frameCfg.totalFrames,
+            frameDuration: enemyDef.display.frameDuration, // Sourced from enemyDef.display
+            scale: specificScale, 
+            anchorX: frameCfg.anchorX,
+            anchorY: frameCfg.anchorY,
+            
+            hp: enemyDef.scaledMaxHp,          
+            bounty: enemyDef.bounty,            
+            healthScaleFactor: enemyDef.healthScaleFactor, 
             speed: enemyDef.stats.speed,
             attackRate: enemyDef.stats.attackRate,
             attackStrength: enemyDef.stats.attackStrength,
             attackRange: enemyDef.stats.attackRange,
-            flashDuration: enemyDef.effects.flashDuration
+            // flashDuration: null, // Deferring hit flash logic
+            flashDuration: this.commonSpiderConfig.hit.enemyFlashDurationMs, // Pass it, Enemy.js might store it
+            base: this.base,
+            hitTextures: this.allProcessedTextureArrays[0] // Pass the common hit textures
         });
-        // --- END MODIFIED ---
 
         this.activeEnemies.push(enemy);
+
+        // --- Add PixiJS container to stage if sprite exists ---
+        if (enemy.pixiSprite) {
+            if (this.game && this.game.app && this.game.app.stage) { // Ensure game, app, and stage are available
+                this.game.app.stage.addChild(enemy.pixiContainer);
+                // console.log(`EnemyManager: Added pixiContainer for ${enemy.id} to stage.`);
+            } else {
+                console.error(`EnemyManager: Cannot add pixiContainer for ${enemy.id} to stage. Game, app, or stage is missing.`);
+            }
+        }
+        // --- End Add PixiJS container ---
+
         return enemy;
     }
 
@@ -257,24 +313,22 @@ export default class EnemyManager {
                 this.lastDeathInfo = { distance: totalDistance, originalX: finalX, originalY: finalY };
                 // --------------------------- 
 
-                // --- Remove Enemy --- 
+                // --- PixiJS Cleanup for Dead Enemy ---
+                if (enemy.pixiContainer) { // Check if it was a Pixi-rendered enemy
+                    if (this.game && this.game.app && this.game.app.stage) {
+                        this.game.app.stage.removeChild(enemy.pixiContainer);
+                    } else {
+                        console.warn(`EnemyManager: Could not remove pixiContainer for ${enemy.id}, game/app/stage missing.`);
+                    }
+                    enemy.destroyPixiObjects(); // Call enemy's own Pixi cleanup
+                }
+                // --- End PixiJS Cleanup ---
+
+                // --- Remove Enemy from active list --- 
                 this.activeEnemies.splice(i, 1);
-                // ------------------
+                // ---------------------------------
             }
         }
-    }
-
-    // Render loop for all enemies (no changes needed)
-    render(ctx) { 
-        if (!this.isLoaded) return;
-
-        // Sort enemies by scale (smallest first) before rendering
-        const sortedEnemies = [...this.activeEnemies].sort((a, b) => a.scale - b.scale);
-
-        // Render the sorted enemies
-        sortedEnemies.forEach(enemy => {
-            enemy.draw(ctx);
-        });
     }
 
     // Apply parameter updates (no changes needed)

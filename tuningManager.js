@@ -104,7 +104,7 @@ export default class TuningManager {
                     const newData = JSON.parse(currentRawContent);
                     
                     // Now, attempt to apply the update. If this fails, TuningManager has still noted the file change.
-                    registration.manager.applyParameterUpdates(newData);
+                registration.manager.applyParameterUpdates(newData);
                 } else {
                     // Optional: log that no change was detected (raw content matched previous)
                     // console.log(`TuningManager: No change detected in ${registration.dataPath} (raw content matched previous)`);
