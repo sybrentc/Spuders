@@ -212,12 +212,12 @@ export default class EnemyManager {
         const frameCfg = this.commonSpiderConfig.display;
         const specificScale = enemyDef.display?.scale || 1; // Use enemy-specific scale
 
-        // Get path data from game
-        const extendedPathData = this.game.getExtendedPathData();
-        if (!extendedPathData || extendedPathData.length === 0) {
-            console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing from game instance.`);
-            return null;
-        }
+         // Get path data from game
+         const extendedPathData = this.game.getExtendedPathData();
+         if (!extendedPathData || extendedPathData.length === 0) {
+             console.error(`EnemyManager: Cannot create enemy ${enemyTypeId}. Extended path is missing from game instance.`);
+             return null;
+         }
 
         const enemy = new Enemy({ 
             id: enemyTypeId,
@@ -407,13 +407,13 @@ export default class EnemyManager {
         // ----------------------------------------------------------------
 
         // --- Recalculate defender durability if DefenceManager is loaded ---
-        if (this.game.defenceManager?.isLoaded) {
-            //console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
-            // TODO: Check if calculateWearParameters needs await in the future
-            this.game.defenceManager.calculateWearParameters(); 
-        } else {
-             console.warn("EnemyManager: Cannot trigger defender wear recalculation - DefenceManager not ready.");
-        }
+            if (this.game.defenceManager?.isLoaded) {
+                //console.log("EnemyManager: Enemy definitions updated, triggering defender wear parameter recalculation (k).");
+                // TODO: Check if calculateWearParameters needs await in the future
+                this.game.defenceManager.calculateWearParameters(); 
+            } else {
+                 console.warn("EnemyManager: Cannot trigger defender wear recalculation - DefenceManager not ready.");
+            }
         // --- END ---
     }
 

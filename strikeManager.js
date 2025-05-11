@@ -1,5 +1,5 @@
-import { distanceBetween } from '../utils/geometryUtils.js';
-import Striker from '../models/striker.js';
+import { distanceBetween } from './utils/geometryUtils.js';
+import Striker from './models/striker.js';
 
 export default class StrikeManager {
     constructor(game) {

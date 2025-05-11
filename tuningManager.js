@@ -48,14 +48,14 @@ export default class TuningManager {
         }
 
         // --- Environment Check --- 
-        const isLocalDev = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && 
-                           window.location.port === '5500';
+        const isOnGitHubPages = window.location.hostname.includes('github.io');
 
-        if (!isLocalDev) {
-            //console.log("TuningManager: Not in local dev environment (port 5500). Periodic updates disabled.");
+        if (isOnGitHubPages) {
+            console.log("TuningManager: Detected GitHub Pages environment. Periodic updates disabled.");
             this.isRunning = false; // Ensure it's marked as not running the interval
             return; // Don't start the interval
         }
+        // If not on GitHub Pages (i.e., local development), proceed.
         // ------------------------
 
         //console.log(`TuningManager: Starting periodic updates every ${this.updateIntervalMs}ms.`);

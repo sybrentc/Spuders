@@ -115,7 +115,7 @@ export default class Game {
     // --- ADDED: Load Global Game Config ---
     async loadGameConfig() {
         try {
-            const response = await fetch('./assets/gameConfig.json');
+            const response = await fetch('assets/gameConfig.json');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -425,11 +425,11 @@ export default class Game {
     
     async loadLevel(levelId) {
         try {
-            // Load level data from JSON
-            const response = await fetch(`./assets/level${levelId}.json`);
+            // Make sure levelId is a valid number or string that can be part of a URL
+            const response = await fetch(`assets/level${levelId}.json`); // Corrected path
             this.levelData = await response.json();
             
-            // Load canvas dimensions
+            // Set canvas dimensions from level data
             this.canvas = {
                 width: this.levelData.canvas.width,
                 height: this.levelData.canvas.height

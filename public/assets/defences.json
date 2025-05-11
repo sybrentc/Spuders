@@ -1,0 +1,163 @@
+[
+  {
+    "id": "laser_tower",
+    "name": "Magic tower",
+    "stats": {
+      "attackRate": 740,
+      "attackStrength": 45,
+      "attackRange": 110
+    },
+    "sprite": {
+      "path": "./assets/images/laser.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.8
+    }
+  },
+  {
+    "id": "super_laser_tower",
+    "name": "Big Chungus",
+    "stats": {
+      "attackRate": 300,
+      "attackStrength": 45,
+      "attackRange": 300
+    },
+    "sprite": {
+      "path": "./assets/images/fat_rabbit.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.7,
+      "anchorX": 0.5,
+      "anchorY": 0.8
+    }
+  },
+  {
+    "id": "axolotl_gunner",
+    "name": "Platypus with a gun",
+    "stats": {
+      "attackRate": 300,
+      "attackStrength": 11,
+      "attackRange": 150
+    },
+    "sprite": {
+      "path": "./assets/images/axolotl2.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    }
+  },
+  {
+    "id": "tank",
+    "name": "Blob tank",
+    "stats": {
+      "attackRate": 2000,
+      "attackStrength": 100,
+      "attackRange": 180
+    },
+    "sprite": {
+      "path": "./assets/images/tank.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.5
+    }
+  },
+  {
+    "id": "turret_tower",
+    "name": "sniper tower",
+    "stats": {
+      "attackRate": 10000,
+      "attackStrength": 300,
+      "attackRange": 99999
+    },
+    "sprite": {
+      "path": "./assets/images/sniper_tower.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.5,
+      "anchorX": 0.5,
+      "anchorY": 0.8
+    }
+  },
+  {
+    "id": "glue_turret",
+    "name": "subzero",
+    "stats": {
+      "cost": 500,
+      "attackRate": 1000,
+      "attackStrength": 0,
+      "attackRange": 170
+    },
+    "effects": {
+      "speedFactor": 0.5,
+      "duration": 5000,
+      "radius": 30,
+      "color": "rgba(0, 255, 255, 0.3)"
+    },
+    "sprite": {
+      "path": "./assets/images/subzero.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.4,
+      "anchorX": 0.5,
+      "anchorY": 0.85
+    }
+  },
+  {
+    "id": "mega_chungus",
+    "name": "Mega Chungus",
+    "stats": {
+      "attackRate": 500,
+      "attackStrength": 110,
+      "attackRange": 300
+    },
+    "sprite": {
+      "path": "./assets/images/fat_rabbit2.png",
+      "frameWidth": 192,
+      "frameHeight": 192,
+      "framesPerRow": 4,
+      "totalFrames": 16,
+      "frameDuration": 150
+    },
+    "display": {
+      "scale": 0.7,
+      "anchorX": 0.5,
+      "anchorY": 0.8
+    }
+  }
+]

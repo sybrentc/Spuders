@@ -4,22 +4,8 @@
     <meta charset="UTF-8">
     <!-- Dynamically add base tag based on environment -->
     <script>
-      (() => {
-        const isLocalDev = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && 
-                           window.location.port === '5500';
-        
-        if (!isLocalDev) {
-          console.log('Not local dev environment, adding base tag.');
-          const baseTag = document.createElement('base');
-          baseTag.href = '/Spuders/'; // Set your GitHub Pages base path here
-          // Insert as the first element in head to ensure it's processed early
-          if (document.head.firstChild) {
-            document.head.insertBefore(baseTag, document.head.firstChild);
-          } else {
-            document.head.appendChild(baseTag);
-          }
-          
-          // Load Google Analytics only if not local dev
+      if (window.location.hostname.includes('github.io')) {
+          // Load Google Analytics only if on GitHub Pages
           const gtagScript1 = document.createElement('script');
           gtagScript1.async = true;
           gtagScript1.src = 'https://www.googletagmanager.com/gtag/js?id=G-HVK9TL1MBL';
@@ -33,27 +19,11 @@
             gtag('config', 'G-HVK9TL1MBL');
           `;
           document.head.appendChild(gtagScript2);
-
-        } else {
-           console.log('Local dev environment (port 5500) detected, skipping base tag and Google Analytics.');
-        }
-      })();
-    </script>
-    <script type="importmap">
-      {
-        "imports": {
-          "pixi.js": "./node_modules/pixi.js/dist/pixi.mjs"
-        }
+          console.log('GitHub Pages environment detected, loading Google Analytics.');
+      } else {
+          console.log('Not on GitHub Pages, skipping Google Analytics.');
       }
     </script>
-    <!-- Google tag (gtag.js) - Conditionally loaded via script above -->
-    <!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-HVK9TL1MBL"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-HVK9TL1MBL');
-    </script> -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spuders</title>
     <link rel="stylesheet" href="style.css">
