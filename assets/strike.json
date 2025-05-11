@@ -1,0 +1,21 @@
+{
+  "targetMaxWipeoutRadiusPercent": 0.75,
+  "zBufferResolution": {
+    "width": 256,
+    "height": 256
+  },
+  "stampMapResolution": {
+    "width": 257,
+    "height": 257
+  },
+  "impactStdDevPercentWidth": 0.04,
+  "explosionAnimation": {
+    "folderPath": "assets/images/PixelSimulations/Explosion1/",
+    "frameDuration": 75,
+    "scale": 1.0,
+    "anchorX": 0.5,
+    "anchorY": 0.5,
+    "frameCount": 36,
+    "digitsForZeroPadding": 4
+  }
+} 

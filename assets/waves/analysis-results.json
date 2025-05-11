@@ -1,0 +1,272 @@
+[
+  {
+    "wave": 1,
+    "totalBounty": 30,
+    "durationMs": 50371.89870018831,
+    "cumulativeAssets": 500,
+    "earningRate": 2.7027027027027026,
+    "bountyRate": 0.0005955701645982991,
+    "ratio": 4.538008891908857
+  },
+  {
+    "wave": 2,
+    "totalBounty": 40,
+    "durationMs": 19514.462012570613,
+    "cumulativeAssets": 530,
+    "earningRate": 2.864864864864865,
+    "bountyRate": 0.0020497618624706762,
+    "ratio": 1.3976574144138414
+  },
+  {
+    "wave": 3,
+    "totalBounty": 150,
+    "durationMs": 92572.31006285307,
+    "cumulativeAssets": 570,
+    "earningRate": 3.081081081081081,
+    "bountyRate": 0.0016203549408905938,
+    "ratio": 1.9014852877775226
+  },
+  {
+    "wave": 4,
+    "totalBounty": 180,
+    "durationMs": 92572.31006285307,
+    "cumulativeAssets": 720,
+    "earningRate": 3.891891891891892,
+    "bountyRate": 0.0019444259290687124,
+    "ratio": 2.0015634608184447
+  },
+  {
+    "wave": 5,
+    "totalBounty": 150,
+    "durationMs": 41143.248916823584,
+    "cumulativeAssets": 900,
+    "earningRate": 4.864864864864865,
+    "bountyRate": 0.003645798617003836,
+    "ratio": 1.3343756405456297
+  },
+  {
+    "wave": 6,
+    "totalBounty": 230,
+    "durationMs": 52371.89870018831,
+    "cumulativeAssets": 1050,
+    "earningRate": 5.675675675675675,
+    "bountyRate": 0.004391668159993081,
+    "ratio": 1.2923735284417797
+  },
+  {
+    "wave": 7,
+    "totalBounty": 300,
+    "durationMs": 54371.89870018831,
+    "cumulativeAssets": 1280,
+    "earningRate": 6.918918918918919,
+    "bountyRate": 0.005517556075321699,
+    "ratio": 1.2539825285809194
+  },
+  {
+    "wave": 8,
+    "totalBounty": 550,
+    "durationMs": 92572.31006285307,
+    "cumulativeAssets": 1580,
+    "earningRate": 8.54054054054054,
+    "bountyRate": 0.005941301449932177,
+    "ratio": 1.437486485496883
+  },
+  {
+    "wave": 9,
+    "totalBounty": 955,
+    "durationMs": 93572.31006285307,
+    "cumulativeAssets": 2130,
+    "earningRate": 11.513513513513514,
+    "bountyRate": 0.010206010724310653,
+    "ratio": 1.1281110538212935
+  },
+  {
+    "wave": 10,
+    "totalBounty": 1455,
+    "durationMs": 96572.31006285307,
+    "cumulativeAssets": 3085,
+    "earningRate": 16.675675675675677,
+    "bountyRate": 0.015066430522921411,
+    "ratio": 1.1068099806590572
+  },
+  {
+    "wave": 11,
+    "totalBounty": 2130,
+    "durationMs": 99572.31006285307,
+    "cumulativeAssets": 4540,
+    "earningRate": 24.54054054054054,
+    "bountyRate": 0.021391489246914922,
+    "ratio": 1.1472104750294452
+  },
+  {
+    "wave": 12,
+    "totalBounty": 3900,
+    "durationMs": 109572.31006285307,
+    "cumulativeAssets": 6670,
+    "earningRate": 36.054054054054056,
+    "bountyRate": 0.03559293399731077,
+    "ratio": 1.0129553820086348
+  },
+  {
+    "wave": 13,
+    "totalBounty": 5850,
+    "durationMs": 118572.31006285307,
+    "cumulativeAssets": 10570,
+    "earningRate": 57.13513513513514,
+    "bountyRate": 0.04933698261338604,
+    "ratio": 1.158058967303633
+  },
+  {
+    "wave": 14,
+    "totalBounty": 8700,
+    "durationMs": 131572.31006285307,
+    "cumulativeAssets": 16420,
+    "earningRate": 88.75675675675676,
+    "bountyRate": 0.06612333549394964,
+    "ratio": 1.342290979330256
+  },
+  {
+    "wave": 15,
+    "totalBounty": 13050,
+    "durationMs": 151572.31006285307,
+    "cumulativeAssets": 25120,
+    "earningRate": 135.78378378378378,
+    "bountyRate": 0.08609752001924696,
+    "ratio": 1.5770928564891245
+  },
+  {
+    "wave": 16,
+    "totalBounty": 19650,
+    "durationMs": 182572.31006285307,
+    "cumulativeAssets": 38170,
+    "earningRate": 206.32432432432432,
+    "bountyRate": 0.1076285883288392,
+    "ratio": 1.9170029778142086
+  },
+  {
+    "wave": 17,
+    "totalBounty": 29400,
+    "durationMs": 227572.31006285307,
+    "cumulativeAssets": 57820,
+    "earningRate": 312.5405405405405,
+    "bountyRate": 0.12918970674367206,
+    "ratio": 2.419237170037537
+  },
+  {
+    "wave": 18,
+    "totalBounty": 44400,
+    "durationMs": 296572.31006285304,
+    "cumulativeAssets": 87220,
+    "earningRate": 471.4594594594595,
+    "bountyRate": 0.14971053767828238,
+    "ratio": 3.14914011245216
+  },
+  {
+    "wave": 19,
+    "totalBounty": 66450,
+    "durationMs": 398572.31006285304,
+    "cumulativeAssets": 131620,
+    "earningRate": 711.4594594594595,
+    "bountyRate": 0.16672006138489937,
+    "ratio": 4.267389620358548
+  },
+  {
+    "wave": 20,
+    "totalBounty": 99900,
+    "durationMs": 552572.310062853,
+    "cumulativeAssets": 198070,
+    "earningRate": 1070.6486486486488,
+    "bountyRate": 0.18079081810783595,
+    "ratio": 5.922030000495052
+  },
+  {
+    "wave": 21,
+    "totalBounty": 149850,
+    "durationMs": 783572.310062853,
+    "cumulativeAssets": 297970,
+    "earningRate": 1610.6486486486488,
+    "bountyRate": 0.19123952962041246,
+    "ratio": 8.422153368843738
+  },
+  {
+    "wave": 22,
+    "totalBounty": 225000,
+    "durationMs": 1130572.3100628532,
+    "cumulativeAssets": 447820,
+    "earningRate": 2420.6486486486488,
+    "bountyRate": 0.19901424968341153,
+    "ratio": 12.163192598014339
+  },
+  {
+    "wave": 23,
+    "totalBounty": 337500,
+    "durationMs": 1649572.3100628532,
+    "cumulativeAssets": 672820,
+    "earningRate": 3636.864864864865,
+    "bountyRate": 0.20459848770566497,
+    "ratio": 17.77561948598981
+  },
+  {
+    "wave": 24,
+    "totalBounty": 506550,
+    "durationMs": 2429572.310062853,
+    "cumulativeAssets": 1010320,
+    "earningRate": 5461.189189189189,
+    "bountyRate": 0.2084934858295679,
+    "ratio": 26.193572271382212
+  },
+  {
+    "wave": 25,
+    "totalBounty": 759750,
+    "durationMs": 3598572.310062853,
+    "cumulativeAssets": 1516870,
+    "earningRate": 8199.297297297297,
+    "bountyRate": 0.2111253948893777,
+    "ratio": 38.836149017475805
+  },
+  {
+    "wave": 26,
+    "totalBounty": 1139700,
+    "durationMs": 5351572.310062853,
+    "cumulativeAssets": 2276620,
+    "earningRate": 12306.054054054053,
+    "bountyRate": 0.21296544902457173,
+    "ratio": 57.784274916041404
+  },
+  {
+    "wave": 27,
+    "totalBounty": 1709550,
+    "durationMs": 7981572.310062853,
+    "cumulativeAssets": 3416320,
+    "earningRate": 18466.594594594593,
+    "bountyRate": 0.2141871217334793,
+    "ratio": 86.21710981098684
+  },
+  {
+    "wave": 28,
+    "totalBounty": 2564400,
+    "durationMs": 11927572.310062854,
+    "cumulativeAssets": 5125870,
+    "earningRate": 27707.405405405407,
+    "bountyRate": 0.21499764858574869,
+    "ratio": 128.87306250865674
+  },
+  {
+    "wave": 29,
+    "totalBounty": 3846600,
+    "durationMs": 17845572.31006285,
+    "cumulativeAssets": 7690270,
+    "earningRate": 41569.02702702703,
+    "bountyRate": 0.21554926528363338,
+    "ratio": 192.85162940512865
+  },
+  {
+    "wave": 30,
+    "totalBounty": 5770200,
+    "durationMs": 26723572.31006285,
+    "cumulativeAssets": 11536870,
+    "earningRate": 62361.45945945946,
+    "bountyRate": 0.21592173131087014,
+    "ratio": 288.8151140733281
+  }
+]

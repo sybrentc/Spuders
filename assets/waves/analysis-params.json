@@ -1,0 +1,43 @@
+{
+  "B0": 500,
+  "beta": 0.0035,
+  "W1": 25000,
+  "f": 1.5,
+  "alpha": 185,
+  "wear": 0.0001,
+  "L": 3702.8924025141228,
+  "dt_seconds": 1,
+  "waveGenConfig": {
+    "difficultyTolerance": 0.1,
+    "maxSelectionAttempts": 200,
+    "maxPrepopulationPerType": 25,
+    "minEnemyTypes": 2
+  },
+  "enemyStats": [
+    {
+      "id": "spider_normal",
+      "speed": 75,
+      "hp": 150,
+      "w": 11250
+    },
+    {
+      "id": "spider_fast",
+      "speed": 200,
+      "hp": 100,
+      "w": 20000
+    },
+    {
+      "id": "spider_tank",
+      "speed": 40,
+      "hp": 1500,
+      "w": 60000
+    },
+    {
+      "id": "super_tank",
+      "speed": 90,
+      "hp": 1500,
+      "w": 135000
+    }
+  ],
+  "T0": 92.57231006285306
+}
