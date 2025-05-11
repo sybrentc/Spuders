@@ -1,4 +1,5 @@
 import * as PIXI from 'pixi.js'; // Import PIXI
+import HealthBarDisplay from '../healthBar.js'; // <-- ADD IMPORT
 
 export default class Enemy {
     constructor({
@@ -12,11 +13,13 @@ export default class Enemy {
         flashDuration, // This is the hit flash duration in MS
         base,
         pixiTextures, // Add pixiTextures to destructured parameters
-        hitTextures // Add hitTextures for the flash effect
+        hitTextures, // Add hitTextures for the flash effect
+        game // <-- ADD game TO DESTRUCTURED PARAMETERS
     }) {
         // Identification
         this.id = id;
         this.name = name;
+        this.game = game; // <-- STORE THE GAME INSTANCE
         // Ensure base is provided, needed for bounty calculation
         if (!base) {
              throw new Error(`Enemy ${id} requires a valid Base instance.`);
@@ -76,6 +79,8 @@ export default class Enemy {
         this.isHitFlashing = false;            // Is the enemy currently in "hit flash" (texture swapped) state?
         this.hitFlashTimer = 0;                // Countdown timer for the hit flash duration
 
+        this.healthBarDisplay = null; // <-- INITIALIZE HEALTH BAR DISPLAY
+
         this.isAttacking = false;
         this.targetTower = null;
         this.lastAttackTime = 0;
@@ -119,6 +124,15 @@ export default class Enemy {
             this.pixiSprite.play();
             
             this.pixiContainer.addChild(this.pixiSprite);
+
+            // --- Initialize HealthBarDisplay ---
+            if (this.pixiSprite && this.game) { 
+                this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);
+            } else {
+                this.healthBarDisplay = null; // Ensure it's null if conditions aren't met
+                console.warn(`Enemy ${this.id}: Could not initialize HealthBarDisplay. Missing pixiSprite or game instance.`);
+            }
+            // --- End HealthBarDisplay Initialization ---
         }
         // --- End PixiJS AnimatedSprite Setup ---
     }
@@ -206,6 +220,12 @@ export default class Enemy {
             this.pixiContainer.y = this.y;
         }
         // --- End Update PixiJS container position ---
+
+        // --- Update HealthBarDisplay ---
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.update(this.hp, this.maxHp);
+        }
+        // --- End Update HealthBarDisplay ---
     }
     
     applyUpdate(updatedDef) {
@@ -281,6 +301,10 @@ export default class Enemy {
     }
     
     destroyPixiObjects() {
+        if (this.healthBarDisplay) { // <-- ADD DESTROY CALL FOR HEALTH BAR
+            this.healthBarDisplay.destroy();
+            this.healthBarDisplay = null;
+        }
         if (this.pixiSprite) {
             this.pixiSprite.destroy();
             this.pixiSprite = null;

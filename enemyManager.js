@@ -255,7 +255,8 @@ export default class EnemyManager {
             // flashDuration: null, // Deferring hit flash logic
             flashDuration: this.commonSpiderConfig.hit.enemyFlashDurationMs, // Pass it, Enemy.js might store it
             base: this.base,
-            hitTextures: this.allProcessedTextureArrays[0] // Pass the common hit textures
+            hitTextures: this.allProcessedTextureArrays[0], // Pass the common hit textures
+            game: this.game // <-- PASS THE GAME INSTANCE
         });
 
         this.activeEnemies.push(enemy);
