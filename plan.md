@@ -4,45 +4,23 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 ## In Progress
 
-### Phase 3: UI Elements & Effects
-
-**Phase 3.A: Refactor Health Bar System** (Base.js part is DONE)
-
-15. **Integrate `healthBar.js` into Entities (e.g., `Enemy.js`, `Defender.js`):**
-    *   In entity's initialization (e.g., `Enemy.loadAssets` or constructor): `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);` (adjust parent/sprite refs as needed).
-    *   In entity's `update()`: `this.healthBarDisplay.update(this.currentHp, this.maxHp);`.
-    *   In entity's destruction logic: `this.healthBarDisplay.setVisible(false);` or `this.healthBarDisplay.destroy();`.
-    *   In entity's `reset()`: `this.healthBarDisplay.setVisible(true);` (or re-create), call `update()`.
-    *   Remove old direct calls to `drawHealthBar` from these entities.
-
----
+*(No tasks currently in this section)*
 
 ## Tasks To Do
 
-### Phase 2: Asset Loading & Entity Rendering
-
-**Phase 2.B: General Asset Loading & Other Entities**
-
-11. **Defender Rendering (`Defender.js`, `DefenceManager.js`):**
-    *   Apply similar changes as for Enemies.
-
 ### Phase 3: UI Elements & Effects
-
-*(Phase 3.A is In Progress)*
 
 **Phase 3.B: Other UI Elements & Effects**
 
 16. **Placement Preview (`Game.js`):**
     *   Refactor `renderPlacementPreview` to use `PIXI.Graphics` to draw the preview square on the PixiJS stage.
 17. **Defender Effects (Puddles in `Defender.js`):**
-    *   Represent puddles with `PIXI.Graphics` objects, add/remove from an effects container on the PixiJS stage.
+    *   Represent puddles with `PIXI.Graphics` objects, add/remove from an effects container on the PixiJS stage. (This was previously linked to `DefenceManager.renderEffects`).
 18. **Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
     *   Refactor `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage.
 19. **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
     *   Load explosion frames as a sequence of `PIXI.Texture`s.
     *   `Striker.js` creates and plays a `PIXI.AnimatedSprite` for explosions, adding it to an effects container on the PixiJS stage and removing it on completion.
-
-*(Phase 3.C Hit Flash Effect is DONE, details moved to Completed section)*
 
 ### Phase 4: Main Render Loop & Cleanup
 
@@ -60,6 +38,28 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 ---
 
 ## Completed Tasks
+
+**Phase 3.A: Refactor Health Bar System** (Base.js & Enemy.js parts are DONE)
+
+**Phase D-HB1: Defender Health Bar Integration (Task 15) (DONE)**
+
+1.  **(DONE) Import `HealthBarDisplay` in `models/defender.js`:**
+    *   Add `import HealthBarDisplay from '../healthBar.js';` (adjust path if necessary).
+2.  **(DONE) Modify `Defender.js` Constructor:**
+    *   Add `this.healthBarDisplay = null;`.
+    *   After `this.pixiContainer` and `this.pixiSprite` are initialized, and if `this.game` is available, instantiate:
+        `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);`
+    *   Handle cases where `pixiSprite` might not be created.
+3.  **(DONE) Update Health Bar in `Defender.update()`:**
+    *   If `this.healthBarDisplay` exists, call `this.healthBarDisplay.update(this.hp, this.maxHp);`.
+4.  **(DONE) Manage Health Bar Visibility in `Defender.update()` (or relevant methods):**
+    *   Primarily handled by `HealthBarDisplay` itself. Considered complete as current visibility logic is sufficient.
+5.  **(DONE) Destroy Health Bar in `Defender.destroyPixiObjects()`:**
+    *   Add logic to destroy `this.healthBarDisplay` if it exists.
+6.  **(DONE) Confirmation: Old `drawHealthBar` Call Removed:**
+    *   Verified that the old `drawHealthBar` call from `Defender.render(ctx)` is gone.
+7.  **(DONE) Review `utils/renderUtils.js`:**
+    *   `utils/renderUtils.js` has been assessed and deleted as it's no longer used.
 
 ### Phase 1: Core Setup & Background (DONE)
 
@@ -121,6 +121,48 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
         *   Remove PIXI container on death.
         *   Old `render` method became obsolete.
 
+**Phase D: Defender PixiJS Rendering (DONE)**
+
+**Phase D1: Asset Loading & Texture Preparation (`DefenceManager.js`) (DONE)**
+1.  **(DONE) Import PixiJS:** Add `import * as PIXI from 'pixi.js';` and relevant classes (`Texture`, `Rectangle`) to `DefenceManager.js`.
+2.  **(DONE) Sprite Processing Helper:** Adapt/reuse `_processSpritesheet` from `EnemyManager.js` (moved to `utils/dataLoaders.js` and used by both managers).
+3.  **(DONE) Modify `DefenceManager.loadDefinitions()`:**
+    *   After fetching `defences.json`, iterate through each `defenceDef`.
+    *   If `defenceDef.sprite` and `defenceDef.sprite.path` exist:
+        *   Use the `processSpritesheet` helper to load and process the sprite sheet.
+        *   Store these textures on `defenceDef.pixiTextures`.
+
+**Phase D2: Defender Entity Setup (`models/defender.js`) (DONE)**
+4.  **(DONE) Import PixiJS:** Add `import * as PIXI from 'pixi.js';` to `models/defender.js`.
+5.  **(DONE) Modify `Defender.js` Constructor:**
+    *   Add `this.pixiContainer`, `this.pixiSprite`, `this.allSpriteFrames`, `this.framesPerRow`.
+    *   Accept `pixiTextures`.
+    *   Create `this.pixiSprite = new PIXI.Sprite(initialTexture)`.
+    *   Configure `anchor`, `scale`.
+    *   Add sprite to container, position container.
+    *   Remove old sprite properties.
+6.  **(DONE) Update Visuals in `Defender.update()`:**
+    *   Preserve logic for `directionRowIndex`, `currentFrame`, `isAttacking`.
+    *   Calculate `textureIndex` and update `this.pixiSprite.texture`.
+    *   Attack animation plays once then reverts to idle frame of current direction.
+
+**Phase D3: Integration & Stage Management (DONE)**
+7.  **(DONE) Modify `DefenceManager.placeDefence()`:**
+    *   Pass `defenceDef.pixiTextures` to `DefenceEntity` constructor.
+    *   Add `newDefence.pixiContainer` to `this.game.app.stage`.
+8.  **(DONE) Add `Defender.destroyPixiObjects()` Method:**
+    *   Destroys `this.pixiSprite` and `this.pixiContainer`.
+9.  **(DONE) Modify `DefenceManager.update()` for Removal:**
+    *   When defender `isDestroyed`: remove its `pixiContainer` from stage and call `destroyPixiObjects()`.
+
+**Phase D4: Cleanup (DONE)**
+10. **(DONE) Remove Old Rendering Code:**
+    *   Delete `render(ctx)` method from `models/defender.js`.
+    *   Delete `render(ctx)` method from `DefenceManager.js`.
+    *   Delete `renderEffects(ctx)` from `DefenceManager.js`.
+11. **(DONE) Remove `drawHealthBar` Import:** Remove `import { drawHealthBar } from '../utils/renderUtils.js';` from `models/defender.js`.
+
+
 **Rendering `spider_normal` (Enemy PixiJS Rendering - Part 1) (DONE)**
 *   **A. (DONE) Asset Preparation (`EnemyManager.js`):**
     1.  **(DONE) Modify `EnemyManager.loadSprite(path)` to use `await PIXI.Assets.load(path)` and return the PixiJS asset.**
@@ -150,7 +192,7 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 ### Phase 3: UI Elements & Effects (DONE for Base Health Bar & Enemy Hit Flash)
 
-**Phase 3.A: Refactor Health Bar System (DONE FOR BASE)**
+**Phase 3.A: Refactor Health Bar System** (Base.js & Enemy.js parts are DONE)
 
 12. **(DONE FOR BASE) Game Configuration for Health Bars (`Game.js`, `gameConfig.json`):**
     *   Ensure `gameConfig.json` has a `ui.healthBar` section with fixed `width`, `height`, `padding` (optional), and `healthyColor`, `damagedColor`, `borderColor`, `borderThickness`.
@@ -174,6 +216,13 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
     *   In `Base.takeDamage` and `Base.reset`: `this.healthBarDisplay.setVisible()` and `this.healthBarDisplay.update()` are called.
     *   In `Base.destroySelf()`: `this.healthBarDisplay.destroy()` is called.
     *   Old direct calls to `drawHealthBar` and related `healthBarGraphic` property removed from `Base.js`.
+
+**15.A. (DONE FOR ENEMIES) Integrate `healthBar.js` into `Enemy.js`:**
+    *   In `Enemy.js` constructor: `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);` (after `pixiSprite` and `game` are available).
+    *   In `Enemy.js` `update()`: `this.healthBarDisplay.update(this.hp, this.maxHp);`.
+    *   In `Enemy.js` `destroyPixiObjects()`: `this.healthBarDisplay.destroy();`.
+    *   The `reset()` logic is not directly applicable to enemies in the same way as `Base.js`; health bars are created with the enemy and destroyed when the enemy dies. Visibility is handled by the parent `pixiContainer`.
+    *   Old direct calls to `drawHealthBar` were removed when enemy rendering was refactored for PixiJS.
 
 **Phase 3.C: Hit Flash Effect (DONE)**
     *   **E.1: (DONE) Asset & Configuration Preparation (`EnemyManager.js`)**

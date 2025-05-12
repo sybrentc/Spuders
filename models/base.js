@@ -1,6 +1,5 @@
-import { Assets, Texture, Sprite, Rectangle, Graphics, Container, TextureSource } from 'pixi.js';
-// import { drawHealthBar } from '../utils/renderUtils.js'; // REMOVED OLD IMPORT
-import HealthBarDisplay from '../healthBar.js'; // Import the new HealthBarDisplay class
+import { Assets, Texture, Sprite, Rectangle, Container, TextureSource } from 'pixi.js';
+import HealthBarDisplay from '../healthBar.js'; // Import the HealthBarDisplay class
 
 /**
  * Represents the player's main base.

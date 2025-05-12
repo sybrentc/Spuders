@@ -1,3 +1,6 @@
+import * as PIXI from 'pixi.js';
+import { Texture, Rectangle } from 'pixi.js';
+
 /**
  * Loads a CSV file where the first column is an integer range/index
  * and the second column is a numerical value, creating a lookup array.
@@ -36,6 +39,51 @@ export async function loadCsvLookup(filePath) {
     } catch (error) {
         console.error(`loadCsvLookup: Error loading lookup table from ${filePath}:`, error);
         throw error; // Re-throw after logging
+    }
+}
+
+/**
+ * Processes a spritesheet asset into an array of PIXI.Texture objects.
+ * @param {string} assetPath - Path to the image asset.
+ * @param {object} frameConfig - Configuration for sprite frames.
+ * @param {number} frameConfig.frameWidth - Width of a single frame.
+ * @param {number} frameConfig.frameHeight - Height of a single frame.
+ * @param {number} frameConfig.totalFrames - Total number of frames in the spritesheet.
+ * @param {number} frameConfig.framesPerRow - Number of frames per row.
+ * @returns {Promise<PIXI.Texture[]>} A promise that resolves with an array of textures.
+ */
+export async function processSpritesheet(assetPath, frameConfig) {
+    if (!assetPath || !frameConfig) {
+        console.error("processSpritesheet (util): Missing assetPath or frameConfig.", { assetPath, frameConfig });
+        return [];
+    }
+    try {
+        const loadedAsset = await PIXI.Assets.load(assetPath);
+
+        if (!loadedAsset || !loadedAsset.source) {
+            console.error(`processSpritesheet (util): Failed to load asset or asset source is invalid for ${assetPath}.`, loadedAsset);
+            return [];
+        }
+
+        const textures = [];
+        const { frameWidth, frameHeight, totalFrames, framesPerRow } = frameConfig;
+
+        for (let i = 0; i < totalFrames; i++) {
+            const col = i % framesPerRow;
+            const row = Math.floor(i / framesPerRow);
+            const x = col * frameWidth;
+            const y = row * frameHeight;
+            const frameRectangle = new PIXI.Rectangle(x, y, frameWidth, frameHeight);
+            
+            // Ensure the texture uses the correct base texture source from the loaded asset
+            const newTexture = new PIXI.Texture({ source: loadedAsset, frame: frameRectangle.clone() });
+
+            textures.push(newTexture);
+        }
+        return textures;
+    } catch (error) {
+        console.error(`processSpritesheet (util): Error processing spritesheet ${assetPath}:`, error);
+        return [];
     }
 }
 

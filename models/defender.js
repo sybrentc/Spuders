@@ -1,7 +1,8 @@
-import { drawHealthBar } from '../utils/renderUtils.js'; // Import the utility function
+import * as PIXI from 'pixi.js';
+import HealthBarDisplay from '../healthBar.js'; // <-- ADD IMPORT
 
 export default class DefenceEntity {
-    constructor(id, definition, position, spriteDefinition, gameInstance) {
+    constructor(id, definition, position, pixiTextures, gameInstance) {
         if (!gameInstance) {
              throw new Error("DefenceEntity requires a valid Game instance.");
         }
@@ -22,30 +23,59 @@ export default class DefenceEntity {
         
         // --- Wear properties --- UPDATED to use HP
         this.wearEnabled = definition.stats.wearEnabled ?? false;
-        // REMOVED: this.totalHitsK = this.wearEnabled ? (definition.stats.totalHitsK ?? 1) : 1;
-        // REMOVED: this.remainingHits = this.totalHitsK;
         this.maxHp = this.wearEnabled ? (definition.stats.maxHp ?? 1) : 1; // Get calculated maxHp
         this.hp = this.maxHp; // Initialize current HP
         this.wearDecrement = this.wearEnabled ? (definition.stats.wearDecrement ?? 0) : 0; // Get calculated decrement
         this.isDestroyed = false;
         // --- End Wear properties ---
         
-        // --- Sprite and Animation Setup --- 
-        this.spriteDefinition = spriteDefinition;
-        this.spriteImage = null;
+        this.healthBarDisplay = null; // <-- Initialize healthBarDisplay
+
+        // --- PixiJS Sprite Setup --- 
+        this.pixiContainer = new PIXI.Container();
+        this.pixiSprite = null;
+        this.allSpriteFrames = pixiTextures || []; // Store all frames
+        this.framesPerRow = definition.sprite?.framesPerRow || 1; // Store for texture index calculations
+
         this.isAttacking = false;
-        this.currentFrame = 0;
-        this.lastFrameChangeTime = 0;
+        this.currentFrame = 0; // Current animation frame index within a direction row (0 for idle)
+        this.directionRowIndex = 2; // Default to facing down (row 2 of spritesheet)
+        this.frameTimeAccumulator = 0; // Accumulator for animation timing
 
-        this.directionRowIndex = 2; // Default to facing down (row 2)
+        if (this.allSpriteFrames.length > 0) {
+            // Calculate initial texture index: frame 0 of the default direction row
+            const initialTextureIndex = (this.directionRowIndex * this.framesPerRow) + 0;
+            if (initialTextureIndex < this.allSpriteFrames.length) {
+                this.pixiSprite = new PIXI.Sprite(this.allSpriteFrames[initialTextureIndex]);
 
-        if (this.spriteDefinition) {
-            this.spriteImage = new Image();
-            this.spriteImage.src = this.spriteDefinition.path;
-            // TODO: Add error handling for image loading
+                const anchorX = definition.display?.anchorX ?? 0.5;
+                const anchorY = definition.display?.anchorY ?? 0.5;
+                this.pixiSprite.anchor.set(anchorX, anchorY);
+
+                const scale = definition.display?.scale ?? 1;
+                this.pixiSprite.scale.set(scale);
+
+                this.pixiContainer.addChild(this.pixiSprite);
+            } else {
+                console.warn(`Defender ${this.id}: Initial texture index out of bounds. Sprite not created.`);
+            }
+        } else {
+            console.warn(`Defender ${this.id}: No sprite frames provided. Sprite not created.`);
         }
-        // --- End Sprite Setup ---
         
+        this.pixiContainer.x = this.x;
+        this.pixiContainer.y = this.y;
+        // --- End PixiJS Sprite Setup ---
+        
+        // --- HealthBarDisplay Initialization ---
+        if (this.pixiSprite && this.game) { // Ensure pixiSprite and game are available
+            this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);
+        } else {
+            // console.warn(`Defender ${this.id}: Could not initialize HealthBarDisplay. Missing pixiSprite or game instance.`);
+            // this.healthBarDisplay remains null if conditions aren't met
+        }
+        // --- End HealthBarDisplay Initialization ---
+
         // --- Generalized Effects Setup --- 
         this.effects = definition.effects; // Store the whole effects object (or undefined)
         this.puddles = []; // Array for splash effects like puddles {x, y, createdAt, duration, radius, speedFactor}
@@ -55,10 +85,10 @@ export default class DefenceEntity {
         // --- End Effects Setup --- 
         
         // --- Display Properties --- 
-        this.displayScale = definition.display?.scale
-        this.displayAnchorX = definition.display?.anchorX
-        this.displayAnchorY = definition.display?.anchorY
-        this.frameTimeAccumulator = 0; // Accumulator for animation timing
+        this.displayScale = definition.display?.scale // Keep for potential other uses or remove if only for old render
+        this.displayAnchorX = definition.display?.anchorX // Keep for potential other uses or remove if only for old render
+        this.displayAnchorY = definition.display?.anchorY // Keep for potential other uses or remove if only for old render
+        // this.frameTimeAccumulator = 0; // Moved to PixiJS Sprite Setup section
         // --- End Display Properties ---
     }
 
@@ -182,6 +212,7 @@ export default class DefenceEntity {
         // REMOVED:     // TODO: Trigger removal logic? (Handled by Manager filter for now)
         // REMOVED:     return; // Stop further updates if destroyed by wear
         // REMOVED: }
+        // REMOVED: }
         // --- End Check ---
 
         // 1. Find a target if we don't have one (or current one is dead)
@@ -221,36 +252,52 @@ export default class DefenceEntity {
         this.attack(timestamp);
         
         // --- Animation Update --- 
-        if (this.isAttacking && this.spriteDefinition) {
-            const frameDuration = this.spriteDefinition.frameDuration;
-            const framesInRow = this.spriteDefinition.framesPerRow;
-            // Assuming frame 0 is idle and frames 1 to N-1 are the attack animation
-            const lastAttackFrameIndex = framesInRow - 1; 
+        // Ensure we have a sprite and frames to work with
+        if (this.pixiSprite && this.allSpriteFrames && this.allSpriteFrames.length > 0) {
+            const frameDuration = this.definition.sprite?.frameDuration || 100; // Default if not defined
+            const framesInAttackAnimation = this.framesPerRow; // Total frames in one direction row
 
-            this.frameTimeAccumulator += deltaTime; // Accumulate effective time
+            if (this.isAttacking) {
+                this.frameTimeAccumulator += deltaTime;
 
-            // Check if enough accumulated time has passed to change frame
-            while (this.frameTimeAccumulator >= frameDuration) { 
-                 this.frameTimeAccumulator -= frameDuration; // Subtract consumed time
-                 
-                 // Check if we are still within the attack animation frames (1 to lastAttackFrameIndex)
-                 if (this.currentFrame < lastAttackFrameIndex) {
-                    this.currentFrame++; // Advance to the next frame
-                    // Removed: this.lastFrameChangeTime = timestamp; // No longer needed
-                 } else {
-                    // Animation cycle finished
-                    this.isAttacking = false;
-                    this.currentFrame = 0; // Reset to idle frame (frame 0)
-                    this.frameTimeAccumulator = 0; // Reset accumulator when animation ends
-                    break; // Exit the while loop as animation finished
-                 }
+                while (this.frameTimeAccumulator >= frameDuration) {
+                    this.frameTimeAccumulator -= frameDuration;
+                    this.currentFrame++; // Advance frame
+
+                    // Frame 0 is idle, frames 1 to framesPerRow-1 are attack frames for the current direction.
+                    if (this.currentFrame >= framesInAttackAnimation) {
+                        // Attack animation finished, revert to idle frame of the current direction
+                        this.isAttacking = false;
+                        this.currentFrame = 0; 
+                        this.frameTimeAccumulator = 0;
+                        break; // Exit loop, animation for this attack is done
+                    }
+                }
+            } else {
+                // Not attacking, ensure we are on the idle frame (frame 0 of current direction)
+                this.currentFrame = 0;
+                this.frameTimeAccumulator = 0; // Reset accumulator when not attacking
+            }
+
+            // Calculate the texture index for the current direction and frame
+            let textureIndex = (this.directionRowIndex * this.framesPerRow) + this.currentFrame;
+            
+            // Ensure textureIndex is within bounds
+            if (textureIndex >= 0 && textureIndex < this.allSpriteFrames.length) {
+                this.pixiSprite.texture = this.allSpriteFrames[textureIndex];
+            } else {
+                // Fallback or error logging if index is out of bounds
+                // console.warn(`Defender ${this.id}: Texture index ${textureIndex} out of bounds. Max: ${this.allSpriteFrames.length - 1}`);
+                // Optionally, set to a default texture or the first frame
+                if (this.allSpriteFrames.length > 0) {
+                    this.pixiSprite.texture = this.allSpriteFrames[0]; 
+                }
             }
         } else {
             // Not attacking, ensure we are on the idle frame
-            this.currentFrame = 0;
-            this.frameTimeAccumulator = 0; // Reset accumulator when not attacking
+            // This case is if pixiSprite or allSpriteFrames are missing, already handled by the outer if
         }
-        // --- End Animation Update ---
+        // --- End Animation Update --- 
 
         // 3. Update Effects (Puddles/Slow)
         // Check if this entity manages puddles (has effect properties)
@@ -287,13 +334,17 @@ export default class DefenceEntity {
             });
         }
         
+        // Update HealthBarDisplay
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.update(this.hp, this.maxHp);
+        }
         // TODO: Add other update logic (animations, health regen, etc.)
     }
 
     render(ctx) {
         // Draw sprite if available
-        if (this.spriteImage && this.spriteImage.complete && this.spriteDefinition) {
-            const { frameWidth, frameHeight, framesPerRow } = this.spriteDefinition;
+        if (this.pixiSprite && this.pixiContainer) {
+            const { frameWidth, frameHeight } = this.allSpriteFrames[0].texture.baseTexture;
 
             // --- Calculate Source Frame --- 
             const row = this.directionRowIndex; // Use the calculated direction row
@@ -313,7 +364,7 @@ export default class DefenceEntity {
 
             ctx.save();
             ctx.drawImage(
-                this.spriteImage, 
+                this.pixiSprite.texture.baseTexture, 
                 sourceX, sourceY,           // Source x, y (top-left corner of frame)
                 frameWidth, frameHeight,    // Source width, height (size of frame)
                 drawX, drawY,               // Destination x, y (where to draw on canvas)
@@ -321,11 +372,9 @@ export default class DefenceEntity {
             );
 
             // --- Draw Wear/Durability Bar --- 
-            if (this.wearEnabled) {
-                // Reuse the existing health bar logic, treating remaining hits as 'current health'
-                // REMOVED: drawHealthBar(ctx, this.remainingHits, this.totalHitsK, drawX, drawY, destWidth, destHeight);
-                drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, destWidth, destHeight); // Use hp and maxHp
-            }
+            // if (this.wearEnabled) { // <-- REMOVE OLD HEALTH BAR DRAWING
+            //     drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, destWidth, destHeight); // Use hp and maxHp
+            // }
             // --- End Draw Wear Bar ---
 
             ctx.restore();
@@ -399,17 +448,26 @@ export default class DefenceEntity {
         // --- Update Sprite and Display ---
         if (updatedDef.sprite) {
             // Check if sprite path changed to reload image
-            if (!this.spriteDefinition || this.spriteDefinition.path !== updatedDef.sprite.path) {
-                this.spriteImage = new Image();
-                this.spriteImage.src = updatedDef.sprite.path;
+            if (!this.allSpriteFrames.length > 0 || this.allSpriteFrames[0].texture.baseTexture.resource.source.src !== updatedDef.sprite.path) {
+                this.allSpriteFrames = updatedDef.sprite.frames.map(frame => new PIXI.Sprite(frame));
                 // TODO: Add error handling for image loading
             }
             // Update the rest of the sprite definition
-            this.spriteDefinition = { ...this.spriteDefinition, ...updatedDef.sprite }; 
+            this.pixiSprite = this.allSpriteFrames[this.directionRowIndex * this.framesPerRow + this.currentFrame];
+            if (this.pixiSprite) {
+                const anchorX = updatedDef.display?.anchorX ?? 0.5;
+                const anchorY = updatedDef.display?.anchorY ?? 0.5;
+                this.pixiSprite.anchor.set(anchorX, anchorY);
+
+                const scale = updatedDef.display?.scale ?? 1;
+                this.pixiSprite.scale.set(scale);
+            } else {
+                console.warn(`Defender ${this.id}: No sprite frames provided. Sprite not updated.`);
+            }
         } else {
             // Handle case where sprite info might be removed
-            this.spriteDefinition = undefined;
-            this.spriteImage = null;
+            this.allSpriteFrames = [];
+            this.pixiSprite = null;
         }
 
         if (updatedDef.display) {
@@ -428,5 +486,22 @@ export default class DefenceEntity {
 
         // Update the stored definition reference if needed
         this.definition = { ...this.definition, ...updatedDef }; 
+    }
+
+    destroyPixiObjects() {
+        if (this.pixiSprite) {
+            this.pixiSprite.destroy();
+            this.pixiSprite = null;
+        }
+        if (this.pixiContainer) {
+            // Passing { children: true } ensures all children (like the sprite if not already destroyed) are also destroyed.
+            this.pixiContainer.destroy({ children: true }); 
+            this.pixiContainer = null;
+        }
+        // TODO: Later, when healthBarDisplay is added for defenders:
+        if (this.healthBarDisplay) {
+            this.healthBarDisplay.destroy();
+            this.healthBarDisplay = null;
+        }
     }
 } 

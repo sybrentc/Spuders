@@ -1,6 +1,7 @@
 import Enemy from './models/enemy.js'; // EnemyManager needs to know about Enemy
 import * as PIXI from 'pixi.js'; // Import PIXI
 import { Texture, Rectangle } from 'pixi.js';
+import { processSpritesheet } from './utils/dataLoaders.js'; // <-- IMPORT THE UTILITY
 
 // Helper function for distance calculation
 function distanceBetween(point1, point2) {
@@ -41,40 +42,6 @@ export default class EnemyManager {
         this.allProcessedTextureArrays = [];
     }
 
-    async _processSpritesheet(assetPath, frameConfig) {
-        if (!assetPath || !frameConfig) {
-            console.error("EnemyManager._processSpritesheet: Missing assetPath or frameConfig.", { assetPath, frameConfig });
-            return [];
-        }
-        try {
-            const loadedAsset = await PIXI.Assets.load(assetPath);
-
-            if (!loadedAsset || !loadedAsset.source) {
-                console.error(`EnemyManager._processSpritesheet: Failed to load asset or asset source is invalid for ${assetPath}.`, loadedAsset);
-                return [];
-            }
-
-            const textures = [];
-            const { frameWidth, frameHeight, totalFrames, framesPerRow } = frameConfig;
-
-            for (let i = 0; i < totalFrames; i++) {
-                const col = i % framesPerRow;
-                const row = Math.floor(i / framesPerRow);
-                const x = col * frameWidth;
-                const y = row * frameHeight;
-                const frameRectangle = new PIXI.Rectangle(x, y, frameWidth, frameHeight);
-                
-                const newTexture = new PIXI.Texture({ source: loadedAsset, frame: frameRectangle.clone() });
-
-                textures.push(newTexture);
-            }
-            return textures;
-        } catch (error) {
-            console.error(`EnemyManager._processSpritesheet: Error processing spritesheet ${assetPath}:`, error);
-            return [];
-        }
-    }
-
     // Method to load initial data (Definitions and Sprites ONLY)
     async load() {
         try {
@@ -87,7 +54,7 @@ export default class EnemyManager {
 
             // Load and process common hit spritesheet
             if (this.commonSpiderConfig && this.commonSpiderConfig.hit && this.commonSpiderConfig.hit.commonHitSpriteSheetPath && this.commonSpiderConfig.display) {
-                this.allProcessedTextureArrays[0] = await this._processSpritesheet(
+                this.allProcessedTextureArrays[0] = await processSpritesheet( // <-- USE IMPORTED FUNCTION
                     this.commonSpiderConfig.hit.commonHitSpriteSheetPath,
                     this.commonSpiderConfig.display
                 );
@@ -129,7 +96,7 @@ export default class EnemyManager {
 
                     // Process normal animation frames for this enemy
                     if (enemyDef.sprite && enemyDef.sprite.path && this.commonSpiderConfig && this.commonSpiderConfig.display) {
-                        const normalTextures = await this._processSpritesheet(
+                        const normalTextures = await processSpritesheet( // <-- USE IMPORTED FUNCTION
                             enemyDef.sprite.path,
                             this.commonSpiderConfig.display
                         );

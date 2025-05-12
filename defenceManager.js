@@ -1,4 +1,7 @@
 import DefenceEntity from './models/defender.js'; // Import the entity class
+import * as PIXI from 'pixi.js';
+import { Texture, Rectangle } from 'pixi.js';
+import { processSpritesheet } from './utils/dataLoaders.js'; // Corrected path
 
 /**
  * Compares two definition objects to see if relevant source fields have changed.
@@ -90,14 +93,57 @@ export default class DefenceManager extends EventTarget {
             
             // Process and store definitions, perhaps indexed by ID
             if (Array.isArray(data)) {
-                data.forEach(def => {
+                for (const def of data) { // Changed to for...of for async operations
                     if (def.id) {
-                        this.defenceDefinitions[def.id] = def;
+                        this.defenceDefinitions[def.id] = { ...def }; // Store a copy
+                        const currentDef = this.defenceDefinitions[def.id];
+
+                        // Load and process spritesheet if sprite info exists
+                        if (currentDef.sprite && currentDef.sprite.path && 
+                            typeof currentDef.sprite.frameWidth === 'number' &&
+                            typeof currentDef.sprite.frameHeight === 'number' &&
+                            typeof currentDef.sprite.totalFrames === 'number' &&
+                            typeof currentDef.sprite.framesPerRow === 'number') {
+                            try {
+                                currentDef.pixiTextures = await processSpritesheet(
+                                    currentDef.sprite.path,
+                                    currentDef.sprite // Pass the whole sprite object as frameConfig
+                                );
+                                // console.log(`DefenceManager: Loaded ${currentDef.pixiTextures.length} textures for ${currentDef.id}`);
+                            } catch (error) {
+                                console.error(`DefenceManager: Failed to process spritesheet for ${currentDef.id} at ${currentDef.sprite.path}:`, error);
+                                currentDef.pixiTextures = []; // Ensure it's an empty array on failure
+                            }
+                        } else {
+                            currentDef.pixiTextures = []; // No sprite info, or incomplete
+                            // console.warn(`DefenceManager: No valid sprite data to process for ${currentDef.id}`);
+                        }
                     }
-                });
+                }
             } else {
                 // Handle cases where data might be an object, if applicable
-                this.defenceDefinitions = data;
+                // This part would also need async handling if it processes sprites.
+                // For now, assuming this path doesn't load individual sprites or needs to be updated similarly if it does.
+                this.defenceDefinitions = data; 
+                if (typeof data === 'object' && data !== null) {
+                    for (const defId in data) {
+                        const def = data[defId];
+                        if (def.id && def.sprite && def.sprite.path && 
+                            typeof def.sprite.frameWidth === 'number' &&
+                            typeof def.sprite.frameHeight === 'number' &&
+                            typeof def.sprite.totalFrames === 'number' &&
+                            typeof def.sprite.framesPerRow === 'number') {
+                            try {
+                                def.pixiTextures = await processSpritesheet(def.sprite.path, def.sprite);
+                            } catch (error) {
+                                 console.error(`DefenceManager: Failed to process spritesheet for ${def.id} (object data):`, error);
+                                 def.pixiTextures = [];
+                            }
+                        } else {
+                            def.pixiTextures = [];
+                        }
+                    }
+                }
             }
             
             this.isLoaded = true;
@@ -187,7 +233,7 @@ export default class DefenceManager extends EventTarget {
         }
         
         // Create and add the defence
-        const newDefence = new DefenceEntity(defenceId, definition, position, definition.sprite, this.game); // REMOVED instanceId argument
+        const newDefence = new DefenceEntity(defenceId, definition, position, definition.pixiTextures, this.game); // NEW: Pass pixiTextures
 
         // --- ADDED: Calculate and store grid coordinates for StrikeManager ---
         if (this.game.strikeManager?.isConfigLoaded()) {
@@ -201,6 +247,17 @@ export default class DefenceManager extends EventTarget {
         // --- END ADDED ---
 
         this.activeDefences.push(newDefence);
+        
+        // Add PixiJS container to stage if it exists
+        if (newDefence.pixiContainer) {
+            if (this.game && this.game.app && this.game.app.stage) {
+                this.game.app.stage.addChild(newDefence.pixiContainer);
+                // console.log(`DefenceManager: Added pixiContainer for ${newDefence.id} to stage.`);
+            } else {
+                console.error(`DefenceManager: Cannot add pixiContainer for ${newDefence.id} to stage. Game, app, or stage is missing.`);
+            }
+        }
+
         //console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
         return newDefence; // Return the created instance
     }
@@ -214,13 +271,31 @@ export default class DefenceManager extends EventTarget {
             // Pass the fetched enemies list to each defence entity
             defence.update(timestamp, deltaTime, activeEnemies); 
         });
-        // TODO: Remove destroyed defences
-        // --- Filter out destroyed defenders ---
+        
+        // --- Filter out destroyed defenders and perform PixiJS cleanup ---
         const initialCount = this.activeDefences.length;
-        this.activeDefences = this.activeDefences.filter(defence => !defence.isDestroyed);
-        const finalCount = this.activeDefences.length;
-        if (initialCount > finalCount) {
-            //console.log(`DefenceManager: Removed ${initialCount - finalCount} worn-out defender(s).`); // Optional log
+        let removedCount = 0;
+        this.activeDefences = this.activeDefences.filter(defence => {
+            if (defence.isDestroyed) {
+                // PixiJS Cleanup for destroyed defender
+                if (defence.pixiContainer) {
+                    if (this.game && this.game.app && this.game.app.stage) {
+                        this.game.app.stage.removeChild(defence.pixiContainer);
+                    } else {
+                        console.warn(`DefenceManager: Could not remove pixiContainer for ${defence.id}, game/app/stage missing.`);
+                    }
+                }
+                if (typeof defence.destroyPixiObjects === 'function') {
+                    defence.destroyPixiObjects(); // Call defender's own Pixi cleanup
+                }
+                removedCount++;
+                return false; // Remove from activeDefences
+            }
+            return true; // Keep in activeDefences
+        });
+
+        if (removedCount > 0) {
+            // console.log(`DefenceManager: Removed ${removedCount} worn-out defender(s).`);
         }
         // --- End Filter ---
     }
