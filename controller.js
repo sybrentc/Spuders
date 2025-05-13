@@ -151,11 +151,24 @@ class Controller {
         });
 
         this.gameCanvas.addEventListener('click', async (event) => {
-            const currentPreview = this.gameInstance.getPlacementPreview();
-            if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) return;
+            // const currentPreview = this.gameInstance.getPlacementPreview(); // Old way, no longer reliable for validity
+            // if (!isPlacingDefence || !selectedDefenceType || !currentPreview?.isValid) return;
 
+            if (!isPlacingDefence || !selectedDefenceType || !placementPreviewPos) {
+                return; // Not placing, no type selected, or no position known
+            }
+
+            // Check validity directly using the game instance and current mouse position
+            const isValidClick = this.gameInstance.isPositionValidForPlacement(placementPreviewPos);
+
+            if (!isValidClick) {
+                return; // Click was not in a valid placement location
+            }
+
+            // If all checks pass (placing, type selected, position known, and position is valid):
             if (this.gameInstance.defenceManager) {
-                await this.gameInstance.defenceManager.placeDefence(selectedDefenceType, { x: currentPreview.x, y: currentPreview.y });
+                // Use placementPreviewPos for the coordinates, as it's the most up-to-date mouse position
+                await this.gameInstance.defenceManager.placeDefence(selectedDefenceType, { x: placementPreviewPos.x, y: placementPreviewPos.y });
             }
             const selectedButton = document.querySelector(`.defence-button[data-defence-id="${selectedDefenceType}"]`);
             if (selectedButton) selectedButton.classList.remove('selected');

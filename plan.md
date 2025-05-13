@@ -4,7 +4,31 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 ## In Progress
 
-*(No tasks currently in this section)*
+**Phase 3.B / Task 16: Placement Preview (`Game.js`)**
+*   Refactor placement preview rendering to use PixiJS.
+*   **Steps:**
+    1.  **Add `PIXI.Graphics` Object:**
+        *   In `Game.js` constructor: Initialize `this.placementPreviewGraphic = new PIXI.Graphics();`.
+        *   Set initial visibility: `this.placementPreviewGraphic.visible = false;`.
+        *   In `Game.initialize()`: Add to stage: `this.app.stage.addChild(this.placementPreviewGraphic);`.
+    2.  **Refactor `Game.setPlacementPreview(position, definition)`:**
+        *   Call `this.placementPreviewGraphic.clear();` at the beginning.
+        *   Check if `position`, `definition`, and `this.gameConfig.ui.placementPreview` are valid.
+        *   If **invalid**:
+            *   Set `this.placementPreviewGraphic.visible = false;`.
+            *   Return.
+        *   If **valid**:
+            *   Determine placement validity (`isValidPlacement` boolean, using existing logic).
+            *   Calculate preview size: `const previewSize = definition.sprite.frameWidth * definition.display.scale * this.gameConfig.ui.placementPreview.scaleFactor;`.
+            *   Determine fill color based on `isValidPlacement` and colors from `this.gameConfig.ui.placementPreview` (e.g., `0x00FF00` or `0xFF0000`).
+            *   Set fill: `this.placementPreviewGraphic.beginFill(fillColor, 0.5);` (using determined color and alpha).
+            *   Draw rectangle: `this.placementPreviewGraphic.drawRect(position.x - previewSize / 2, position.y - previewSize / 2, previewSize, previewSize);`.
+            *   End fill: `this.placementPreviewGraphic.endFill();`.
+            *   Set visible: `this.placementPreviewGraphic.visible = true;`.
+    3.  **Cleanup:**
+        *   Delete the old `Game.renderPlacementPreview(ctx)` method entirely.
+
+*(Add other tasks currently in progress here if any)*
 
 ## Tasks To Do
 
@@ -12,8 +36,7 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 **Phase 3.B: Other UI Elements & Effects**
 
-16. **Placement Preview (`Game.js`):**
-    *   Refactor `renderPlacementPreview` to use `PIXI.Graphics` to draw the preview square on the PixiJS stage.
+*(Task 16 is moved to "In Progress")*
 17. **Defender Effects (Puddles in `Defender.js`):**
     *   Represent puddles with `PIXI.Graphics` objects, add/remove from an effects container on the PixiJS stage. (This was previously linked to `DefenceManager.renderEffects`).
 18. **Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
@@ -178,7 +201,7 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
         *   **(DONE) Add `this.pixiSprite` to `this.pixiContainer`.**
         *   **(DONE) Set initial `this.pixiContainer.x/y` from enemy's logical `this.x/y`.**
 *   **C. (DONE) Integration & Stage Management (`EnemyManager.js`, `Game.js`):**
-    1.  **(DONE) Modify `EnemyManager.createEnemy("spider_normal")` (now ID-agnostic for this part):**
+    1.  **(DONE) Modify `EnemyManager.createEnemy(enemyId)` (now ID-agnostic for this part):**
         *   **(DONE) Ensure it adds `enemy.pixiContainer` to `this.game.app.stage`.**
     2.  **(DONE) Modify `Enemy.js -> update()`:**
         *   **(DONE) Update `this.pixiContainer.x = this.x;` and `this.pixiContainer.y = this.y;`.**

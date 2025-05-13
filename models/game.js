@@ -1,4 +1,4 @@
-import { Application, Assets, Sprite } from 'pixi.js';
+import { Application, Assets, Sprite, Graphics } from 'pixi.js';
 import WaveManager from '../waveManager.js'; // Import the WaveManager
 import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
@@ -70,45 +70,101 @@ export default class Game {
         this.slowMoStartTime = null; // Timestamp when slow-mo transition begins
         this.backgroundMusic = null; // Property to hold the Audio element
         this.isMusicPlaying = false; // Flag to track if music has been started
+        this.placementPreviewGraphic = new Graphics(); // ADDED: For placement preview
+        this.placementPreviewGraphic.visible = false; // ADDED: Start hidden
     }
     
     // --- ADD methods for placement preview --- 
+    /**
+     * Checks if a given position is valid for placing a defence based on path proximity.
+     * @param {object} position - The {x, y} position to check.
+     * @returns {boolean} True if the position is valid, false otherwise.
+     */
+    isPositionValidForPlacement(position) {
+        if (!position) return false;
+
+        const path = this.extendedPathData;
+        const exclusionRadius = this.levelConfig?.pathExclusionRadius;
+
+        if (path && path.length >= 2 && typeof exclusionRadius === 'number') {
+            const distance = minDistanceToPath(position, path);
+            return distance >= exclusionRadius;
+        } else {
+            // Log if path/config wasn't ready for validation
+            if (!path || path.length < 2) {
+                 console.warn("isPositionValidForPlacement: Path data not available or incomplete for validation.");
+            }
+            if (typeof exclusionRadius !== 'number') {
+                console.warn(`isPositionValidForPlacement: pathExclusionRadius (${exclusionRadius}) not available or not a number in level config.`);
+            }
+            return false; // Default to invalid if critical data is missing
+        }
+    }
+
     /**
      * Sets the placement preview data.
      * @param {object | null} position - The {x, y} position or null to clear.
      * @param {object | null} defenceDefinition - The definition of the defence being placed.
      */
-    setPlacementPreview(position, defenceDefinition) { // <-- MODIFIED SIGNATURE
-        if (!position || !defenceDefinition) { // <-- Check for definition too
-            this.placementPreview = null;
+    setPlacementPreview(position, defenceDefinition) {
+        // Always clear previous drawing first
+        this.placementPreviewGraphic.clear();
+
+        // --- Validation --- 
+        // Check 1: Basic inputs
+        if (!position || !defenceDefinition) {
+            this.placementPreviewGraphic.visible = false;
             return;
         }
-        
-        // Check if path data and config are available
-        const path = this.extendedPathData; 
-        const exclusionRadius = this.levelData?.pathExclusionRadius;
 
-        if (path && path.length >= 2 && typeof exclusionRadius === 'number') { // Ensure path has at least 2 points
-            const distance = minDistanceToPath(position, path); // Use path variable
-            const isValid = distance >= exclusionRadius;
-            // Store the definition along with position and validity
-            this.placementPreview = { ...position, isValid, definition: defenceDefinition }; // <-- MODIFIED TO STORE DEF
-        } else {
-            // If path or config not ready, assume invalid or hide preview
-             if (!path || path.length < 2) {
-                  console.warn("setPlacementPreview: Path data not available or incomplete.");
-             }
-             if (typeof exclusionRadius !== 'number') {
-                 console.warn(`setPlacementPreview: pathExclusionRadius (${exclusionRadius}) not available or not a number in level data.`);
-             }
-             // Store definition even if invalid placement
-             this.placementPreview = { ...position, isValid: false, definition: defenceDefinition }; // <-- MODIFIED TO STORE DEF
-            // Or set to null: this.placementPreview = null;
+        // Check 2: Required definition and config data
+        const config = this.gameConfig;
+        if (!defenceDefinition.sprite || !defenceDefinition.display || !config || !config.ui?.placementPreview) {
+            console.warn("setPlacementPreview: Missing definition details (sprite, display) or gameConfig.ui.placementPreview. Cannot render.");
+            this.placementPreviewGraphic.visible = false;
+            return;
         }
+
+        // --- Placement Validity Check (Path Collision) --- 
+        const isValidPlacement = this.isPositionValidForPlacement(position);
+
+        // --- Calculate Appearance --- 
+        // Size
+        const frameWidth = defenceDefinition.sprite.frameWidth;
+        const definitionScale = defenceDefinition.display.scale;
+        const globalScaleFactor = config.ui.placementPreview.scaleFactor; // Already checked config.ui.placementPreview exists
+        const previewSize = frameWidth * definitionScale * globalScaleFactor;
+
+        // Color (with fallbacks)
+        // Using hex codes directly for Pixi, alpha is separate parameter in beginFill
+        const validColorHex = config.ui.placementPreview.validColorHex || 0x00FF00; // Default Green
+        const invalidColorHex = config.ui.placementPreview.invalidColorHex || 0xFF0000; // Default Red
+        const colorAlpha = config.ui.placementPreview.alpha || 0.5; // Default Alpha
+        const fillColor = isValidPlacement ? validColorHex : invalidColorHex;
+
+        // --- Draw Preview --- 
+        // this.placementPreviewGraphic.beginFill(fillColor, colorAlpha); // DEPRECATED
+        // Draw centered rectangle
+        this.placementPreviewGraphic.rect(
+            position.x - previewSize / 2, 
+            position.y - previewSize / 2, 
+            previewSize, 
+            previewSize
+        );
+        // this.placementPreviewGraphic.endFill(); // DEPRECATED
+        this.placementPreviewGraphic.fill({ color: fillColor, alpha: colorAlpha }); // New way to apply fill, with object argument
+
+        // --- Make Visible --- 
+        this.placementPreviewGraphic.visible = true;
+        
+        // REMOVED: this.placementPreview = ... ; // State is now managed by the graphic itself
     }
 
     getPlacementPreview() {
-        return this.placementPreview;
+        // NOTE: This method now returns the OLD state object if it was set previously.
+        // It might need refactoring or removal depending on how the controller uses it.
+        // For now, keep it, but be aware it doesn't reflect the PIXI graphic state.
+        return this.placementPreview; 
     }
     // --- END ADD methods --- 
 
@@ -185,6 +241,7 @@ export default class Game {
                 backgroundSprite.width = this.app.screen.width;
                 backgroundSprite.height = this.app.screen.height;
                 this.app.stage.addChild(backgroundSprite);
+                this.app.stage.addChild(this.placementPreviewGraphic); // ADDED: Add preview graphic to stage
             }
 
             // *** Load Path Coverage Data AFTER loadLevel sets the path ***
@@ -726,64 +783,6 @@ export default class Game {
         // Calls to manager.render() are removed.
         // Entity rendering will be handled by entities updating their PIXI.Sprite properties,
         // and those sprites being on the PIXI.stage.
-    }
-
-    // --- ADD method to render preview --- 
-    renderPlacementPreview(ctx) { // This will be refactored to use PIXI.Graphics later
-        if (!this.placementPreview) return;
-
-        // --- DETAILED DEBUG LOGGING --- 
-        // console.log("DEBUG: renderPlacementPreview - Entering function.");
-        // console.log("DEBUG: this.placementPreview:", JSON.stringify(this.placementPreview));
-        // const definition = this.placementPreview?.definition; // Use optional chaining for logging safety
-        // const config = this.gameConfig;
-        // console.log("DEBUG: definition retrieved:", definition ? JSON.stringify(definition) : 'null/undefined');
-        // console.log("DEBUG: definition.sprite exists:", !!definition?.sprite);
-        // console.log("DEBUG: definition.display exists:", !!definition?.display);
-        // console.log("DEBUG: config exists:", !!config);
-        // console.log("DEBUG: config.ui.placementPreview exists:", !!config?.ui?.placementPreview);
-        // --- END DEBUG LOGGING --- 
-
-        // Get the definition and global config
-        const definition = this.placementPreview.definition; // Restore direct access
-        const config = this.gameConfig; 
-
-        // Check required data exists
-        // Use the already retrieved definition/config from logging block
-        if (!definition || !definition.sprite || !definition.display || !config || !config.ui?.placementPreview) { // Modified check to use logged vars and check config.ui path
-            console.warn("renderPlacementPreview: Missing definition, sprite, display, or gameConfig data. Cannot render preview.");
-            return; 
-        }
-
-        ctx.save();
-        
-        // Choose color based on validity
-        // Use colors from config, provide fallbacks
-        const validColor = config.ui?.placementPreview?.validColor || 'rgba(0, 255, 0, 0.5)';
-        const invalidColor = config.ui?.placementPreview?.invalidColor || 'rgba(255, 0, 0, 0.5)';
-        if (this.placementPreview.isValid) {
-            ctx.fillStyle = validColor;
-        } else {
-            ctx.fillStyle = invalidColor;
-        }
-        
-        // --- Calculate dynamic preview size --- 
-        const frameWidth = definition.sprite.frameWidth;
-        const definitionScale = definition.display.scale;
-        const globalScaleFactor = config.ui.placementPreview.scaleFactor; // Use updated config path
-        
-        // Refined calculation: globalFactor * frameWidth * definitionScale
-        const previewSize = frameWidth * definitionScale * globalScaleFactor;
-        // --- End calculation ---
-
-        // Draw the preview square
-        ctx.fillRect(
-            this.placementPreview.x - previewSize / 2, 
-            this.placementPreview.y - previewSize / 2, 
-            previewSize, 
-            previewSize
-        );
-        ctx.restore();
     }
 
     // --- Game Setup ---
