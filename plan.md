@@ -4,31 +4,36 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 ## In Progress
 
-**Phase 3.B / Task 16: Placement Preview (`Game.js`)**
-*   Refactor placement preview rendering to use PixiJS.
-*   **Steps:**
-    1.  **Add `PIXI.Graphics` Object:**
-        *   In `Game.js` constructor: Initialize `this.placementPreviewGraphic = new PIXI.Graphics();`.
-        *   Set initial visibility: `this.placementPreviewGraphic.visible = false;`.
-        *   In `Game.initialize()`: Add to stage: `this.app.stage.addChild(this.placementPreviewGraphic);`.
-    2.  **Refactor `Game.setPlacementPreview(position, definition)`:**
-        *   Call `this.placementPreviewGraphic.clear();` at the beginning.
-        *   Check if `position`, `definition`, and `this.gameConfig.ui.placementPreview` are valid.
-        *   If **invalid**:
-            *   Set `this.placementPreviewGraphic.visible = false;`.
-            *   Return.
-        *   If **valid**:
-            *   Determine placement validity (`isValidPlacement` boolean, using existing logic).
-            *   Calculate preview size: `const previewSize = definition.sprite.frameWidth * definition.display.scale * this.gameConfig.ui.placementPreview.scaleFactor;`.
-            *   Determine fill color based on `isValidPlacement` and colors from `this.gameConfig.ui.placementPreview` (e.g., `0x00FF00` or `0xFF0000`).
-            *   Set fill: `this.placementPreviewGraphic.beginFill(fillColor, 0.5);` (using determined color and alpha).
-            *   Draw rectangle: `this.placementPreviewGraphic.drawRect(position.x - previewSize / 2, position.y - previewSize / 2, previewSize, previewSize);`.
-            *   End fill: `this.placementPreviewGraphic.endFill();`.
-            *   Set visible: `this.placementPreviewGraphic.visible = true;`.
-    3.  **Cleanup:**
-        *   Delete the old `Game.renderPlacementPreview(ctx)` method entirely.
+### Phase 3.B: Defender Effects (Puddles in `Defender.js`) - PixiJS Implementation
 
-*(Add other tasks currently in progress here if any)*
+1.  **Effects Container Strategy**:
+    *   Decision: For now, puddle `PIXI.Graphics` objects will be added directly to `this.game.app.stage`. A dedicated effects container can be a future refinement if needed for z-ordering.
+2.  **Modify `models/defender.js` - Puddle Data Structure**:
+    *   Update the `this.puddles` array. Each entry will store an object like: `{ metadata: { x, y, createdAt, duration, radius, speedFactor, color }, graphics: PIXI.Graphics_object }`.
+3.  **Modify `models/defender.js` - `attack(timestamp)` Method**:
+    *   When a defender with `this.effects` (e.g., "subzero") attacks and should create a puddle:
+        *   Create a new `PIXI.Graphics` object.
+        *   Use `new PIXI.Color(this.effects.color)` to get color and alpha. For example, from `"rgba(0, 255, 255, 0.3)"`.
+        *   Draw the puddle shape: `graphics.circle(0, 0, puddleMetadata.radius);`
+        *   Apply fill: `graphics.fill({ color: pixiColor.toNumber(), alpha: pixiColor.alpha });` (or simpler if direct RGBA string fill is confirmed compatible).
+        *   Set position: `graphics.x = enemyPos.x; graphics.y = enemyPos.y;`
+        *   Add to stage: `this.game.app.stage.addChild(graphics);`
+        *   Store the `graphics` object along with its `metadata` (x, y, createdAt, duration, radius, speedFactor, color) in the `this.puddles` array.
+4.  **Modify `models/defender.js` - `update(timestamp, deltaTime, enemies)` Method**:
+    *   Iterate `this.puddles` to manage lifecycle:
+        *   If a puddle (based on `puddle.metadata.createdAt` and `puddle.metadata.duration`) has expired:
+            *   Remove its `PIXI.Graphics` object from the stage: `this.game.app.stage.removeChild(puddle.graphics);`
+            *   Destroy the graphics object: `puddle.graphics.destroy();`
+            *   Filter this puddle out from the `this.puddles` array.
+        *   The logic for applying slow effects to enemies (using `puddle.metadata`) remains unchanged.
+5.  **Modify `models/defender.js` - `destroyPixiObjects()` Method**:
+    *   When the defender itself is destroyed, iterate through any of its active `this.puddles`.
+    *   For each active puddle:
+        *   Remove `puddle.graphics` from the stage.
+        *   Call `puddle.graphics.destroy()`.
+    *   Clear the `this.puddles` array.
+6.  **Modify `models/defender.js` - Cleanup**:
+    *   Remove the old canvas-based `renderEffects(ctx)` method entirely.
 
 ## Tasks To Do
 
@@ -36,7 +41,6 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 **Phase 3.B: Other UI Elements & Effects**
 
-*(Task 16 is moved to "In Progress")*
 17. **Defender Effects (Puddles in `Defender.js`):**
     *   Represent puddles with `PIXI.Graphics` objects, add/remove from an effects container on the PixiJS stage. (This was previously linked to `DefenceManager.renderEffects`).
 18. **Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
@@ -246,6 +250,35 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
     *   In `Enemy.js` `destroyPixiObjects()`: `this.healthBarDisplay.destroy();`.
     *   The `reset()` logic is not directly applicable to enemies in the same way as `Base.js`; health bars are created with the enemy and destroyed when the enemy dies. Visibility is handled by the parent `pixiContainer`.
     *   Old direct calls to `drawHealthBar` were removed when enemy rendering was refactored for PixiJS.
+
+**Phase 3.B: Other UI Elements & Effects (Placement Preview DONE)**
+
+16. **(DONE) Placement Preview (`Game.js`):**
+    *   Refactored placement preview rendering to use PixiJS.
+    *   **Steps:**
+        1.  **(DONE) Add `Graphics` Object to `Game.js`:**
+            *   (DONE) Imported `Graphics` from `pixi.js`.
+            *   (DONE) In `Game.js` constructor: Initialized `this.placementPreviewGraphic = new Graphics();`.
+            *   (DONE) Set initial visibility: `this.placementPreviewGraphic.visible = false;`.
+            *   (DONE) In `Game.initialize()`: Added to stage: `this.app.stage.addChild(this.placementPreviewGraphic);`.
+        2.  **(DONE) Create `Game.isPositionValidForPlacement(position)`:**
+            *   (DONE) Added method to check placement validity based on path proximity and exclusion radius.
+        3.  **(DONE) Refactor `Game.setPlacementPreview(position, definition)`:**
+            *   (DONE) Calls `this.placementPreviewGraphic.clear();`.
+            *   (DONE) Validates `position`, `definition`, and `gameConfig`.
+            *   (DONE) Calls `this.isPositionValidForPlacement(position)` to determine `isValidPlacement`.
+            *   (DONE) Calculates preview size and determines color/alpha from config.
+            *   (DONE) Uses `this.placementPreviewGraphic.rect(x, y, w, h);` to define the shape.
+            *   (DONE) Uses `this.placementPreviewGraphic.fill({ color: fillColor, alpha: colorAlpha });` to apply fill.
+            *   (DONE) Sets `this.placementPreviewGraphic.visible = true;` or `false`.
+            *   (DONE) Removed usage of old `this.placementPreview` property for storing current state.
+        4.  **(DONE) Update `Controller.js` Click Handler:**
+            *   (DONE) Calls `gameInstance.isPositionValidForPlacement(currentMousePos)` to check validity.
+            *   (DONE) Uses `currentMousePos` for placing defence if valid.
+            *   (DONE) No longer relies on `gameInstance.getPlacementPreview().isValid`.
+        5.  **(DONE) Cleanup:**
+            *   (DONE) Deleted the old `Game.renderPlacementPreview(ctx)` method from `Game.js`.
+            *   (Note: `Game.getPlacementPreview()` remains, but its returned value `this.placementPreview` is no longer updated by `setPlacementPreview`.)
 
 **Phase 3.C: Hit Flash Effect (DONE)**
     *   **E.1: (DONE) Asset & Configuration Preparation (`EnemyManager.js`)**
