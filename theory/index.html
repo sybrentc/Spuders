@@ -101,7 +101,7 @@
 
 <p>The graph shows a few different regimes. The first regime starts at a range equal to the size of the exclusion zone, i.e., the distance from the path within which no defenders may be placed. Any defender with a range of that size or less could not achieve overlap with the path. To first-order approximation, the overlap grows linearly with range in the first regime. This regime is indicated on the map below by red dots. In this regime, defenders need to be placed in 'hot spots', corresponding to parts of the path with high radii of curvature. Note that our path has a complex winding part and a straight part, we can refer to these as the knot and the string. The second regime occurs when the range gets large enough that we no longer need to concern ourselves with the complex winding part of the path, since the entire knot falls within range. This marks the start of the second regime, indicated by blue dots on the map below. Here, the optimal defender positions are not in hot spots but seem to follow a centre of mass approach, capturing the knot in all cases while expanding range to capture more additional string as well. The second regime transitions into the third regime around the range corresponding to the theoretical minimum radius of a freely placed circle which covers our path entirely. The third regime corresponds to a full coverage of the entire path. The following map shows the calculated optimal defender positions for range values up to 500 pixels. Larger ranges have wider error bars on their optimal positions and are therefore less informative.</p>
 <div id="mapContainer" class="plot-container" style="position: relative; width: 600px; height: 600px; border: 1px solid #ccc;">
-    <img id="mapImage" src="../assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
+    <img id="mapImage" src="../public/assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
     <canvas id="optimumPositionsCanvas" width="600" height="600" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
 </div>
 <p class="figure-caption">Figure 2: Optimal defender placement positions. Red dots are below a threshold range; blue dots above it. The blue circle indicates the smallest defender range in the second regime, centred on its optimum position. Note that the blue circle covers the complex turns of the path almost entirely.</p>
@@ -236,12 +236,12 @@
 
 \[ w = \frac{1}{\mathbb{E}[\tau]}. \tag{35} \]
 
-<p>The expected lifetime of a defender can be expressed in terms of the total number of attacks \(k\) the defender has in its life before it is entirely worn out, its rate of attack \(r\) in hits per second when it is engaging an enemy, and its duty cycle \(\bar{f}\), which is the average fraction of gametime the defender is firing. This yields</p>
+<p>The expected lifetime of a defender can be expressed in terms of the total number of attacks \(k_0\) the defender has in its life before it is entirely worn out, its rate of attack \(r\) in hits per second when it is engaging an enemy, and its duty cycle \(\bar{f}\), which is the average fraction of gametime the defender is firing. This yields</p>
 
-\[ \mathbb{E}[\tau] = \frac{k}{r \bar{f}}. \tag{36} \]
+\[ \mathbb{E}[\tau] = \frac{k_0}{r \bar{f}}. \tag{36} \]
 
-<p>Equating eqts. 35 and 36, we obtain an expression for \(k\), which we can use to provide each defender of the given type with a durability bar (health bar) which depletes by \(1/k\) with every attack it carries out</p>
-\[ k = \frac{r \bar{f}}{w}. \tag{37} \]
+<p>Equating eqts. 35 and 36, we obtain an expression for \(k_0\), which we can use to provide each defender of the given type with a durability bar (health bar) which depletes by \(1/k_0\) with every attack it carries out</p>
+\[ k_0 = \frac{r \bar{f}}{w}. \tag{37} \]
 
 <p>Consider a single defender-enemy interaction. We first take as our reference the time the enemy is within range \(T_r\) and calculate what fraction of that time the defender spends firing at the enemy. This can be 1 if the enemy leaves the range before being killed, or can be \(T_k/T_r\lt1\) if the enemy is killed before leaving the range (cf. eqts. 11 and 13). To obtain the duty cycle in terms of game time, we then multiply that fraction by the fraction of total time on path which the enemy spends in range, i.e., \(P(\text{in range})\). We then take the expectation value over all \(N\) enemy types to obtain</p>
 
@@ -259,47 +259,59 @@
 
 \[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{40} \]
 
-<p>To implement this required destruction rate using discrete events, we need to determine the cumulative target reduction in earning power that should have occurred by time \(t\) within wave \(n\) due to \(d_n\). This target cumulative loss, denoted \(\Delta R_n(t)\), can be found by integrating the destruction rate over the time the wave has been active, from its start \(t=0\) to the current time \(t\). We use the solution to eqt. 39, \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\), to obtain</p>
+<p>To implement this required destruction rate using discrete events, such as airstrikes, we need to determine the cumulative target reduction in earning power that should have occurred at any given moment during wave \(n\). It is important to note at this point that eqt. 40 is derived in the macroscopic, time-averaged model, which assumes a time-independent, average bounty rate throughout the wave \(b_n=B_n/T_n\). While the macroscopic approach is perfectly fine for obtaining the wave-average values such as \(d_n\), it does not apply to the microscopic game mechanics. This is illustrated as follows.</p>
 
-\[ \Delta R_n(t) = \int_0^t d_n R_n(t') dt' = \int_0^t d_n R_n(0) e^{-d_n t'} dt'. \tag{41} \]
+<p>Suppose we continued to work in the steady-state, macroscopic model, and obtained the time-dependent solution to eqt. 40, i.e., \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\). The target destruction accumulated at a time \(t\) into a wave \(n\) could then be found by integrating that destruction rate over the time the wave has been active, which would yield \( \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}).\) However, this macroscopic approach would result in a steadily increasing cumulative loss throughout the duration of the wave. The amount of target destruction for a given wave would surprisingly depend on how quickly a player clears the wave. Crucially, it would work exactly opposite to expectation, being more lenient on 'stronger' players who clear the wave early and more punishing on 'weaker' players who clear the wave late.</p>
 
-<p>Solving this integral yields the total target earning power that should have been removed by time \(t\) in wave \(n\)</p>
+<p>The correct approach therefore is to obtain an expression for the cumulative target destruction which is valid for the microscopic, discrete game-world. We recognise that, during gameplay, the bounty rate is not constant but that bounty is earned in lumps as enemies are killed. We therefore carry out the above derivation with respect to bounty (discretisable) rather than time (continuous). To do so, we make the average bounty-rate assumption explicit by writing \(dB/dt=B_n/T_n\), with \(B\) the bounty earned in wave \(n\) so far, \(B_n\) the total bounty available in the wave, and \(T_n\) the maximum time the wave can last. Substituting this into eqt. 40 yields</p>
 
-\[ \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}). \tag{42} \]
+\[\frac{dR_n}{dB}=-\frac{d_nT_n}{B_n}R_n.\tag{41}\]
 
-<p>At runtime, we accumulate \(\Delta R_n(t)\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run.</p>
+<p>To solve this differential equation, we first separate the variables:</p>
+\[ \frac{1}{R_n} dR_n = - \frac{d_n T_n}{B_n} dB \]
+<p>Next, we integrate both sides. The integration for \(R_n\) is from its value at the start of the wave, \(R_n(0)\) (when no bounty \(B\) for the current wave has yet been collected), to its value \(R_n(B)\) after a certain amount of bounty \(B\) has been collected. The integration for \(B\) is from \(0\) to \(B\):</p>
+\[ \int_{R_n(0)}^{R_n(B)} \frac{1}{R'_n} dR'_n = - \frac{d_n T_n}{B_n} \int_{0}^{B} dB' \]
+<p>Evaluating these integrals yields:</p>
+\[ \ln\left(\frac{R_n(B)}{R_n(0)}\right) = - \frac{d_n T_n B}{B_n} \]
+<p>Exponentiating both sides gives the earning rate \(R_n(B)\) as a function of the bounty \(B\) collected so far in the wave:</p>
 
-<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing \(\Delta R_n(t)\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k(t)/k\), where \(k(t)\) is the number of its total \(k\) attacks a defender has left before it is entirely worn out, i.e., \(C^*(t)=Ck(t)/k\). This yields</p>
+\[ R_n(B) = R_n(0) e^{-d_n T_n (B/B_n)}. \tag{42}\]
 
-\[\Delta R_n(t)=\frac{1}{\alpha}\Delta C^*(t) = \frac{R}{k}\Delta k(t). \tag{43}\]
+<p>At runtime, we accumulate \(\Delta R\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run. The accumulation of \(\Delta R\) can be carried out by adding a contribution \(\delta R\) to the running total each time a discrete bounty \(\delta B\) is earned. Since bounty values are not infinitesimal, we cannot derive these contributions from eqt. 41 but need to derive them from eqt. 42</p>
+
+\[ \delta R_n = R_n(B) \left(1 - e^{-d_n T_n (\delta B/B_n)}\right). \tag{43} \]
+
+<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing \(\Delta R_n\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k/k_0\), where \(k\) is the number of its total \(k_0\) attacks a defender has left before it is entirely worn out. This yields</p>
+
+\[\Delta R_n=\frac{1}{\alpha}\Delta C^* = \frac{R}{k_0}\Delta k. \tag{44}\]
 
 <p>The above result for a single defender can be generalised to a population by simple summation to yield</p>
 
-\[ \Delta R_n(t) = \sum_{i=1}^{N} \frac{R_i}{k_i}\Delta k_i(t). \tag{44} \]
+\[ \Delta R_n = \sum_{i=1}^{N} \frac{R_i}{k_{0,i}}\Delta k_i. \tag{45} \]
 
-<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R_n(t)\), we redefine eqt. 43 in terms of a rescaled defender health \(h^d_i(t)\) such that</p>
+<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R_n\), we redefine eqt. 45 in terms of a rescaled defender health \(h^d_i\) such that</p>
 
-\[\Delta R_n(t) \equiv \sum_{i=1}^{N} \Delta h^d_i(t). \tag{45}\]
+\[\Delta R_n \equiv \sum_{i=1}^{N} \Delta h^d_i. \tag{46}\]
 
-<p>Comparing eqts. 43 and 44 yields an expression for \(h^d_i(t)\)</p>
+<p>Comparing eqts. 45 and 46 yields an expression for \(h^d_i\)</p>
 
-\[h^d_i(t) = \frac{R_i}{k_i}k_i(t), \tag{46}\]
+\[h^d_i = \frac{R_i}{k_{0,i}}k_i, \tag{47}\]
 
-<p>We note that the rescaled defender health has units of earning rate, with \(h^d_i(t)=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since, each enemy has an associated bounty in units of currency, and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i(t)\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i(t)\) is the health of enemy \(i\) at time \(t\)</p>
+<p>We note that the rescaled defender health has units of earning rate, with \(h^d_i=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since each enemy has an associated bounty in units of currency and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i\) is the current health of enemy \(i\)</p>
 
-\[h^e_i(t)=\frac{\beta s_i}{\alpha}h_i(t). \tag{47} \]
+\[h^e_i=\frac{\beta s_i}{\alpha}h_i. \tag{48} \]
 
 <h2>Airstrikes</h2>
 
-<p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i(t)\) and ask what the maximum distance \(r^w_i(t)\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
+<p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i\) and ask what the maximum distance \(r^w_i\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
 
-\[ r^w_i(t) = \sqrt{\frac{A}{h^d_i(t)}}. \tag{48} \]
+\[ r^w_i = \sqrt{\frac{A}{h^d_i}}. \tag{49} \]
 
-<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 47 and 45, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i(t)=1\), is a certain percentage of the map width, say 25%.</p>
+<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 49 and 47, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i=1\), is a certain percentage of the map width, say 25%.</p>
 
 <p>We work on the basis that it is the best interests of the enemy to remove as much earning rate from the pool per explosion as possible, since that translates into the greatest instantaneous boost to their chances of success. To pick the optimal location for the epicentre of the explosion therefore, we add all defender wipe-out circles to a z-buffer, each weighted by its associated defender earning rate, and randomly select a pixel of maximum z-value to be the target location.</p>
 
-<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the \(\Delta h^d_n(t)\) health reduction per bomb, which according to eqt. 44 equals the \(\Delta R_n(t)\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
+<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R_n\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
@@ -307,7 +319,7 @@
 
   // Function to fetch and parse path coverage CSV
   function fetchPathCoverageData() {
-      return fetch('../assets/paths/path-coverage.csv')
+      return fetch('../public/assets/paths/path-coverage.csv')
           .then(response => {
               if (!response.ok) {
                   throw new Error(`HTTP error fetching coverage data! status: ${response.status}`);
@@ -335,7 +347,7 @@
 
   // Function to fetch level data JSON
   function fetchLevelData() {
-      return fetch('../assets/level1.json') // Fetch level1.json
+      return fetch('../public/assets/level1.json') // Fetch level1.json
           .then(response => {
               if (!response.ok) {
                   throw new Error(`HTTP error fetching level data! status: ${response.status}`);
@@ -478,7 +490,7 @@
   const mapImage = document.getElementById('mapImage');
   const mapCanvas = document.getElementById('optimumPositionsCanvas');
   const mapCtx = mapCanvas.getContext('2d');
-  const optimalPosDataPath = '../assets/paths/path-optimums.csv';
+  const optimalPosDataPath = '../public/assets/paths/path-optimums.csv';
   const mapRangeThreshold = 468; // Define threshold variable here
 
   // Ensure image is loaded before drawing (important for dimensions if not hardcoded)
@@ -504,7 +516,7 @@
   async function fetchOptimalPositions(threshold) { 
       try {
           // --- Fetch level data first ---
-          const levelResponse = await fetch('../assets/level1.json');
+          const levelResponse = await fetch('../public/assets/level1.json');
           if (!levelResponse.ok) {
               throw new Error(`HTTP error fetching level data! status: ${levelResponse.status}`);
           }
@@ -613,8 +625,8 @@
 
   // --- Script for Endgame Ratio Plot ---
   const endgamePlotDiv = document.getElementById('endgameRatioPlot');
-  const analysisDataPath = '../assets/waves/analysis-results.json';
-  const analysisParamsPath = '../assets/waves/analysis-params.json'; // Path to the saved parameters
+  const analysisDataPath = '../public/assets/waves/analysis-results.json';
+  const analysisParamsPath = '../public/assets/waves/analysis-params.json'; // Path to the saved parameters
 
   // Function to fetch a JSON file
   function fetchJson(path) {
@@ -898,7 +910,7 @@
   const maxWaveN_f = 75; // Max wave number to plot
 
   // Path to the frozen parameters file
-  const analysisParamsPath_f = '../assets/waves/analysis-params.json';
+  const analysisParamsPath_f = '../public/assets/waves/analysis-params.json';
 
   // Function to fetch JSON
   function fetchJson_f(path) {
@@ -1119,8 +1131,8 @@
     console.log("Calculating theoretical alpha_0 and B_0 using current game parameters...");
 
     // --- Define necessary paths ---
-    const level1Path_calc = '../assets/level1.json';
-    const wavesPath_calc = '../assets/waves/waves.json';
+    const level1Path_calc = '../public/assets/level1.json';
+    const wavesPath_calc = '../public/assets/waves/waves.json';
     // Other paths derived from level1.json
 
     // --- Fetch function ---
@@ -1257,7 +1269,7 @@
 <!-- Script for dn vs n plot -->
 <script>
   const dnPlotDiv = document.getElementById('dnEvolutionPlot');
-  const analysisParamsPath_dn = '../assets/waves/analysis-params.json';
+  const analysisParamsPath_dn = '../public/assets/waves/analysis-params.json';
   const maxWaveN_dn = 25; // Max wave number to plot
 
   // --- Function to fetch JSON ---
@@ -1482,9 +1494,9 @@
 <!-- Script for Depreciation Comparison Plot -->
 <script>
   const depreciationPlotDiv = document.getElementById('depreciationComparisonPlot');
-  const originalResultsPath = '../assets/waves/analysis-results.json';
-  const dtREndResultsPath = '../assets/waves/analysis-depreciation-results.json'; // Renamed output file
-  const paramsPath = '../assets/waves/analysis-params.json'; // Need params for analytical line
+  const originalResultsPath = '../public/assets/waves/analysis-results.json';
+  const dtREndResultsPath = '../public/assets/waves/analysis-depreciation-results.json'; // Renamed output file
+  const paramsPath = '../public/assets/waves/analysis-params.json'; // Need params for analytical line
 
   // --- Function to fetch JSON ---
   function fetchJson_depr(path) {
