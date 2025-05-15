@@ -277,7 +277,7 @@
 
 \[ R_n(B) = R_n(0) e^{-d_n T_n (B/B_n)}. \tag{42}\]
 
-<p>At runtime, we accumulate \(\Delta R\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run. The accumulation of \(\Delta R\) can be carried out by adding a contribution \(\delta R\) to the running total each time a discrete bounty \(\delta B\) is earned. Since bounty values are not infinitesimal, we cannot derive these contributions from eqt. 41 but need to derive them from eqt. 42</p>
+<p>At runtime, we accumulate \(\Delta R\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run. The accumulation can be carried out by adding a contribution \(\delta R\) to the running total \(\Delta R\) each time a discrete bounty \(\delta B\) is earned. Since bounty values are not infinitesimal, we cannot derive these contributions from eqt. 41 but need to derive them from eqt. 42</p>
 
 \[ \delta R_n = R_n(B) \left(1 - e^{-d_n T_n (\delta B/B_n)}\right). \tag{43} \]
 
