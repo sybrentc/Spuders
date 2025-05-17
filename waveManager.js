@@ -57,6 +57,10 @@ export default class WaveManager extends EventTarget {
         this.nextWaveDurationSeconds = 0;   // Duration for wave n+1
         this.scheduleIndex = 0;             // Tracks progress through currentWaveSchedule
         this.previousWaveDurationSeconds = 0; // <-- ADDED: Store duration of the completed wave
+        // --- ADDED: Store total bounty for waves ---
+        this.currentWaveTotalBounty = 0;
+        this.nextWaveTotalBounty = 0;
+        this.previousWaveTotalBounty = 0;
         // --- END ADDED ---
 
         //console.log("WaveManager: Instance created.");
@@ -201,34 +205,39 @@ export default class WaveManager extends EventTarget {
 
              if (!currentResult || currentResult.schedule.length === 0) {
                  console.error(`WaveManager: Failed initial calculation for Wave 1. Stopping.`);
-                 this.currentWaveSchedule = []; this.currentWaveDurationSeconds = 0;
-                 this.nextWaveSchedule = []; this.nextWaveDurationSeconds = 0;
+                 this.currentWaveSchedule = []; this.currentWaveDurationSeconds = 0; this.currentWaveTotalBounty = 0;
+                 this.nextWaveSchedule = []; this.nextWaveDurationSeconds = 0; this.nextWaveTotalBounty = 0;
                  this.isFinished = true; // Stop further processing
                  // TODO: Consider how to handle UI/game state on critical failure
              return;
         }
              this.currentWaveSchedule = currentResult.schedule;
              this.currentWaveDurationSeconds = currentResult.durationSeconds;
-             //console.log(` -> Wave 1 Schedule: ${this.currentWaveSchedule.length} spawns, Duration: ${this.currentWaveDurationSeconds.toFixed(2)}s`);
+             this.currentWaveTotalBounty = currentResult.totalBounty; // Store bounty
+             //console.log(` -> Wave 1 Schedule: ${this.currentWaveSchedule.length} spawns, Duration: ${this.currentWaveDurationSeconds.toFixed(2)}s, Bounty: ${this.currentWaveTotalBounty.toFixed(2)}`);
 
              if (nextResult) {
                   this.nextWaveSchedule = nextResult.schedule;
                   this.nextWaveDurationSeconds = nextResult.durationSeconds;
-                  //console.log(` -> Wave 2 Schedule: ${this.nextWaveSchedule.length} spawns, Duration: ${this.nextWaveDurationSeconds.toFixed(2)}s`);
+                  this.nextWaveTotalBounty = nextResult.totalBounty; // Store bounty for next wave
+                  //console.log(` -> Wave 2 Schedule: ${this.nextWaveSchedule.length} spawns, Duration: ${this.nextWaveDurationSeconds.toFixed(2)}s, Bounty: ${this.nextWaveTotalBounty.toFixed(2)}`);
                 } else {
                   console.warn(`WaveManager: Failed to pre-calculate schedule for Wave 2.`);
                   this.nextWaveSchedule = [];
                   this.nextWaveDurationSeconds = 0;
+                  this.nextWaveTotalBounty = 0; // Reset bounty for next wave
                 }
             } else {
              // --- Subsequent Waves: Move next to current, calculate new next ---
              //console.log(`WaveManager: Transitioning to Wave ${waveN}...`);
              this.currentWaveSchedule = this.nextWaveSchedule;
-             // --- ADDED: Store previous duration before overwriting current ---
+             // --- Store previous duration and bounty before overwriting current ---
              this.previousWaveDurationSeconds = this.currentWaveDurationSeconds;
-             // --- END ADDED ---
+             this.previousWaveTotalBounty = this.currentWaveTotalBounty; // Store previous bounty
+             // --- END ---
              this.currentWaveDurationSeconds = this.nextWaveDurationSeconds;
-             //console.log(` -> Using pre-calculated Wave ${waveN} Schedule: ${this.currentWaveSchedule.length} spawns, Duration: ${this.currentWaveDurationSeconds.toFixed(2)}s`);
+             this.currentWaveTotalBounty = this.nextWaveTotalBounty; // Move next bounty to current
+             //console.log(` -> Using pre-calculated Wave ${waveN} Schedule: ${this.currentWaveSchedule.length} spawns, Duration: ${this.currentWaveDurationSeconds.toFixed(2)}s, Bounty: ${this.currentWaveTotalBounty.toFixed(2)}`);
 
              // Check if the schedule we just moved is valid
              if (this.currentWaveSchedule.length === 0 && waveN > 0) {
@@ -236,6 +245,7 @@ export default class WaveManager extends EventTarget {
                  // Clear next wave too, as it might be based on a bad state
                  this.nextWaveSchedule = [];
                  this.nextWaveDurationSeconds = 0;
+                 this.nextWaveTotalBounty = 0; // Clear bounty for next wave
                  this.timeUntilNextWave = this.waveConfig.delayBetweenWavesMs;
                  this.lastDisplayedSeconds = Math.ceil(this.timeUntilNextWave / 1000);
                  this.dispatchEvent(new CustomEvent('statusUpdated'));
@@ -249,11 +259,13 @@ export default class WaveManager extends EventTarget {
              if (nextResult) {
                  this.nextWaveSchedule = nextResult.schedule;
                  this.nextWaveDurationSeconds = nextResult.durationSeconds;
-                 //console.log(` -> Wave ${waveNplus1} Schedule: ${this.nextWaveSchedule.length} spawns, Duration: ${this.nextWaveDurationSeconds.toFixed(2)}s`);
+                 this.nextWaveTotalBounty = nextResult.totalBounty; // Store bounty for new next wave
+                 //console.log(` -> Wave ${waveNplus1} Schedule: ${this.nextWaveSchedule.length} spawns, Duration: ${this.nextWaveDurationSeconds.toFixed(2)}s, Bounty: ${this.nextWaveTotalBounty.toFixed(2)}`);
                  } else {
                  console.warn(`WaveManager: Failed to pre-calculate schedule for Wave ${waveNplus1}.`);
                  this.nextWaveSchedule = [];
                  this.nextWaveDurationSeconds = 0;
+                 this.nextWaveTotalBounty = 0; // Reset bounty for new next wave
              }
         }
         // --- End Calculate Schedules ---
@@ -321,6 +333,13 @@ export default class WaveManager extends EventTarget {
      */
     _calculateWaveScheduleAndDuration(waveNumber) {
         try { // Wrap in try-catch for robustness
+            // --- ADDED: Check if EnemyManager and its definitions are loaded ---
+            if (!this.enemyManager || !this.enemyManager.isLoaded) {
+                console.error(`WaveManager (_calcSchedule ${waveNumber}): EnemyManager not available or its definitions not loaded. Cannot calculate schedule.`);
+                return null; // Or return { schedule: [], durationSeconds: 0 }; to be consistent with other failures
+            }
+            // --- END ADDED ---
+
             // --- Target Point & Fallback (same logic as before) ---
             let targetDistance = this.lastAverageDeathDistance;
             if (waveNumber === 1 && targetDistance === null) {
@@ -406,17 +425,36 @@ export default class WaveManager extends EventTarget {
                     selectedEnemies.push(enemyToAdd);
                     currentDifficulty += enemyToAdd.cost;
                 } else {
-                    if (selectedEnemies.length === 0) break;
+                    if (selectedEnemies.length === 0) break; // Should not happen if diff < 0
                     const randomIndex = Math.floor(Math.random() * selectedEnemies.length);
                     currentDifficulty -= selectedEnemies[randomIndex].cost;
                     selectedEnemies.splice(randomIndex, 1);
                 }
             }
-            if (attempts >= maxAttempts) console.warn(`WaveManager (_calcSchedule ${waveNumber}): Max refinement attempts reached.`);
+            if (attempts >= maxAttempts) console.warn(`WaveManager (_calcSchedule ${waveNumber}): Max refinement attempts reached. Actual difficulty: ${currentDifficulty.toFixed(2)} vs Target: ${targetDifficulty.toFixed(2)}`);
             if (selectedEnemies.length === 0 && targetDifficulty > 0) {
-                 console.warn(`WaveManager (_calcSchedule ${waveNumber}): 0 enemies selected despite target diff > 0.`);
-                 return { schedule: [], durationSeconds: 0 };
+                 console.warn(`WaveManager (_calcSchedule ${waveNumber}): 0 enemies selected despite target diff > 0. Actual difficulty: ${currentDifficulty.toFixed(2)}`);
+                 // currentDifficulty will be 0, so bounty will be 0. This is acceptable.
             }
+
+            // --- Calculate Actual Total Bounty for this specific schedule ---
+            let beta = 0;
+            if (this.game && typeof this.game.getBetaFactor === 'function') {
+                const rawBeta = this.game.getBetaFactor();
+                if (typeof rawBeta === 'number' && isFinite(rawBeta) && rawBeta >= 0) {
+                    beta = rawBeta;
+                } else {
+                    console.warn(`WaveManager (_calcSchedule ${waveNumber}): Invalid beta value (${rawBeta}) from game.getBetaFactor(). Using beta = 0.`);
+                }
+            } else {
+                console.warn(`WaveManager (_calcSchedule ${waveNumber}): game.getBetaFactor() not available. Using beta = 0.`);
+            }
+            const actualTotalBountyForSchedule = currentDifficulty * beta;
+            if (!isFinite(actualTotalBountyForSchedule) || actualTotalBountyForSchedule < 0) {
+                console.warn(`WaveManager (_calcSchedule ${waveNumber}): Calculated actualTotalBountyForSchedule is invalid (${actualTotalBountyForSchedule}). currentDifficulty=${currentDifficulty}, beta=${beta}. Setting to 0.`);
+                // actualTotalBountyForSchedule = 0; // Not strictly needed as it will be caught by isFinite check before returning if it was NaN from 0*Infinity etc.
+            }
+            // --- End Calculate Actual Total Bounty ---
 
             // --- Group by Speed ---
             const speedGroupsMap = new Map();
@@ -490,7 +528,11 @@ export default class WaveManager extends EventTarget {
             schedule.sort((a, b) => a.timestampMs - b.timestampMs); // Sort by spawn time
             const durationSeconds = maxFinishTimeMs / 1000.0;
 
-            return { schedule, durationSeconds };
+            return { 
+                schedule, 
+                durationSeconds, 
+                totalBounty: (isFinite(actualTotalBountyForSchedule) && actualTotalBountyForSchedule >=0) ? actualTotalBountyForSchedule : 0
+            };
 
         } catch (error) {
             console.error(`WaveManager: Error during _calculateWaveScheduleAndDuration for wave ${waveNumber}:`, error);
@@ -609,12 +651,8 @@ export default class WaveManager extends EventTarget {
         
         // Default/Idle State: Not waiting, timer not running, schedule finished or empty
         // This might happen briefly between states or if the game ends.
-        } else {
-             // This block might be reached if a wave finishes spawning AND clearing
-             // AND the timer finishes all in theoretically the same instant (unlikely)
-             // Or if the game is started but the first wave calc hasn't happened.
-             // No action usually needed here unless specific edge cases arise.
-             // console.log("WaveManager: In idle state.");
+        // No action usually needed here unless specific edge cases arise.
+        // console.log("WaveManager: In idle state.");
         }
 
         // --- REMOVED Post-Spawning Logic / Set Waiting Flag check ---
@@ -646,11 +684,18 @@ export default class WaveManager extends EventTarget {
      * @returns {Array | null} An array of group metric objects, or null.
      */
     getActiveWaveGroupMetrics() {
-        // REMOVED: return this.activeWaveState?.calculatedMetrics || null;
-        // This information is now internal to _calculateWaveScheduleAndDuration
-        // If needed externally, we'd have to store the metrics alongside the schedule.
-        console.warn("WaveManager.getActiveWaveGroupMetrics is deprecated as metrics are no longer stored directly.");
-        return null;
+        // Return a copy of the metrics for the current wave
+        // This assumes this.activeWaveState.groupMetrics is up-to-date
+        // If activeWaveState is removed or refactored, this needs adjustment.
+        // For now, returning a placeholder as activeWaveState was removed.
+        // This method needs to be re-evaluated based on how wave progress/details are now tracked.
+        // console.warn("WaveManager.getActiveWaveGroupMetrics: Placeholder implementation. Needs review.");
+        return {
+            totalEnemies: 0,
+            enemiesSpawned: 0,
+            spawnProgress: 0,
+            // ... other metrics if they were part of activeWaveState.groupMetrics
+        };
     }
 
     // --- ADDED: Method to get pre-calculated durations ---
@@ -661,28 +706,70 @@ export default class WaveManager extends EventTarget {
      * @returns {number | null} Duration in seconds, or null if not available/calculated.
      */
     getWaveDurationSeconds(waveNumber) {
+        // --- ADDED: Return value for current wave ---
         if (waveNumber === this.currentWaveNumber) {
             return this.currentWaveDurationSeconds;
-        } else if (waveNumber === this.currentWaveNumber - 1 && waveNumber > 0) {
-            // Requesting the duration of the wave that just finished
-            return this.previousWaveDurationSeconds;
-        } else if (waveNumber === this.currentWaveNumber + 1) {
-            return this.nextWaveDurationSeconds;
-        } else {
-            console.warn(`WaveManager: Requested duration for wave ${waveNumber}, but only previous (${this.currentWaveNumber - 1}), current (${this.currentWaveNumber}), and next (${this.currentWaveNumber + 1}) are available.`);
-            // Optionally, calculate on the fly if needed, but that defeats pre-calculation
-            // const result = this._calculateWaveScheduleAndDuration(waveNumber);
-            // return result ? result.durationSeconds : null;
-            return null; // Indicate duration is not readily available
         }
+        // --- ADDED: Return value for NEXT wave (n+1) ---
+        if (waveNumber === this.currentWaveNumber + 1) {
+            return this.nextWaveDurationSeconds;
+        }
+        // --- ADDED: Return value for PREVIOUS wave (n-1) ---
+        if (waveNumber === this.currentWaveNumber - 1 && this.currentWaveNumber > 1) { // Ensure n-1 is valid
+            return this.previousWaveDurationSeconds;
+        }
+
+        console.warn(`WaveManager.getWaveDurationSeconds: Duration for wave ${waveNumber} (current: ${this.currentWaveNumber}) is not cached. Attempting calculation if possible, or returning 0.`);
+
+        // If the wave is the current wave or the next pre-calculated wave, it should have been caught above.
+        // If it's a past wave (not n-1) or a future wave beyond n+1, we might need to calculate it.
+        // Calculating on-the-fly can be expensive. For now, if it's a valid wave number from config, try to calculate.
+        if (this.waveConfig && this.waveConfig.waves && waveNumber > 0 && waveNumber <= this.waveConfig.waves.length) {
+            // console.log(`WaveManager.getWaveDurationSeconds: Attempting to calculate duration for wave ${waveNumber} on the fly.`);
+            const result = this._calculateWaveScheduleAndDuration(waveNumber);
+            if (result && typeof result.durationSeconds === 'number') {
+                // console.log(`WaveManager.getWaveDurationSeconds: Calculated duration ${result.durationSeconds} for wave ${waveNumber}.`);
+                // Note: This on-the-fly calculation is not cached back into current/next/previousWaveDurationSeconds.
+                return result.durationSeconds;
+            }
+            console.warn(`WaveManager.getWaveDurationSeconds: Failed to calculate duration for wave ${waveNumber} on the fly.`);
+        }
+        
+        return 0; // Fallback if not cached and not calculable or out of defined wave range
     }
     // --- END ADDED ---
+
+    /**
+     * Returns the total bounty for a given wave number.
+     * For StrikeManager, only the current wave's bounty is typically needed.
+     * @param {number} waveNumber - The wave number to get the total bounty for.
+     * @returns {number} The total bounty for the specified wave, or 0 if not the current wave or not loaded.
+     */
+    getWaveTotalBounty(waveNumber) {
+        if (!this.isLoaded) {
+            // console.warn("WaveManager.getWaveTotalBounty: WaveManager not loaded. Returning 0 bounty.");
+            return 0;
+        }
+
+        if (typeof waveNumber !== 'number' || waveNumber <= 0) {
+            console.warn(`WaveManager.getWaveTotalBounty: Invalid waveNumber (${waveNumber}) provided. Must be a positive number. Returning 0 bounty.`);
+            return 0;
+        }
+
+        if (waveNumber === this.currentWaveNumber) {
+            // console.log(`WaveManager.getWaveTotalBounty: Returning cached currentWaveTotalBounty: ${this.currentWaveTotalBounty} for wave ${waveNumber}`);
+            return this.currentWaveTotalBounty;
+        } else {
+            // console.warn(`WaveManager.getWaveTotalBounty: Requested bounty for wave ${waveNumber}, but only current wave's (${this.currentWaveNumber}) bounty is directly returned by this simplified path. Returning 0.`);
+            return 0;
+        }
+    }
 
     /**
      * Resets the WaveManager to its initial state.
      */
     reset() {
-        //console.log("WaveManager: Resetting state.");
+        //console.log("WaveManager: Resetting...");
         // Clear any pending initial wave timeout
         if (this.initialWaveTimeoutId) {
             clearTimeout(this.initialWaveTimeoutId);
@@ -701,10 +788,13 @@ export default class WaveManager extends EventTarget {
         // --- ADDED: Reset schedule properties ---
         this.currentWaveSchedule = [];
         this.currentWaveDurationSeconds = 0;
+        this.currentWaveTotalBounty = 0; // Reset bounty
         this.nextWaveSchedule = [];
         this.nextWaveDurationSeconds = 0;
+        this.nextWaveTotalBounty = 0; // Reset bounty
         this.scheduleIndex = 0;
-        this.previousWaveDurationSeconds = 0; // <-- ADDED: Reset previous duration
+        this.previousWaveDurationSeconds = 0;
+        this.previousWaveTotalBounty = 0; // Reset bounty
         // --- END ADDED ---
         this.waitingForClear = false;
         this.lastAverageDeathDistance = null;

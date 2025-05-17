@@ -34,9 +34,19 @@ export default class StrikeManager {
         this.currentWaveNumber = 0;
         this.currentWaveStartTime = 0; // Timestamp (ms) when the current wave started
         this.currentWaveStartTotalR = 0; // Total R at the start of the current wave
-        this.totalAccumulatedTargetDamageR = 0; // Delta R accumulated *before* the current wave
         this.currentDn = 0; // Store the calculated dn for the current wave
         // --- END ADDED ---
+
+        // --- NEW PROPERTIES based on plan2.md ---
+        this.totalTargetDestructionR = 0;           // I.1
+        this.K_current_wave = null;                 // I.2
+        this.Rn_at_wave_start = 0;                  // I.3
+        this.Rn_at_last_bounty_checkpoint = 0;      // I.4
+        this.bountyCollectedSinceLastCheckpoint = 0;// I.5
+        this.bountyUpdateThreshold_B_star = null;   // I.6
+        this.totalBountyForCurrentWave_Bn = 0;      // I.7
+        this.projectedDurationCurrentWave_Tn = 0;   // I.8
+        // --- END NEW PROPERTIES ---
 
         // --- ADDED: Tracker for bomb damage dealt ---
         this.totalBombDamageDealtR = 0; // Initialize tracker
@@ -61,6 +71,11 @@ export default class StrikeManager {
         // --- ADDED: bombPayload (Plan I.2b) ---
         this.bombPayload = null;
         // --- END ADDED ---
+
+        // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
+        this.bombCost = null; // Store for potential future use
+        this.targetDamageUpdatePoints = null; // Store for potential future use
+        // --- END ADDED ---
     }
 
     async loadConfig(path = 'assets/strike.json') {
@@ -74,6 +89,12 @@ export default class StrikeManager {
             // Check for required fields
             if (config.targetMaxWipeoutRadiusPercent === undefined || !config.zBufferResolution || !config.stampMapResolution) {
                 throw new Error("Strike config file is missing required fields (targetMaxWipeoutRadiusPercent, zBufferResolution, stampMapResolution).");
+            }
+            if (typeof config.bombCost !== 'number' || config.bombCost <= 0) {
+                throw new Error("Strike config file is missing required field 'bombCost' or it's invalid (must be a positive number).");
+            }
+            if (typeof config.targetDamageUpdatePoints !== 'number' || config.targetDamageUpdatePoints <= 0) {
+                throw new Error("Strike config file is missing required field 'targetDamageUpdatePoints' or it's invalid (must be a positive number).");
             }
             if (config.targetMaxWipeoutRadiusPercent <= 0 || config.targetMaxWipeoutRadiusPercent > 1) {
                  console.warn(`StrikeManager: targetMaxWipeoutRadiusPercent (${config.targetMaxWipeoutRadiusPercent}) should be between 0 and 1. Clamping or using as is? Using as is for now.`);
@@ -100,6 +121,18 @@ export default class StrikeManager {
             this.zBufferResolution = config.zBufferResolution;
             this.stampMapResolution = config.stampMapResolution;
             this.bombStrengthA = null; // Explicitly null, calculated later
+
+            // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
+            this.bombCost = config.bombCost; // Store for potential future use
+            this.targetDamageUpdatePoints = config.targetDamageUpdatePoints; // Store for potential future use
+            this.bountyUpdateThreshold_B_star = this.bombCost / this.targetDamageUpdatePoints;
+            if (!isFinite(this.bountyUpdateThreshold_B_star) || this.bountyUpdateThreshold_B_star <= 0) {
+                console.error(`StrikeManager: Calculated bountyUpdateThreshold_B_star is invalid (${this.bountyUpdateThreshold_B_star}). Check bombCost and targetDamageUpdatePoints in strike.json.`);
+                // Potentially throw an error or set a default, for now, logging error and proceeding with potentially problematic value
+            } else {
+                // console.log(`StrikeManager: bountyUpdateThreshold_B_star calculated to ${this.bountyUpdateThreshold_B_star}`);
+            }
+            // --- END ADDED ---
 
             // --- ADDED: Load and calculate impact deviation --- 
             if (typeof config.impactStdDevPercentWidth !== 'number' || config.impactStdDevPercentWidth < 0) {
@@ -578,7 +611,7 @@ export default class StrikeManager {
      * @param {number} timestamp - The timestamp when the wave starts.
      */
     startWave(waveNumber, timestamp) {
-        if (!this.game || !this.game.defenceManager || !this.configLoaded) {
+        if (!this.game || !this.game.defenceManager || !this.game.waveManager || !this.configLoaded) {
             console.error("StrikeManager.startWave: Cannot start wave, dependencies missing or not ready.");
             return;
         }
@@ -588,110 +621,144 @@ export default class StrikeManager {
         this.currentWaveNumber = waveNumber;
         this.currentWaveStartTime = timestamp;
 
-        // Fetch and store R_n(0) for the new wave
+        // Fetch and store R_n(0) for the new wave (existing logic, but Rn_at_wave_start will be the primary one for new calcs)
         if (typeof this.game.defenceManager.getCurrentTotalEarningRate === 'function') {
             this.currentWaveStartTotalR = this.game.defenceManager.getCurrentTotalEarningRate();
             if (typeof this.currentWaveStartTotalR !== 'number' || !isFinite(this.currentWaveStartTotalR)) {
-                console.warn(`StrikeManager.startWave: Invalid R_n(0) received (${this.currentWaveStartTotalR}). Setting to 0.`);
+                console.warn(`StrikeManager.startWave: Invalid currentWaveStartTotalR received (${this.currentWaveStartTotalR}). Setting to 0.`);
                 this.currentWaveStartTotalR = 0;
             }
         } else {
-             console.error("StrikeManager.startWave: DefenceManager.getCurrentTotalEarningRate method missing. Cannot get R_n(0). Setting to 0.");
+             console.error("StrikeManager.startWave: DefenceManager.getCurrentTotalEarningRate method missing. Cannot get currentWaveStartTotalR. Setting to 0.");
              this.currentWaveStartTotalR = 0;
         }
 
-        // Calculate and store dn for the new wave
+        // Calculate and store dn for the new wave (existing logic)
         this.currentDn = this._calculateDn(this.currentWaveNumber);
 
-        //console.log(`  -> Stored R_n(0)=${this.currentWaveStartTotalR.toFixed(4)}, dn=${this.currentDn.toFixed(4)}`);
-    }
-    // --- END ADDED ---
-
-    // --- ADDED: Getter for the calculated target damage ---
-    /**
-     * Returns the total cumulative target damage (Delta R) up to the given timestamp.
-     * It internally calls updateTargetDamageCalculation to ensure the value is current.
-     * @param {number} timestamp - The current high-resolution timestamp (performance.now()).
-     * @returns {number} The total target damage Delta R.
-     */
-    getCumulativeTargetDamageR(timestamp) {
-        // REMOVED: Call to updateTargetDamageCalculation - state is now managed by startWave/finalizeWaveDamage
-
-        // Initialize with damage accumulated from previous waves
-        let currentTargetValue = this.totalAccumulatedTargetDamageR;
-
-        // Check if enemies are present to calculate intra-wave delta
-        const enemiesArePresent = this.game.enemyManager?.getActiveEnemies().length > 0;
-
-        if (enemiesArePresent && 
-            this.currentWaveNumber > 0 && 
-            this.currentDn !== null && this.currentDn >= 0 && 
-            this.currentWaveStartTotalR > 0)
-        {
-            const t_seconds = Math.max(0, (timestamp - this.currentWaveStartTime) / 1000.0);
-            const deltaR_thisWave = this.currentWaveStartTotalR * (1 - Math.exp(-this.currentDn * t_seconds));
-            
-            if (isFinite(deltaR_thisWave) && deltaR_thisWave > 0) {
-                currentTargetValue += deltaR_thisWave; // Add the intra-wave component
+        // --- NEW LOGIC from plan2.md II.3 ---
+        // Get total bounty for the current wave
+        if (typeof this.game.waveManager.getWaveTotalBounty === 'function') {
+            this.totalBountyForCurrentWave_Bn = this.game.waveManager.getWaveTotalBounty(waveNumber);
+            if (typeof this.totalBountyForCurrentWave_Bn !== 'number' || this.totalBountyForCurrentWave_Bn < 0) {
+                console.warn(`StrikeManager.startWave: Invalid totalBountyForCurrentWave_Bn (${this.totalBountyForCurrentWave_Bn}). Setting to 0.`);
+                this.totalBountyForCurrentWave_Bn = 0;
             }
+        } else {
+            console.error("StrikeManager.startWave: waveManager.getWaveTotalBounty method missing. Setting totalBountyForCurrentWave_Bn to 0.");
+            this.totalBountyForCurrentWave_Bn = 0;
         }
-        // Else: No enemies present or calculation invalid, return only accumulated value
 
-        return Math.max(0, currentTargetValue); // Ensure non-negative
+        // Get projected duration for the current wave
+        if (typeof this.game.waveManager.getWaveDurationSeconds === 'function') {
+            this.projectedDurationCurrentWave_Tn = this.game.waveManager.getWaveDurationSeconds(waveNumber);
+            if (typeof this.projectedDurationCurrentWave_Tn !== 'number' || this.projectedDurationCurrentWave_Tn < 0) {
+                console.warn(`StrikeManager.startWave: Invalid projectedDurationCurrentWave_Tn (${this.projectedDurationCurrentWave_Tn}). Setting to 0.`);
+                this.projectedDurationCurrentWave_Tn = 0;
+            }
+        } else {
+            console.error("StrikeManager.startWave: waveManager.getWaveDurationSeconds method missing. Setting projectedDurationCurrentWave_Tn to 0.");
+            this.projectedDurationCurrentWave_Tn = 0;
+        }
+
+        // Get Rn_at_wave_start (player's total defender earning rate at the start of the wave)
+        if (typeof this.game.defenceManager.getCurrentTotalEarningRate === 'function') {
+            this.Rn_at_wave_start = this.game.defenceManager.getCurrentTotalEarningRate();
+            if (typeof this.Rn_at_wave_start !== 'number' || !isFinite(this.Rn_at_wave_start) || this.Rn_at_wave_start < 0) {
+                console.warn(`StrikeManager.startWave: Invalid Rn_at_wave_start received (${this.Rn_at_wave_start}). Setting to 0.`);
+                this.Rn_at_wave_start = 0;
+            }
+        } else {
+             console.error("StrikeManager.startWave: DefenceManager.getCurrentTotalEarningRate method missing. Cannot get Rn_at_wave_start. Setting to 0.");
+             this.Rn_at_wave_start = 0;
+        }
+
+        // Calculate K_current_wave
+        if (this.totalBountyForCurrentWave_Bn > 0) {
+            this.K_current_wave = (this.currentDn * this.projectedDurationCurrentWave_Tn) / this.totalBountyForCurrentWave_Bn;
+            if (!isFinite(this.K_current_wave) || this.K_current_wave < 0) {
+                 console.warn(`StrikeManager.startWave: Calculated K_current_wave is invalid (${this.K_current_wave}). Setting to null. Dn=${this.currentDn}, Tn=${this.projectedDurationCurrentWave_Tn}, Bn=${this.totalBountyForCurrentWave_Bn}`);
+                 this.K_current_wave = null;
+            }
+        } else {
+            console.warn("StrikeManager.startWave: totalBountyForCurrentWave_Bn is 0. Cannot calculate K_current_wave. Setting to null.");
+            this.K_current_wave = null;
+        }
+
+        // Initialize Rn_at_last_bounty_checkpoint
+        this.Rn_at_last_bounty_checkpoint = this.Rn_at_wave_start;
+
+        // Reset bountyCollectedSinceLastCheckpoint
+        this.bountyCollectedSinceLastCheckpoint = 0;
+        // --- END NEW LOGIC ---
+
+        //console.log(`  -> Stored R_n(0)=${this.currentWaveStartTotalR.toFixed(4)}, dn=${this.currentDn.toFixed(4)}`); // Old log
+        // New log reflecting new properties:
+        // console.log(`StrikeManager.startWave Details for Wave ${waveNumber}:`);
+        // console.log(`  Rn_at_wave_start: ${this.Rn_at_wave_start.toFixed(4)}`);
+        // console.log(`  totalBountyForCurrentWave_Bn: ${this.totalBountyForCurrentWave_Bn.toFixed(2)}`);
+        // console.log(`  projectedDurationCurrentWave_Tn: ${this.projectedDurationCurrentWave_Tn.toFixed(2)}s`);
+        // console.log(`  currentDn: ${this.currentDn.toFixed(4)}`);
+        // console.log(`  K_current_wave: ${this.K_current_wave !== null ? this.K_current_wave.toFixed(6) : 'null'}`);
+        // console.log(`  Rn_at_last_bounty_checkpoint: ${this.Rn_at_last_bounty_checkpoint.toFixed(4)}`);
+        // console.log(`  bountyCollectedSinceLastCheckpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}`);
     }
     // --- END ADDED ---
 
-    // --- ADDED: Method to finalize damage accumulation for a completed wave ---
+    // --- MODIFIED: Getter for the calculated target damage (Plan II.7) ---
     /**
-     * Calculates the final Delta R for a completed wave and adds it to the accumulator.
+     * Returns the total cumulative target destruction (Delta R).
+     * This value is updated by bounty processing.
+     * The timestamp parameter is no longer used.
+     * @returns {number} The total target destruction Delta R, ensured non-negative.
+     */
+    getCumulativeTargetDamageR() {
+        // The logic for calculating intra-wave deltaR based on time has been removed.
+        // totalTargetDestructionR is now updated incrementally by recordBountyEarned and finalizeWaveDamage.
+        return Math.max(0, this.totalTargetDestructionR);
+    }
+    // --- END MODIFIED ---
+
+    // --- MODIFIED: Method to finalize damage accumulation for a completed wave (Plan II.6) ---
+    /**
+     * Processes any remaining bounty at the end of a wave to update target destruction.
      * Called by WaveManager when a wave is cleared.
      * @param {number} waveNumber - The wave number that just finished.
-     * @param {number} startTime - The timestamp (ms) when this wave started.
-     * @param {number} clearTime - The timestamp (ms) when the last enemy of this wave was cleared.
+     * @param {number} startTime - The timestamp (ms) when this wave started (currently unused, but kept for API consistency).
+     * @param {number} clearTime - The timestamp (ms) when the last enemy of this wave was cleared (currently unused, but kept for API consistency).
      */
     finalizeWaveDamage(waveNumber, startTime, clearTime) {
-        //console.log(`StrikeManager: Received finalize signal for Wave ${waveNumber}. Start: ${startTime.toFixed(0)}, Clear: ${clearTime.toFixed(0)}`);
+        // console.log(`StrikeManager.finalizeWaveDamage: Received finalize signal for Wave ${waveNumber}.`);
 
-        // Ensure the data we are finalizing *matches* the wave StrikeManager *thought* was running.
-        // This is a safety check, though normally they should align perfectly.
+        // Safety check: Ensure this finalization corresponds to the wave StrikeManager thinks is active.
         if (waveNumber !== this.currentWaveNumber) {
-            console.error(`StrikeManager.finalizeWaveDamage: Mismatch! WaveManager cleared wave ${waveNumber}, but StrikeManager is on wave ${this.currentWaveNumber}. Accumulation might be incorrect.`);
-            // Decide how to handle: skip accumulation? Use stored values anyway? For now, proceed but log error.
+            console.warn(`StrikeManager.finalizeWaveDamage: Mismatch! WaveManager cleared wave ${waveNumber}, but StrikeManager is on wave ${this.currentWaveNumber}. Final bounty processing might be skipped or incorrect.`);
+            // Optionally, could decide to not process if mismatched, or try to use stored K for that waveNumber if available.
+            // For now, proceed cautiously if conditions below are met.
         }
 
-        // Retrieve the R_n(0) and dn that were stored when this waveNumber started.
-        const Rn0_forCompletedWave = this.currentWaveStartTotalR;
-        const dn_forCompletedWave = this.currentDn;
-
-        if (Rn0_forCompletedWave === null || dn_forCompletedWave === null) {
-             console.error(`StrikeManager.finalizeWaveDamage: Missing R_n(0) or dn for completed wave ${waveNumber}. Cannot calculate final Delta R.`);
-             return;
+        // Process any remaining bounty collected since the last B* checkpoint
+        if (this.bountyCollectedSinceLastCheckpoint > 0) {
+            // console.log(`StrikeManager.finalizeWaveDamage: Processing remaining bounty of ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} for wave ${waveNumber}.`);
+            // We need to ensure K_current_wave and Rn_at_last_bounty_checkpoint are still valid for THIS wave.
+            // If waveNumber !== this.currentWaveNumber, K_current_wave might be for the *new* current wave.
+            // This logic assumes that finalizeWaveDamage is called *before* startWave for the *next* wave fully reinitializes K and R_checkpoint.
+            // If K_current_wave is null (e.g., if startWave for next wave already ran and reset it, or if initial calc failed for current wave)
+            // then _updateTargetDestructionForBatch will correctly do nothing.
+            this._updateTargetDestructionForBatch(this.bountyCollectedSinceLastCheckpoint);
         }
 
-        if (clearTime < startTime) {
-             console.error(`StrikeManager.finalizeWaveDamage: Clear time (${clearTime}) is before start time (${startTime}) for wave ${waveNumber}. Cannot calculate duration.`);
-             return;
-        }
+        // Ensure bounty collected is reset for the next wave (startWave also does this, but good for safety).
+        this.bountyCollectedSinceLastCheckpoint = 0;
 
-        // Calculate actual duration and final Delta R
-        const effectiveDurationMs = clearTime - startTime;
-        const effectiveDurationSec = effectiveDurationMs / 1000.0;
-        let finalDeltaR = 0;
+        // --- REMOVED Old Time-Based Delta R Calculation --- 
+        // The old logic based on effectiveDurationSec, Rn0_forCompletedWave, and dn_forCompletedWave is now gone.
+        // this.totalAccumulatedTargetDamageR was the old property being updated here.
+        // --- END REMOVED --- 
 
-        // Only calculate if dn > 0 and R > 0, otherwise Delta R is 0
-        if (dn_forCompletedWave > 0 && Rn0_forCompletedWave > 0 && effectiveDurationSec >= 0) {
-            finalDeltaR = Rn0_forCompletedWave * (1 - Math.exp(-dn_forCompletedWave * effectiveDurationSec));
-        }
-
-        if (isFinite(finalDeltaR) && finalDeltaR > 0) {
-            this.totalAccumulatedTargetDamageR += finalDeltaR;
-            //console.log(`  -> Wave ${waveNumber} Final DeltaR: ${finalDeltaR.toFixed(4)} (Duration: ${effectiveDurationSec.toFixed(2)}s). New Accumulated Total: ${this.totalAccumulatedTargetDamageR.toFixed(4)}`);
-        } else {
-            //console.log(`  -> Wave ${waveNumber} Final DeltaR calculation resulted in zero or invalid value (${finalDeltaR.toFixed(4)}). Accumulator unchanged.`);
-            // No change needed to totalAccumulatedTargetDamageR
-        }
+        // console.log(`StrikeManager.finalizeWaveDamage: Wave ${waveNumber} finalized. totalTargetDestructionR is now ${this.totalTargetDestructionR.toFixed(2)}.`);
     }
-    // --- END ADDED ---
+    // --- END MODIFIED ---
 
     // --- ADDED: Orchestration for a single real bomb drop ---
     /**
@@ -938,4 +1005,62 @@ export default class StrikeManager {
         }
     }
     // --- END ADDED ---
+
+    // --- NEW METHOD: _updateTargetDestructionForBatch (Plan II.5) ---
+    /**
+     * Calculates ΔR for a completed bounty batch (B*) and updates totalTargetDestructionR.
+     * @param {number} bountyProcessedThisBatch - The amount of bounty in this batch (typically B*).
+     * @private
+     */
+    _updateTargetDestructionForBatch(bountyProcessedThisBatch) {
+        if (this.K_current_wave === null || this.K_current_wave <= 0 || this.Rn_at_last_bounty_checkpoint <= 0) {
+            // console.log("StrikeManager._updateTargetDestructionForBatch: Conditions not met for destruction calculation.", 
+            //              { K: this.K_current_wave, R_checkpoint: this.Rn_at_last_bounty_checkpoint });
+            return; // No destruction to apply if K is invalid or no earning rate to destroy
+        }
+
+        const Rn_before_segment = this.Rn_at_last_bounty_checkpoint;
+        // K_current_wave already incorporates Bn in its denominator, so the exponent is -K_n * B_processed
+        const exp_decay_factor = Math.exp(-this.K_current_wave * bountyProcessedThisBatch);
+        const Rn_after_segment = Rn_before_segment * exp_decay_factor;
+        const deltaR_increment = Rn_before_segment - Rn_after_segment;
+
+        this.totalTargetDestructionR += deltaR_increment;
+        this.Rn_at_last_bounty_checkpoint = Rn_after_segment;
+
+        // console.log(`StrikeManager._updateTargetDestructionForBatch: Processed bounty ${bountyProcessedThisBatch}. ` +
+        //             `Rn_before: ${Rn_before_segment.toFixed(2)}, Rn_after: ${Rn_after_segment.toFixed(2)}, ` +
+        //             `deltaR: ${deltaR_increment.toFixed(2)}, totalTargetDestructionR: ${this.totalTargetDestructionR.toFixed(2)}`);
+    }
+
+    // --- NEW METHOD: recordBountyEarned (Plan II.4) ---
+    /**
+     * Called by game logic whenever bounty is awarded for an enemy kill.
+     * Accumulates bounty and triggers updates to target destruction when threshold B* is met.
+     * @param {number} bountyIncrement - The amount of bounty earned (ΔB).
+     */
+    recordBountyEarned(bountyIncrement) {
+        if (!this.configLoaded || this.K_current_wave === null || this.Rn_at_wave_start <= 0 || this.bountyUpdateThreshold_B_star === null || this.bountyUpdateThreshold_B_star <= 0) {
+            // console.log("StrikeManager.recordBountyEarned: Conditions not met for processing bounty.",
+            //              { configLoaded: this.configLoaded, K: this.K_current_wave, R_start: this.Rn_at_wave_start, B_star: this.bountyUpdateThreshold_B_star });
+            return; // Cannot process if not configured, K is invalid, no initial R, or B* is invalid
+        }
+
+        if (typeof bountyIncrement !== 'number' || bountyIncrement <= 0) {
+            // console.warn(`StrikeManager.recordBountyEarned: Invalid bountyIncrement (${bountyIncrement}). Ignoring.`);
+            return;
+        }
+
+        this.bountyCollectedSinceLastCheckpoint += bountyIncrement;
+        // console.log(`StrikeManager.recordBountyEarned: Bounty ${bountyIncrement.toFixed(2)} recorded. ` +
+        //             `Collected since last checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} / ${this.bountyUpdateThreshold_B_star.toFixed(2)}`);
+
+        // Process completed B* batches
+        while (this.bountyCollectedSinceLastCheckpoint >= this.bountyUpdateThreshold_B_star) {
+            // console.log(`StrikeManager.recordBountyEarned: Threshold B* met. Processing batch of ${this.bountyUpdateThreshold_B_star.toFixed(2)}.`);
+            this._updateTargetDestructionForBatch(this.bountyUpdateThreshold_B_star);
+            this.bountyCollectedSinceLastCheckpoint -= this.bountyUpdateThreshold_B_star;
+            // console.log(`StrikeManager.recordBountyEarned: Remaining collected bounty: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}`);
+        }
+    }
 } 

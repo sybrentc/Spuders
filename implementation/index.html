@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strike Mechanism Architecture Summary</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
     <style>
         body { font-family: sans-serif; line-height: 1.6; padding: 2em; max-width: 800px; margin: auto; }
         h1, h2 { margin-top: 1.5em; }
@@ -26,6 +29,26 @@
 <p>Upon creation, the executor receives the standard bomb payload description, the intended target coordinates, and the operational context (indicating a real or simulated strike and providing either access to the live game or a list of simulated entities). It begins by validating these inputs. If the inputs are valid, it immediately starts the strike execution process asynchronously, managing an internal completion signal (a promise).</p>
 <p>The core execution involves several steps. First, it calculates the actual point of impact. This is done by taking the intended target coordinates and applying a random offset derived from a normal distribution (internally using the Box-Muller method technique), governed by the inaccuracy parameter specified in the bomb payload. Next, it identifies the entities within its area of effect, adhering to the operational context – either querying the live game state for active defenders and enemies (for a real strike) or using the provided list of simulated defenders (for a simulation; enemies are ignored in this case). Damage is then applied to these entities based on an inverse square law relative to the actual impact point, ensuring a minimum effective distance is used to avoid infinite damage calculations. Throughout this process, it specifically calculates and aggregates the total R-value damage inflicted upon the affected defenders.</p>
 <p>Once the damage calculations are complete, the executor signals its completion and provides the aggregated defender R-value damage as the result, resolving the promise that the manager was awaiting.</p>
+
+<h2>Target Damage Accumulation</h2>
+<p>Beyond orchestrating strikes, <code>StrikeManager.js</code> is also tasked with determining the cumulative level of destruction the enemy forces are aiming to inflict on the player's defenses. This "target destruction" value is not static; it increases dynamically based on the player's success in terms of the bounty collected from defeated enemies.</p>
+<p>At the beginning of each wave, the system establishes key parameters for that wave's specific destruction calculations. This includes a critical wave-specific constant, derived from factors like the wave's inherent destructive potential, its anticipated duration, and the total bounty it offers. The player's overall defender R-value (a measure of their defensive strength) at the start of the wave is also noted to serve as a baseline for the wave's initial calculations.</p>
+<p>The target destruction value is updated in discrete, iterative steps, triggered each time the player accumulates a predefined threshold of bounty. When an enemy is defeated, the bounty it yields is reported to the <code>StrikeManager</code>. This manager tracks the collected bounty. Once the accumulated bounty reaches the set threshold, a calculation step is performed for that batch of bounty.</p>
+<p>In this step, the system calculates the amount by which the defenders' R-value would theoretically decay due to the processed bounty batch. This involves a single core computation of an exponential decay factor, based on the wave's destruction constant and the defender R-value recorded at the *start* of the current bounty batch. The target destruction for the wave is then increased by the difference between the R-value before and after applying this decay. The R-value used as the baseline for the *next* bounty batch is then set to this newly calculated, decayed value. This iterative process continues for each bounty threshold crossed. Any bounty collected that doesn't form a complete batch by the wave's end is similarly processed to ensure all earned bounty contributes to the final target destruction value.</p>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    renderMathInElement(document.body, {
+      delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '\\[', right: '\\]', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\(', right: '\\)', display: false}
+      ],
+      throwOnError : false
+    });
+  });
+</script>
 
 </body>
 </html>

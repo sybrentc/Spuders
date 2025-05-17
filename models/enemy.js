@@ -293,6 +293,13 @@ export default class Enemy {
         // Get bounty dynamically
         if (this.base && this.bounty > 0) { // Use stored bounty
             this.base.addFunds(this.bounty);
+            // --- ADDED: Record bounty for StrikeManager (Plan III) ---
+            if (this.game && this.game.strikeManager && typeof this.game.strikeManager.recordBountyEarned === 'function') {
+                this.game.strikeManager.recordBountyEarned(this.bounty);
+            } else {
+                // console.warn(`Enemy ${this.id}: Could not record bounty for StrikeManager. strikeManager or recordBountyEarned method missing.`);
+            }
+            // --- END ADDED ---
         }
     }
     
