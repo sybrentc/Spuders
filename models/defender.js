@@ -167,15 +167,30 @@ export default class DefenceEntity {
         
         // --- Handle attack types based on properties --- 
         // Check if this defence creates a splash/puddle effect (has necessary effect props)
-        if (this.effects) {
-            // Create a puddle at the target's position
-            this.puddles.push({
+        if (this.effects && this.effectRadius !== undefined && this.effectDuration !== undefined && this.effectSpeedFactor !== undefined && this.game && this.game.app) {
+            const puddleMetadata = {
                 x: enemyPos.x,
                 y: enemyPos.y,
                 createdAt: timestamp,
-                duration: this.effectDuration,
-                radius: this.effectRadius,
-                speedFactor: this.effectSpeedFactor
+                duration: this.effectDuration, // from this.effects.duration set in constructor/applyUpdate
+                radius: this.effectRadius,   // from this.effects.radius
+                speedFactor: this.effectSpeedFactor, // from this.effects.speedFactor
+                color: this.effects.color || 'rgba(0, 255, 255, 0.3)' // from this.effects.color or default
+            };
+
+            const graphics = new PIXI.Graphics();
+            const pixiColor = new PIXI.Color(puddleMetadata.color);
+            
+            graphics.circle(0, 0, puddleMetadata.radius);
+            graphics.fill({ color: pixiColor.toNumber(), alpha: pixiColor.alpha });
+            graphics.x = puddleMetadata.x;
+            graphics.y = puddleMetadata.y;
+            
+            this.game.puddleLayer.addChild(graphics); // MODIFIED: Add to puddleLayer
+            
+            this.puddles.push({
+                metadata: puddleMetadata,
+                graphics: graphics
             });
         }
         
@@ -299,45 +314,46 @@ export default class DefenceEntity {
         }
         // --- End Animation Update --- 
 
-        // 3. Update Effects (Puddles/Slow)
-        // Check if this entity manages puddles (has effect properties)
-        if (this.effects) {
-            // Remove expired puddles
-            this.puddles = this.puddles.filter(puddle => 
-                timestamp - puddle.createdAt < puddle.duration
-            );
-
-            // Apply slow effect to enemies
-            enemies.forEach(enemy => {
-                if (enemy.isDead) return;
-                
-                let slowed = false;
-                const enemyPos = enemy.getCurrentPosition();
-                if (!enemyPos) return;
-
-                for (const puddle of this.puddles) {
-                    const dx = enemyPos.x - puddle.x;
-                    const dy = enemyPos.y - puddle.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Use puddle's stored speedFactor
-                    if (distance < puddle.radius) {
-                        enemy.speedModifier = puddle.speedFactor;
-                        slowed = true;
-                        break; // Only apply one puddle effect
-                    }
-                }
-                // Reset speed if not slowed by any puddle this frame
-                if (!slowed) {
-                    enemy.speedModifier = 1.0; 
-                }
-            });
-        }
-        
         // Update HealthBarDisplay
         if (this.healthBarDisplay) {
             this.healthBarDisplay.update(this.hp, this.maxHp);
         }
+
+        // Update zIndex for y-sorting
+        if (this.pixiContainer && this.pixiSprite) {
+            const effectiveY = this.pixiContainer.y + this.pixiSprite.height * (1 - this.pixiSprite.anchor.y);
+            this.pixiContainer.zIndex = effectiveY;
+        }
+        
+        // Reset speed modifier for all potentially affected enemies before checking puddles.
+        enemies.forEach(enemy => {
+            if (!enemy.isDead && enemy.speedModifier !== 1.0) { // Only reset if currently slowed and alive
+                enemy.resetSpeedModifier();
+            }
+        });
+
+        // Puddle lifecycle management and enemy effect application
+        if (this.effects) { 
+            this.puddles = this.puddles.filter(puddle => {
+                const alive = timestamp - puddle.metadata.createdAt < puddle.metadata.duration;
+                if (!alive) {
+                    if (this.game && this.game.puddleLayer) { // MODIFIED: Check for puddleLayer
+                        this.game.puddleLayer.removeChild(puddle.graphics); // MODIFIED: Remove from puddleLayer
+                    }
+                    puddle.graphics.destroy();
+                    return false;
+                }
+                // Apply slow effect to enemies in range of this puddle
+                enemies.forEach(enemy => {
+                    if (!enemy.isDead && 
+                        enemy.isInRange(puddle.metadata, puddle.metadata.radius)) {
+                        enemy.setSlow(puddle.metadata.speedFactor); 
+                    }
+                });
+                return true;
+            });
+        }
+        
         // TODO: Add other update logic (animations, health regen, etc.)
     }
 
@@ -494,14 +510,17 @@ export default class DefenceEntity {
             this.pixiSprite = null;
         }
         if (this.pixiContainer) {
-            // Passing { children: true } ensures all children (like the sprite if not already destroyed) are also destroyed.
             this.pixiContainer.destroy({ children: true }); 
             this.pixiContainer = null;
         }
-        // TODO: Later, when healthBarDisplay is added for defenders:
         if (this.healthBarDisplay) {
             this.healthBarDisplay.destroy();
             this.healthBarDisplay = null;
         }
+        // Puddles are not destroyed with the defender; they expire on their own schedule.
+        // The Defender.update() method handles puddle expiration and graphics cleanup.
+        // this.puddles array on the defender instance can be cleared if the defender is destroyed,
+        // but the actual puddle graphics objects persist in game.puddleLayer until they time out.
+        this.puddles = []; // Clear the defender's reference to its puddles
     }
 } 

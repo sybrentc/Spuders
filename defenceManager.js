@@ -251,7 +251,7 @@ export default class DefenceManager extends EventTarget {
         // Add PixiJS container to stage if it exists
         if (newDefence.pixiContainer) {
             if (this.game && this.game.app && this.game.app.stage) {
-                this.game.app.stage.addChild(newDefence.pixiContainer);
+                this.game.groundLayer.addChild(newDefence.pixiContainer); // MODIFIED: Add to groundLayer
                 // console.log(`DefenceManager: Added pixiContainer for ${newDefence.id} to stage.`);
             } else {
                 console.error(`DefenceManager: Cannot add pixiContainer for ${newDefence.id} to stage. Game, app, or stage is missing.`);

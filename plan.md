@@ -2,47 +2,12 @@
 
 This plan outlines the steps to refactor the game's rendering pipeline to use PixiJS.
 
-## In Progress
-
-### Phase 3.B: Defender Effects (Puddles in `Defender.js`) - PixiJS Implementation
-
-1.  **Effects Container Strategy**:
-    *   Decision: For now, puddle `PIXI.Graphics` objects will be added directly to `this.game.app.stage`. A dedicated effects container can be a future refinement if needed for z-ordering.
-2.  **Modify `models/defender.js` - Puddle Data Structure**:
-    *   Update the `this.puddles` array. Each entry will store an object like: `{ metadata: { x, y, createdAt, duration, radius, speedFactor, color }, graphics: PIXI.Graphics_object }`.
-3.  **Modify `models/defender.js` - `attack(timestamp)` Method**:
-    *   When a defender with `this.effects` (e.g., "subzero") attacks and should create a puddle:
-        *   Create a new `PIXI.Graphics` object.
-        *   Use `new PIXI.Color(this.effects.color)` to get color and alpha. For example, from `"rgba(0, 255, 255, 0.3)"`.
-        *   Draw the puddle shape: `graphics.circle(0, 0, puddleMetadata.radius);`
-        *   Apply fill: `graphics.fill({ color: pixiColor.toNumber(), alpha: pixiColor.alpha });` (or simpler if direct RGBA string fill is confirmed compatible).
-        *   Set position: `graphics.x = enemyPos.x; graphics.y = enemyPos.y;`
-        *   Add to stage: `this.game.app.stage.addChild(graphics);`
-        *   Store the `graphics` object along with its `metadata` (x, y, createdAt, duration, radius, speedFactor, color) in the `this.puddles` array.
-4.  **Modify `models/defender.js` - `update(timestamp, deltaTime, enemies)` Method**:
-    *   Iterate `this.puddles` to manage lifecycle:
-        *   If a puddle (based on `puddle.metadata.createdAt` and `puddle.metadata.duration`) has expired:
-            *   Remove its `PIXI.Graphics` object from the stage: `this.game.app.stage.removeChild(puddle.graphics);`
-            *   Destroy the graphics object: `puddle.graphics.destroy();`
-            *   Filter this puddle out from the `this.puddles` array.
-        *   The logic for applying slow effects to enemies (using `puddle.metadata`) remains unchanged.
-5.  **Modify `models/defender.js` - `destroyPixiObjects()` Method**:
-    *   When the defender itself is destroyed, iterate through any of its active `this.puddles`.
-    *   For each active puddle:
-        *   Remove `puddle.graphics` from the stage.
-        *   Call `puddle.graphics.destroy()`.
-    *   Clear the `this.puddles` array.
-6.  **Modify `models/defender.js` - Cleanup**:
-    *   Remove the old canvas-based `renderEffects(ctx)` method entirely.
-
 ## Tasks To Do
 
 ### Phase 3: UI Elements & Effects
 
 **Phase 3.B: Other UI Elements & Effects**
 
-17. **Defender Effects (Puddles in `Defender.js`):**
-    *   Represent puddles with `PIXI.Graphics` objects, add/remove from an effects container on the PixiJS stage. (This was previously linked to `DefenceManager.renderEffects`).
 18. **Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
     *   Refactor `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage.
 19. **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
@@ -52,19 +17,59 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 ### Phase 4: Main Render Loop & Cleanup
 
 20. **New Main Render Loop (`Game.js`):**
-    *   The primary game loop for rendering is now driven by PixiJS `Application.ticker`.
+    *   The primary game loop for rendering is now driven by PixiJS `Application.ticker`. (Partially Done - Y-sorting is complete)
     *   The `Game.update()` method will still handle game logic updates for all entities.
     *   If a `Game.render()` method is kept, its role will shift from direct drawing to potentially triggering high-level PixiJS updates if not handled by individual entity `update` methods, or it might be removed entirely if the ticker and entity updates cover all needs.
-    *   Y-sorting managed via `PIXI.Container` `sortableChildren` and `zIndex`, or manual reordering of children in a container.
 21. **Cleanup:**
     *   Ensure all old direct canvas `ctx` drawing calls are removed from all files.
     *   Remove obsolete canvas properties and utility functions.
     *   Update event handling for PixiJS interactive objects if needed (e.g., for defence placement clicks).
-    *   **Review `utils/renderUtils.js` for deletion:** Once `HealthBarDisplay` is fully integrated into ALL relevant entities (Base, Enemies, Defenders), `utils/renderUtils.js` should be checked. If `drawHealthBar` is its only export and no other code uses it, the file can be deleted. (User restored this file as other entities still use it).
+
 
 ---
 
 ## Completed Tasks
+
+**(DONE)**
+    *   **Review `utils/renderUtils.js` for deletion:** Once `HealthBarDisplay` is fully integrated into ALL relevant entities (Base, Enemies, Defenders), `utils/renderUtils.js` should be checked. If `drawHealthBar` is its only export and no other code uses it, the file can be deleted. (User restored this file as other entities still use it).
+
+    *   Y-sorting managed via `PIXI.Container` `sortableChildren` and `zIndex`, or manual reordering of children in a container. **(DONE for Base, Enemies, Defenders on `groundLayer`)**
+
+**(DONE) Phase 3.B: Defender Effects (Puddles in `Defender.js`) - PixiJS Implementation**
+
+1.  **(DONE) Effects Container Strategy**:
+    *   Decision: Puddle `PIXI.Graphics` objects are added directly to `this.game.puddleLayer`. The `puddleLayer` is added to `this.game.app.stage` before `groundLayer`.
+2.  **(DONE) Modify `models/defender.js` - Puddle Data Structure**:
+    *   Updated the `this.puddles` array. Each entry stores an object like: `{ metadata: { x, y, createdAt, duration, radius, speedFactor, color }, graphics: PIXI.Graphics_object }`.
+3.  **(DONE) Modify `models/defender.js` - `attack(timestamp)` Method**:
+    *   When a defender with `this.effects` creates a puddle:
+        *   Creates a new `PIXI.Graphics` object.
+        *   Uses `new PIXI.Color(this.effects.color)` to get color and alpha.
+        *   Draws the puddle shape: `graphics.circle(0, 0, puddleMetadata.radius);`
+        *   Applies fill: `graphics.fill({ color: pixiColor.toNumber(), alpha: pixiColor.alpha });`
+        *   Sets position: `graphics.x = enemyPos.x; graphics.y = enemyPos.y;`
+        *   Adds to `puddleLayer`: `this.game.puddleLayer.addChild(graphics);`
+        *   Stores the `graphics` object along with its `metadata` in the `this.puddles` array.
+4.  **(DONE) Modify `models/defender.js` - `update(timestamp, deltaTime, enemies)` Method**:
+    *   Iterates `this.puddles` to manage lifecycle:
+        *   If a puddle (based on `puddle.metadata.createdAt` and `puddle.metadata.duration`) has expired:
+            *   Removes its `PIXI.Graphics` object from the `puddleLayer`: `this.game.puddleLayer.removeChild(puddle.graphics);`
+            *   Destroys the graphics object: `puddle.graphics.destroy();`
+            *   Filters this puddle out from the `this.puddles` array.
+        *   Logic for applying slow effects to enemies (using `puddle.metadata`) is implemented: enemies are slowed only when their center point is within `puddle.metadata.radius`. Speed modifiers are reset each frame and reapplied if an enemy is in a puddle.
+5.  **(DONE) Modify `models/defender.js` - `destroyPixiObjects()` Method**:
+    *   When the defender itself is destroyed, it clears its `this.puddles` array. Puddles themselves are not destroyed with the defender and expire based on their own duration via the `update` method.
+6.  **(DONE) Modify `models/defender.js` - Cleanup**:
+    *   Old canvas-based `renderEffects(ctx)` method remains but is not used for PixiJS puddles; new puddles are `PIXI.Graphics` objects. Plan indicates full removal of `renderEffects(ctx)` once all effects are Pixi-based.
+
+**(DONE) Phase 3.B: Other UI Elements & Effects - Item 17**
+
+17. **(DONE) Defender Effects (Puddles in `Defender.js`):**
+    *   Represent puddles with `PIXI.Graphics` objects, add/remove from `puddleLayer` on the PixiJS stage.
+
+**(DONE) Phase 4: Main Render Loop & Cleanup - Y-Sorting Aspect of Task 20**
+*   Y-sorting for Base, Enemies, and Defenders is implemented using a `groundLayer` (`PIXI.Container`) with `sortableChildren = true`.
+*   Entities on the `groundLayer` update their `pixiContainer.zIndex` based on their effective y-position in their respective `update` methods.
 
 **Phase 3.A: Refactor Health Bar System** (Base.js & Enemy.js parts are DONE)
 

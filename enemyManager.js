@@ -231,7 +231,7 @@ export default class EnemyManager {
         // --- Add PixiJS container to stage if sprite exists ---
         if (enemy.pixiSprite) {
             if (this.game && this.game.app && this.game.app.stage) { // Ensure game, app, and stage are available
-                this.game.app.stage.addChild(enemy.pixiContainer);
+                this.game.groundLayer.addChild(enemy.pixiContainer); // MODIFIED: Add to groundLayer
                 // console.log(`EnemyManager: Added pixiContainer for ${enemy.id} to stage.`);
             } else {
                 console.error(`EnemyManager: Cannot add pixiContainer for ${enemy.id} to stage. Game, app, or stage is missing.`);

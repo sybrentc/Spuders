@@ -226,6 +226,12 @@ export default class Enemy {
             this.healthBarDisplay.update(this.hp, this.maxHp);
         }
         // --- End Update HealthBarDisplay ---
+
+        // Update zIndex for y-sorting
+        if (this.pixiContainer && this.pixiSprite) {
+            const effectiveY = this.pixiContainer.y + this.pixiSprite.height * (1 - this.pixiSprite.anchor.y);
+            this.pixiContainer.zIndex = effectiveY;
+        }
     }
     
     applyUpdate(updatedDef) {
@@ -306,6 +312,20 @@ export default class Enemy {
     getCurrentPosition() {
         return { x: this.x, y: this.y };
     }
+
+    /**
+     * Checks if the enemy is within a given range of a target's coordinates.
+     * @param {object} targetCoords - An object with x and y properties (e.g., puddle.metadata).
+     * @param {number} rangeThreshold - The maximum distance allowed (e.g., enemy radius + puddle radius).
+     * @returns {boolean} True if the enemy is within the threshold, false otherwise.
+     */
+    isInRange(targetCoords, rangeThreshold) {
+        if (!targetCoords) return false;
+        const dx = targetCoords.x - this.x;
+        const dy = targetCoords.y - this.y;
+        const distanceSquared = dx * dx + dy * dy; // Use squared distance to avoid Math.sqrt
+        return distanceSquared <= rangeThreshold * rangeThreshold;
+    }
     
     destroyPixiObjects() {
         if (this.healthBarDisplay) { // <-- ADD DESTROY CALL FOR HEALTH BAR
@@ -321,5 +341,20 @@ export default class Enemy {
             this.pixiContainer.destroy({ children: true }); 
             this.pixiContainer = null;
         }
+    }
+
+    /**
+     * Sets the enemy's speed modifier.
+     * @param {number} speedFactor - The factor by which to reduce speed (e.g., 0.5 for 50% speed).
+     */
+    setSlow(speedFactor) {
+        this.speedModifier = speedFactor;
+    }
+
+    /**
+     * Resets the enemy's speed modifier to normal (1.0).
+     */
+    resetSpeedModifier() {
+        this.speedModifier = 1.0;
     }
 }

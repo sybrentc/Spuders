@@ -1,4 +1,4 @@
-import { Application, Assets, Sprite, Graphics } from 'pixi.js';
+import { Application, Assets, Sprite, Graphics, Container } from 'pixi.js';
 import WaveManager from '../waveManager.js'; // Import the WaveManager
 import TuningManager from '../tuningManager.js'; // Import the new manager
 import EnemyManager from '../enemyManager.js'; // Import the new EnemyManager
@@ -72,6 +72,8 @@ export default class Game {
         this.isMusicPlaying = false; // Flag to track if music has been started
         this.placementPreviewGraphic = new Graphics(); // ADDED: For placement preview
         this.placementPreviewGraphic.visible = false; // ADDED: Start hidden
+        this.groundLayer = new Container(); // MODIFIED: Use imported Container
+        this.puddleLayer = new Container(); // ADDED: For puddle effects
     }
     
     // --- ADD methods for placement preview --- 
@@ -241,7 +243,11 @@ export default class Game {
                 backgroundSprite.width = this.app.screen.width;
                 backgroundSprite.height = this.app.screen.height;
                 this.app.stage.addChild(backgroundSprite);
-                this.app.stage.addChild(this.placementPreviewGraphic); // ADDED: Add preview graphic to stage
+                // Ensure groundLayer is added before placementPreviewGraphic for correct layering
+                this.app.stage.addChild(this.puddleLayer); // ADDED: Add puddleLayer first
+                this.app.stage.addChild(this.groundLayer); 
+                this.groundLayer.sortableChildren = true; 
+                this.app.stage.addChild(this.placementPreviewGraphic); 
             }
 
             // *** Load Path Coverage Data AFTER loadLevel sets the path ***
@@ -262,7 +268,7 @@ export default class Game {
 
                 // Add the base's PIXI.Container to the stage
                 if (this.base && this.base.pixiContainer) {
-                    this.app.stage.addChild(this.base.pixiContainer);
+                    this.groundLayer.addChild(this.base.pixiContainer); // MODIFIED: Add to groundLayer
                 } else {
                     console.error("Game Initialize: Base or base.pixiContainer is not available after creation. Cannot add to stage.");
                     // Potentially throw an error here if the base is critical for rendering

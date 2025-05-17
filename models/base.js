@@ -200,6 +200,12 @@ export default class Base extends EventTarget {
             this.healthBarDisplay.update(this.currentHp, this.maxHp);
         }
         // --- END NEW HealthBarDisplay Update ---
+
+        // Update zIndex for y-sorting
+        if (this.pixiContainer && this.pixiSprite) {
+            const effectiveY = this.pixiContainer.y + this.pixiSprite.height * (1 - this.pixiSprite.anchor.y);
+            this.pixiContainer.zIndex = effectiveY;
+        }
     }
 
     /**
