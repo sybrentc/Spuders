@@ -1,520 +1,191 @@
-## Currently Active Plan: Striker Explosion Animations
-
-This phase focuses on implementing explosion animations for striker bombs using PixiJS.
-
-**Key Task (from Phase 3.B, Item 19):**
-*   **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
-    *   Load explosion frames as a sequence of `PIXI.Texture`s (managed by `StrikeManager` via `_loadExplosionFrames()` which populates `this.loadedAnimationData`).
-    *   `StrikeManager.js` needs to ensure `bombPayload.animation` (derived from `loadedAnimationData`) contains an array of `PIXI.Texture` objects and other necessary animation parameters (duration, scale, anchor).
-    *   `Striker.js` will accept this animation data in its constructor.
-    *   When a strike is executed, the `Striker` instance will:
-        1.  Create a `PIXI.AnimatedSprite` using the provided textures and animation speed (derived from frame duration and number of frames).
-        2.  Configure its properties: `loop = false`, position (at impact site), anchor, scale.
-        3.  Add the `AnimatedSprite` to an appropriate container on the PixiJS stage (e.g., `this.game.groundLayer` or a dedicated effects layer if z-ordering needs adjustment).
-        4.  Implement logic for the `onComplete` event of the `AnimatedSprite` to remove it from its parent container and destroy it, ensuring no memory leaks.
-    *   This involves updates to `StrikeManager.js` (passing data) and `Striker.js` (creating, playing, and cleaning up the animation).
-
-**Steps:**
-1.  **Verify Asset Loading & Data Structure (`StrikeManager.js`):**
-    *   Ensure `StrikeManager._loadExplosionFrames()` correctly loads frames as `PIXI.Texture` objects.
-    *   Confirm `this.loadedAnimationData` (and thus `bombPayload.animation`) has the structure expected by `Striker.js` (e.g., an array of textures, frame duration or animation speed, scale, anchor).
-2.  **Modify `Striker.js` Constructor:**
-    *   Accept animation data (e.g., `{ textures: PIXI.Texture[], animationSpeed: number, scale: number, anchorX: number, anchorY: number }`).
-    *   Store this data.
-3.  **Implement Explosion Animation Logic in `Striker.js`:**
-    *   Likely within the `_executeStrike` method, or a new method called by it (e.g., `_playExplosionAnimation`).
-    *   Create the `PIXI.AnimatedSprite`.
-    *   Set its properties (`position`, `anchor`, `scale`, `animationSpeed`, `loop = false`).
-    *   Add it to the stage (e.g., `this.strikeContext.game.groundLayer.addChild(explosionSprite);` assuming `strikeContext` is the game).
-    *   Define the `onComplete` handler: `explosionSprite.onComplete = () => { explosionSprite.destroy(); };` (ensure it's also removed from parent if `destroy()` doesn't handle that).
-    *   Play the animation: `explosionSprite.play();`.
-4.  **Update `StrikeManager.dispatchStriker()`:**
-    *   Ensure the `bombPayload` passed to the `Striker` constructor contains the correctly structured animation data.
-5.  **Testing:**
-    *   Trigger strikes to verify explosions animate as expected.
-    *   Confirm correct positioning, scaling, and speed.
-    *   Ensure sprites are removed and destroyed after animation.
-    *   Test with multiple simultaneous explosions if applicable.
-
----
-
 # PixiJS Refactoring Plan
 
-This plan outlines the steps to refactor the game's rendering pipeline to use PixiJS.
-
-## Tasks To Do
-
-### Phase 3: UI Elements & Effects
-
-**Phase 3.B: Other UI Elements & Effects**
-
-19. **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
-    *   Load explosion frames as a sequence of `PIXI.Texture`s.
-    *   `Striker.js` creates and plays a `PIXI.AnimatedSprite` for explosions, adding it to an effects container on the PixiJS stage and removing it on completion.
-
-### Phase 4: Main Render Loop & Cleanup
-
-20. **New Main Render Loop (`Game.js`):**
-    *   The primary game loop for rendering is now driven by PixiJS `Application.ticker`. (Partially Done - Y-sorting is complete)
-    *   The `Game.update()` method will still handle game logic updates for all entities.
-    *   If a `Game.render()` method is kept, its role will shift from direct drawing to potentially triggering high-level PixiJS updates if not handled by individual entity `update` methods, or it might be removed entirely if the ticker and entity updates cover all needs.
-21. **Cleanup:**
-    *   Ensure all old direct canvas `ctx` drawing calls are removed from all files.
-    *   Remove obsolete canvas properties and utility functions.
-    *   Update event handling for PixiJS interactive objects if needed (e.g., for defence placement clicks).
-
-
----
-
-## Completed Tasks
-
-## (DONE) Phase 4 Cleanup (Iterative)
-
-The goal is to remove all obsolete canvas rendering code and properties, ensuring the game relies solely on PixiJS for rendering. Each step involves identifying and removing specific obsolete code, followed by testing.
-
-**Preamble: `utils/renderUtils.js`**
-*   **Status:** Already confirmed as removed and no longer imported. (Task 7 from previous detailed plan).
-
-**Step 1: Analyze and Address `Game.render()` Method in `models/game.js`**
-    *   **Action:**
-        1.  Examine the current `Game.render()` method (around line 792 in `models/game.js`).
-        2.  Determine if it contains any logic that is still active or necessary. According to `plan.md` (Phase 1, Task 3), it should have been gutted.
-        3.  Confirm if it's being called anywhere, particularly from the main game loop in `startGameLoop()`.
-        4.  If it's empty or contains only obsolete logic and is not critical to the game loop, remove the method.
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Ensure the game loop continues to function correctly (entities update, animations play).
-        *   Verify that no errors are introduced and the game remains fully playable.
-
-**Step 2: Remove `Game.drawBackground()` and Related Properties in `models/game.js`**
-    *   **Action:**
-        1.  Locate the `drawBackground()` method in `models/game.js` (around line 639). It uses `this.bgCtx` and `this.bgCanvas`.
-        2.  Verify that this method is not being called from anywhere in the active codebase. Background rendering should be handled by a PixiJS Sprite added during `Game.initialize()` (as per `plan.md` Phase 1, Task 2).
-        3.  If confirmed as unused, remove the `drawBackground()` method.
-        4.  Remove the associated properties `this.bgImage`, `this.bgCtx`, and `this.bgCanvas` from the `Game` class (constructor and any assignments).
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Confirm the game background still loads and displays correctly via the PixiJS sprite.
-        *   Ensure no visual regressions or errors.
-
-**Step 3: Remove `renderZBuffer(ctx)` from `strikeManager.js`**
-    *   **Action:**
-        1.  Locate the `renderZBuffer(ctx)` method in `strikeManager.js` (around line 433). It contains old canvas drawing calls.
-        2.  Verify this method is not being called. The heatmap functionality was refactored to use PixiJS (`this.heatmapDrawingGraphic` and `this.heatmapSprite` as per `plan.md` Task 18). The old `renderZBuffer(ctx)` should be dead code.
-        3.  If confirmed as unused, remove the `renderZBuffer(ctx)` method.
-    *   **Files to Check/Edit:** `strikeManager.js`.
-    *   **Test:**
-        *   If there's a debug flag to show the heatmap (e.g., `this.showStrikeManagerHeatmap` or `this.renderHeatmapDebug` in `StrikeManager`), toggle it to ensure the PixiJS heatmap still renders correctly.
-        *   Check for any new console errors or issues related to strike/bombing functionality.
-
-**Step 4: Remove `renderEffects(ctx)` from `models/defender.js`**
-    *   **Action:**
-        1.  Locate the `renderEffects(ctx)` method in `models/defender.js`. It contains old canvas drawing calls for effects.
-        2.  Verify this method is not being called. Puddle effects, a key defender visual, are now handled by `PIXI.Graphics` objects added to `this.game.puddleLayer` (as per `plan.md` Phase 3.B, "Defender Effects (Puddles)"). Other effects should also be Pixi-based if this phase is complete.
-        3.  If confirmed as unused, remove the `renderEffects(ctx)` method.
-    *   **Files to Check/Edit:** `models/defender.js`.
-    *   **Test:**
-        *   Ensure defender attack effects (especially puddles) render correctly using PixiJS.
-        *   Verify defender behavior and game stability.
-
-**Step 5: Clean Up Remaining Obsolete Canvas Properties in `models/game.js`**
-    *   **Action:**
-        1.  Review the `Game` class constructor and other methods in `models/game.js` for any remaining old canvas-related properties, such as `this.ctx` (if it's the 2D context for the main canvas), `this.fgCanvas`, `this.fgCtx`, or `this.layers`.
-        2.  The property `this.canvas` (initialized around line 32) seems to be used for setting initial dimensions for the PixiJS app. Analyze its usage:
-            *   Is it the *old* main canvas element?
-            *   After `this.app = new Application(); await this.app.init(...)` and `this.container.appendChild(this.app.canvas)`, is `this.canvas` still needed, or does `this.app.canvas` supersede it for all purposes?
-            *   If it's only used for initial dimensioning and not for drawing, it might be acceptable or could potentially be refactored to pass dimensions more directly. For now, focus on properties clearly tied to old 2D context drawing.
-        3.  Remove any properties confirmed to be part of the old, direct canvas drawing system and are no longer used.
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Game initializes correctly.
-        *   Screen dimensions and layout are correct.
-        *   No new errors related to canvas or rendering.
-
-**Step 6: Event Handling Final Review (`Controller.js` & `Game.js`)**
-    *   **Action:**
-        1.  Briefly re-confirm that mouse event handling in `Controller.js` (for defence placement, UI interaction) uses `this.gameInstance.app.canvas` and relies on game logic (e.g., `isPositionValidForPlacement`) rather than old canvas coordinate systems or rendering states for its logic.
-        2.  This step is mostly a final check, as earlier analysis suggested it's likely okay.
-    *   **Files to Check:** `Controller.js`, `models/game.js`.
-    *   **Test:**
-        *   Defence placement UI (preview, clicking to place) works as expected.
-        *   Any other UI interactions are responsive.
-
-**Step 7: Final Codebase Search for Canvas Context Usage**
-    *   **Action:**
-        1.  Perform a final grep search across the codebase (excluding `reference/` and `dist/` folders) for any remaining canvas 2D context method calls (e.g., `ctx.fillRect`, `.drawImage`, etc.) to catch any missed instances.
-        2.  Address any findings by removing or refactoring to PixiJS.
-    *   **Files to Check/Edit:** Project-wide (`*.js`).
-    *   **Test:**
-        *   Full playthrough or comprehensive feature test to ensure no regressions.
-
-**(DONE) Phase 3.B: Other UI Elements & Effects - Item 18 (Heatmap)**
-
-18. **(DONE) Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
-    *   Refactored `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage.
-
-**(DONE)**
-    *   **Review `utils/renderUtils.js` for deletion:** Once `HealthBarDisplay` is fully integrated into ALL relevant entities (Base, Enemies, Defenders), `utils/renderUtils.js` should be checked. If `drawHealthBar` is its only export and no other code uses it, the file can be deleted. (User restored this file as other entities still use it).
-
-    *   Y-sorting managed via `PIXI.Container` `sortableChildren` and `zIndex`, or manual reordering of children in a container. **(DONE for Base, Enemies, Defenders on `groundLayer`)**
-
-**(DONE) Phase 3.B: Defender Effects (Puddles in `Defender.js`) - PixiJS Implementation**
-
-1.  **(DONE) Effects Container Strategy**:
-    *   Decision: Puddle `PIXI.Graphics` objects are added directly to `this.game.puddleLayer`. The `puddleLayer` is added to `this.game.app.stage` before `groundLayer`.
-2.  **(DONE) Modify `models/defender.js` - Puddle Data Structure**:
-    *   Updated the `this.puddles` array. Each entry stores an object like: `{ metadata: { x, y, createdAt, duration, radius, speedFactor, color }, graphics: PIXI.Graphics_object }`.
-3.  **(DONE) Modify `models/defender.js` - `attack(timestamp)` Method**:
-    *   When a defender with `this.effects` creates a puddle:
-        *   Creates a new `PIXI.Graphics` object.
-        *   Uses `new PIXI.Color(this.effects.color)` to get color and alpha.
-        *   Draws the puddle shape: `graphics.circle(0, 0, puddleMetadata.radius);`
-        *   Applies fill: `graphics.fill({ color: pixiColor.toNumber(), alpha: pixiColor.alpha });`
-        *   Sets position: `graphics.x = enemyPos.x; graphics.y = enemyPos.y;`
-        *   Adds to `puddleLayer`: `this.game.puddleLayer.addChild(graphics);`
-        *   Stores the `graphics` object along with its `metadata` in the `this.puddles` array.
-4.  **(DONE) Modify `models/defender.js` - `update(timestamp, deltaTime, enemies)` Method**:
-    *   Iterates `this.puddles` to manage lifecycle:
-        *   If a puddle (based on `puddle.metadata.createdAt` and `puddle.metadata.duration`) has expired:
-            *   Removes its `PIXI.Graphics` object from the `puddleLayer`: `this.game.puddleLayer.removeChild(puddle.graphics);`
-            *   Destroys the graphics object: `puddle.graphics.destroy();`
-            *   Filters this puddle out from the `this.puddles` array.
-        *   Logic for applying slow effects to enemies (using `puddle.metadata`) is implemented: enemies are slowed only when their center point is within `puddle.metadata.radius`. Speed modifiers are reset each frame and reapplied if an enemy is in a puddle.
-5.  **(DONE) Modify `models/defender.js` - `destroyPixiObjects()` Method**:
-    *   When the defender itself is destroyed, it clears its `this.puddles` array. Puddles themselves are not destroyed with the defender and expire based on their own duration via the `update` method.
-6.  **(DONE) Modify `models/defender.js` - Cleanup**:
-    *   Old canvas-based `renderEffects(ctx)` method remains but is not used for PixiJS puddles; new puddles are `PIXI.Graphics` objects. Plan indicates full removal of `renderEffects(ctx)` once all effects are Pixi-based.
-
-**(DONE) Phase 3.B: Other UI Elements & Effects - Item 17**
-
-17. **(DONE) Defender Effects (Puddles in `Defender.js`):**
-    *   Represent puddles with `PIXI.Graphics` objects, add/remove from `puddleLayer` on the PixiJS stage.
-
-**(DONE) Phase 4: Main Render Loop & Cleanup - Y-Sorting Aspect of Task 20**
-*   Y-sorting for Base, Enemies, and Defenders is implemented using a `groundLayer` (`PIXI.Container`) with `sortableChildren = true`.
-*   Entities on the `groundLayer` update their `pixiContainer.zIndex` based on their effective y-position in their respective `update` methods.
-
-**Phase 3.A: Refactor Health Bar System** (Base.js & Enemy.js parts are DONE)
-
-**Phase D-HB1: Defender Health Bar Integration (Task 15) (DONE)**
-
-1.  **(DONE) Import `HealthBarDisplay` in `models/defender.js`:**
-    *   Add `import HealthBarDisplay from '../healthBar.js';` (adjust path if necessary).
-2.  **(DONE) Modify `Defender.js` Constructor:**
-    *   Add `this.healthBarDisplay = null;`.
-    *   After `this.pixiContainer` and `this.pixiSprite` are initialized, and if `this.game` is available, instantiate:
-        `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);`
-    *   Handle cases where `pixiSprite` might not be created.
-3.  **(DONE) Update Health Bar in `Defender.update()`:**
-    *   If `this.healthBarDisplay` exists, call `this.healthBarDisplay.update(this.hp, this.maxHp);`.
-4.  **(DONE) Manage Health Bar Visibility in `Defender.update()` (or relevant methods):**
-    *   Primarily handled by `HealthBarDisplay` itself. Considered complete as current visibility logic is sufficient.
-5.  **(DONE) Destroy Health Bar in `Defender.destroyPixiObjects()`:**
-    *   Add logic to destroy `this.healthBarDisplay` if it exists.
-6.  **(DONE) Confirmation: Old `drawHealthBar` Call Removed:**
-    *   Verified that the old `drawHealthBar` call from `Defender.render(ctx)` is gone.
-7.  **(DONE) Review `utils/renderUtils.js`:**
-    *   `utils/renderUtils.js` has been assessed and deleted as it's no longer used.
-
-### Phase 1: Core Setup & Background (DONE)
-
-1.  **(DONE) Install & Initialize PixiJS:**
-    *   Add PixiJS to the project (npm install, import map in `index.html`).
-    *   In `Game.js`, create `PIXI.Application`, append `app.canvas` to the container.
-    *   **Crucially, remove old canvas/layer creation (`this.layers`, `this.bgCanvas`, `this.fgCanvas`, `this.bgCtx`, `this.fgCtx`).**
-2.  **(DONE) Background Rendering:**
-    *   Load background image using `PIXI.Assets.load()`.
-    *   Create a `PIXI.Sprite` for the background, scale it, and add it to the PixiJS stage.
-    *   Remove the old `Game.drawBackground` method.
-3.  **(DONE) Gut Old `Game.render()` Method:**
-    *   The existing `Game.render()` method, which previously orchestrated drawing to the old canvas contexts, has been emptied. Its calls to manager `render` methods have ceased.
-    *   The new role of the game loop with PixiJS will be established in Phase 4.
-
-### Phase 2: Asset Loading & Entity Rendering (Partially DONE)
-
-**Phase 2.A: Base Entity Rendering (`Base.js`, `Game.js`, `utils/renderUtils.js`) (DONE)**
-
-4.  **(DONE) Modify `Base.js` - Asset Loading & Initialization:**
-    *   Import `Assets`, `Texture`, `Sprite`, `Rectangle`, `Graphics`, `Container`, `TextureSource` from `pixi.js`.
-    *   In `constructor`: add `this.pixiSprite`, `this.textures = []`, `this.pixiContainer`. (Old `this.healthBarGraphic` removed, new `this.healthBarDisplay` added).
-    *   In `async loadAssets()`:
-        *   Load base spritesheet using `await Assets.load(this.spritePath)`.
-        *   Correctly determine `TextureSource` from loaded asset.
-        *   Extract individual frame `Texture`s using `new Texture({ source: baseImageTextureSource, frame: frameRectangle })` and store them in `this.textures`.
-        *   Create `this.pixiContainer`, set its `x`, `y`.
-        *   Create `this.pixiSprite = new Sprite(this.textures[0])`, set anchor, scale, and add to `pixiContainer`.
-        *   (New `HealthBarDisplay` instantiated here for Base).
-    *   Remove the old `loadSprite(path)` method.
-5.  **(DONE) Modify `Base.js` - Update Logic & Health Bar Link:**
-    *   In `update(timestamp, deltaTime)`:
-        *   Keep existing logic to calculate `this.currentFrame` based on HP percentage.
-        *   Update `this.pixiSprite.texture = this.textures[this.currentFrame]`.
-        *   Call to old `drawHealthBar` removed; replaced by `this.healthBarDisplay.update()`.
-        *   Manage `this.pixiContainer.visible` based on `_isDestroyed` (in `takeDamage` and `reset`).
-6.  **(DONE) Remove `Base.js` `render(ctx)` method.**
-7.  **(DONE) Modify `utils/renderUtils.js` - Initial Refactor `drawHealthBar`:** (This step is now superseded by `HealthBarDisplay` logic. `renderUtils.js` is kept temporarily for other entities).
-    *   Change signature to accept `(graphics, currentHp, maxHp, ...)` and use PixiJS drawing methods.
-    *   Include logic to clear & return if health is full or <= 0.
-8.  **(DONE) Modify `Game.js` - Add Base Sprite to Stage:**
-    *   In `Game.initialize()`, after `this.base` is created, add `this.base.pixiContainer` to `this.app.stage`.
-
-**Phase 2.B: General Asset Loading & Other Entities (Enemies DONE)**
-
-9.  **(DONE) Centralized Asset Loading (Further Refinement):**
-    *   Refactor remaining image loading (enemies, defenders, effects) to use `PIXI.Assets.load()`.
-    *   Store loaded `PIXI.Texture` objects, potentially in a dedicated asset manager or within respective entity managers.
-10. **(DONE) Enemy Rendering (`Enemy.js`, `EnemyManager.js`):**
-    *   `Enemy.js`:
-        *   Store `PIXI.Texture` instead of `Image` (or arrays of Textures for animations).
-        *   Create and manage a `PIXI.Sprite` (or `PIXI.AnimatedSprite`) within a `PIXI.Container`.
-        *   Old `render` method became obsolete.
-        *   Will instantiate `HealthBarDisplay` (Phase 3.A).
-        *   Hit flash logic implemented (Phase 3.C).
-    *   `EnemyManager.js`:
-        *   `loadSprite` (or equivalent) to fetch textures using `Assets.load()`.
-        *   `createEnemy` passes textures; adds PIXI container to a stage container.
-        *   Remove PIXI container on death.
-        *   Old `render` method became obsolete.
-
-**Phase D: Defender PixiJS Rendering (DONE)**
-
-**Phase D1: Asset Loading & Texture Preparation (`DefenceManager.js`) (DONE)**
-1.  **(DONE) Import PixiJS:** Add `import * as PIXI from 'pixi.js';` and relevant classes (`Texture`, `Rectangle`) to `DefenceManager.js`.
-2.  **(DONE) Sprite Processing Helper:** Adapt/reuse `_processSpritesheet` from `EnemyManager.js` (moved to `utils/dataLoaders.js` and used by both managers).
-3.  **(DONE) Modify `DefenceManager.loadDefinitions()`:**
-    *   After fetching `defences.json`, iterate through each `defenceDef`.
-    *   If `defenceDef.sprite` and `defenceDef.sprite.path` exist:
-        *   Use the `processSpritesheet` helper to load and process the sprite sheet.
-        *   Store these textures on `defenceDef.pixiTextures`.
-
-**Phase D2: Defender Entity Setup (`models/defender.js`) (DONE)**
-4.  **(DONE) Import PixiJS:** Add `import * as PIXI from 'pixi.js';` to `models/defender.js`.
-5.  **(DONE) Modify `Defender.js` Constructor:**
-    *   Add `this.pixiContainer`, `this.pixiSprite`, `this.allSpriteFrames`, `this.framesPerRow`.
-    *   Accept `pixiTextures`.
-    *   Create `this.pixiSprite = new PIXI.Sprite(initialTexture)`.
-    *   Configure `anchor`, `scale`.
-    *   Add sprite to container, position container.
-    *   Remove old sprite properties.
-6.  **(DONE) Update Visuals in `Defender.update()`:**
-    *   Preserve logic for `directionRowIndex`, `currentFrame`, `isAttacking`.
-    *   Calculate `textureIndex` and update `this.pixiSprite.texture`.
-    *   Attack animation plays once then reverts to idle frame of current direction.
-
-**Phase D3: Integration & Stage Management (DONE)**
-7.  **(DONE) Modify `DefenceManager.placeDefence()`:**
-    *   Pass `defenceDef.pixiTextures` to `DefenceEntity` constructor.
-    *   Add `newDefence.pixiContainer` to `this.game.app.stage`.
-8.  **(DONE) Add `Defender.destroyPixiObjects()` Method:**
-    *   Destroys `this.pixiSprite` and `this.pixiContainer`.
-9.  **(DONE) Modify `DefenceManager.update()` for Removal:**
-    *   When defender `isDestroyed`: remove its `pixiContainer` from stage and call `destroyPixiObjects()`.
-
-**Phase D4: Cleanup (DONE)**
-10. **(DONE) Remove Old Rendering Code:**
-    *   Delete `render(ctx)` method from `models/defender.js`.
-    *   Delete `render(ctx)` method from `DefenceManager.js`.
-    *   Delete `renderEffects(ctx)` from `DefenceManager.js`.
-11. **(DONE) Remove `drawHealthBar` Import:** Remove `import { drawHealthBar } from '../utils/renderUtils.js';` from `models/defender.js`.
-
-
-**Rendering `spider_normal` (Enemy PixiJS Rendering - Part 1) (DONE)**
-*   **A. (DONE) Asset Preparation (`EnemyManager.js`):**
-    1.  **(DONE) Modify `EnemyManager.loadSprite(path)` to use `await PIXI.Assets.load(path)` and return the PixiJS asset.**
-    2.  **(DONE) In `EnemyManager.load()`, after loading the sprite sheet asset for `spider_normal`:**
-        *   **(DONE) Extract `PIXI.Texture[]` for each animation frame using `enemies.json` sprite details.**
-        *   **(DONE) Store this texture array in `this.enemyTypes["spider_normal"].pixiTextures`.**
-*   **B. (DONE) Enemy Entity Setup (`models/enemy.js`):**
-    1.  **(DONE) Modify `Enemy.js` constructor:**
-        *   **(DONE) Import `PIXI.Container`, `PIXI.AnimatedSprite`.**
-        *   **(DONE) Add `this.pixiContainer = new PIXI.Container();` and `this.pixiSprite = null;`.**
-        *   **(DONE) Create `this.pixiSprite = new PIXI.AnimatedSprite(passed_in_pixiTextures);`.**
-        *   **(DONE) Configure `this.pixiSprite` (anchor, scale, animationSpeed, play).**
-        *   **(DONE) Add `this.pixiSprite` to `this.pixiContainer`.**
-        *   **(DONE) Set initial `this.pixiContainer.x/y` from enemy's logical `this.x/y`.**
-*   **C. (DONE) Integration & Stage Management (`EnemyManager.js`, `Game.js`):**
-    1.  **(DONE) Modify `EnemyManager.createEnemy(enemyId)` (now ID-agnostic for this part):**
-        *   **(DONE) Ensure it adds `enemy.pixiContainer` to `this.game.app.stage`.**
-    2.  **(DONE) Modify `Enemy.js -> update()`:**
-        *   **(DONE) Update `this.pixiContainer.x = this.x;` and `this.pixiContainer.y = this.y;`.**
-    3.  **(DONE) Modify `EnemyManager.update()` for enemy removal:**
-        *   **(DONE) When a Pixi-rendered enemy is removed, remove its `enemy.pixiContainer` from the stage/layer.**
-        *   **(DONE) Call a new `enemy.destroyPixiObjects();`.**
-    4.  **(DONE) Add `Enemy.js -> destroyPixiObjects()` to destroy its `pixiContainer` and `pixiSprite`.**
-*   **D. (DONE) Cleanup (Old Rendering for `spider_normal`):**
-    1.  **(DONE) Remove `Enemy.render(ctx)` method.**
-    2.  **(DONE) Remove `EnemyManager.render(ctx)` method.**
-
-### Phase 3: UI Elements & Effects (DONE for Base Health Bar & Enemy Hit Flash)
-
-**Phase 3.A: Refactor Health Bar System** (Base.js & Enemy.js parts are DONE)
-
-12. **(DONE FOR BASE) Game Configuration for Health Bars (`Game.js`, `gameConfig.json`):**
-    *   Ensure `gameConfig.json` has a `ui.healthBar` section with fixed `width`, `height`, `padding` (optional), and `healthyColor`, `damagedColor`, `borderColor`, `borderThickness`.
-    *   In `Game.js`, load this config and provide a getter (e.g., `getHealthBarConfig()`).
-13. **(DONE FOR BASE) Create `healthBar.js` Helper Class:**
-    *   **Constructor:** `(containerParent, spriteToFollow, gameInstance)` where `containerParent` is the entity's main container and `spriteToFollow` is the entity's main sprite.
-        *   **Note on `parentVisual` logic:** `HealthBarDisplay`'s graphics object is added to `containerParent`. Its `update()` method uses `spriteToFollow` to get accurate dimensions and anchor points for positioning.
-    *   Creates and stores `this.graphics = new PIXI.Graphics()`. Adds it as a child to `containerParent`.
-    *   Fetches and stores `this.healthBarConfig = gameInstance.getHealthBarConfig()`.
-    *   **`update(currentHp, maxHp)` method:**
-        *   Calculates the position (`this.graphics.x`, `this.graphics.y`) for its graphics object to be centered above `spriteToFollow`.
-        *   The drawing logic is self-contained within this `update` method, using the loaded config.
-    *   **`setVisible(isVisible)` method:** Sets `this.graphics.visible`.
-    *   **`destroy()` method:** Clears/destroys `this.graphics`.
-14. **(DONE - Superseded) Review `utils/renderUtils.js` for Deletion:**
-    *   The primary drawing logic previously in `drawHealthBar` (from `utils/renderUtils.js`) has been incorporated into `HealthBarDisplay.update()`.
-    *   `utils/renderUtils.js` is temporarily kept as other entities (Enemies, Defenders) still depend on it. Its final deletion is noted in Phase 4 Cleanup (Step 21).
-15. **(DONE FOR BASE) Integrate `healthBar.js` into Entities (e.g., `Base.js`):**
-    *   In `Base.loadAssets()`: `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);`.
-    *   In `Base.update()`: `this.healthBarDisplay.update(this.currentHp, this.maxHp);`.
-    *   In `Base.takeDamage` and `Base.reset`: `this.healthBarDisplay.setVisible()` and `this.healthBarDisplay.update()` are called.
-    *   In `Base.destroySelf()`: `this.healthBarDisplay.destroy()` is called.
-    *   Old direct calls to `drawHealthBar` and related `healthBarGraphic` property removed from `Base.js`.
-
-**15.A. (DONE FOR ENEMIES) Integrate `healthBar.js` into `Enemy.js`:**
-    *   In `Enemy.js` constructor: `this.healthBarDisplay = new HealthBarDisplay(this.pixiContainer, this.pixiSprite, this.game);` (after `pixiSprite` and `game` are available).
-    *   In `Enemy.js` `update()`: `this.healthBarDisplay.update(this.hp, this.maxHp);`.
-    *   In `Enemy.js` `destroyPixiObjects()`: `this.healthBarDisplay.destroy();`.
-    *   The `reset()` logic is not directly applicable to enemies in the same way as `Base.js`; health bars are created with the enemy and destroyed when the enemy dies. Visibility is handled by the parent `pixiContainer`.
-    *   Old direct calls to `drawHealthBar` were removed when enemy rendering was refactored for PixiJS.
-
-**Phase 3.B: Other UI Elements & Effects (Placement Preview DONE)**
-
-16. **(DONE) Placement Preview (`Game.js`):**
-    *   Refactored placement preview rendering to use PixiJS.
-    *   **Steps:**
-        1.  **(DONE) Add `Graphics` Object to `Game.js`:**
-            *   (DONE) Imported `Graphics` from `pixi.js`.
-            *   (DONE) In `Game.js` constructor: Initialized `this.placementPreviewGraphic = new Graphics();`.
-            *   (DONE) Set initial visibility: `this.placementPreviewGraphic.visible = false;`.
-            *   (DONE) In `Game.initialize()`: Added to stage: `this.app.stage.addChild(this.placementPreviewGraphic);`.
-        2.  **(DONE) Create `Game.isPositionValidForPlacement(position)`:**
-            *   (DONE) Added method to check placement validity based on path proximity and exclusion radius.
-        3.  **(DONE) Refactor `Game.setPlacementPreview(position, definition)`:**
-            *   (DONE) Calls `this.placementPreviewGraphic.clear();`.
-            *   (DONE) Validates `position`, `definition`, and `gameConfig`.
-            *   (DONE) Calls `this.isPositionValidForPlacement(position)` to determine `isValidPlacement`.
-            *   (DONE) Calculates preview size and determines color/alpha from config.
-            *   (DONE) Uses `this.placementPreviewGraphic.rect(x, y, w, h);` to define the shape.
-            *   (DONE) Uses `this.placementPreviewGraphic.fill({ color: fillColor, alpha: colorAlpha });` to apply fill.
-            *   (DONE) Sets `this.placementPreviewGraphic.visible = true;` or `false`.
-            *   (DONE) Removed usage of old `this.placementPreview` property for storing current state.
-        4.  **(DONE) Update `Controller.js` Click Handler:**
-            *   (DONE) Calls `gameInstance.isPositionValidForPlacement(currentMousePos)` to check validity.
-            *   (DONE) Uses `currentMousePos` for placing defence if valid.
-            *   (DONE) No longer relies on `gameInstance.getPlacementPreview().isValid`.
-        5.  **(DONE) Cleanup:**
-            *   (DONE) Deleted the old `Game.renderPlacementPreview(ctx)` method from `Game.js`.
-            *   (Note: `Game.getPlacementPreview()` remains, but its returned value `this.placementPreview` is no longer updated by `setPlacementPreview`.)
-
-**Phase 3.C: Hit Flash Effect (DONE)**
-    *   **E.1: (DONE) Asset & Configuration Preparation (`EnemyManager.js`)**
-        1.  **(DONE) Shared Hit Spritesheet:** `assets/sprites/spider-hit.png` is used.
-        2.  **(DONE) Spider Configuration File (`assets/spiderConfig.json`):** Contains common display properties (frameWidth, frameHeight, etc.) and hit effect properties (`hit.commonHitSpriteSheetPath`, `hit.enemyFlashDurationMs`).
-        3.  **(DONE) Initialize Properties (Constructor):** In `EnemyManager.constructor`, initialize `this.commonSpiderConfig = null;` and `this.allProcessedTextureArrays = [];`.
-        4.  **(DONE) Load Common Spider Config:** In `EnemyManager.load()` (make it `async`), load and parse `assets/spiderConfig.json` into `this.commonSpiderConfig`.
-        5.  **(DONE) Implement Spritesheet Processing Helper:** Create a helper method in `EnemyManager` (e.g., `async _processSpritesheet(assetPath, frameConfig)`) that loads an image asset from `assetPath`, then uses `frameConfig` (from `this.commonSpiderConfig.display`) to cut it into and return an array of `PIXI.Texture[]`.
-        6.  **(DONE) Process Common Hit Spritesheet:** In `EnemyManager.load()`, use the helper to process `this.commonSpiderConfig.hit.commonHitSpriteSheetPath` and store the result in `this.allProcessedTextureArrays[0]`.
-        7.  **(DONE) Process Normal Enemy Spritesheets & Store Index:** In `EnemyManager.load()`, after loading `enemies.json` into `this.enemyDefinitions` (preserving order):
-            *   Iterate through `this.enemyDefinitions`. For each `enemyDef`:
-                *   Use the helper method (`_processSpritesheet`) with `enemyDef.sprite.path` and `this.commonSpiderConfig.display` to get its normal animation textures.
-                *   Push these textures to `this.allProcessedTextureArrays`.
-                *   Store the index of this new entry on the definition: `enemyDef.normalTextureArrayIndex = this.allProcessedTextureArrays.length - 1;`.
-    *   **E.2: (DONE) `EnemyManager.createEnemy(enemyId)` - Passing Data to `Enemy` Instance:**
-        *   Find the `enemyDef` for `enemyId` (this definition will have `normalTextureArrayIndex`).
-        *   `normalTextures = this.allProcessedTextureArrays[enemyDef.normalTextureArrayIndex]`.
-        *   `hitTextures = this.allProcessedTextureArrays[0]`.
-        *   `flashDuration = this.commonSpiderConfig.hit.enemyFlashDurationMs`.
-        *   Pass these to the `Enemy` constructor, along with any other relevant display properties from `this.commonSpiderConfig.display` (like anchor, scale, frameDuration for animationSpeed) if `Enemy.js` needs them for sprite setup.
-    *   **E.3: (DONE) `Enemy.js` - Storing Data & Initializing Flash Properties:**
-        1.  **(DONE) Constructor:** Accept `normalTextures` (enemy-specific), `hitTextures` (common), `flashDuration`. Store them. Initialize `isHitFlashing = false`, `hitFlashTimer = 0`. Stored `pixiTextures` as `this.normalAnimationFrames`.
-    *   **E.4: (DONE) `Enemy.js` - Implementing Flash Logic:**
-        1.  **(DONE) `hit()` Method:** Set `isHitFlashing = true`, `hitFlashTimer = this.flashDurationMs`. Swap `this.pixiSprite.textures` to `this.hitAnimationFrames`, maintaining `currentFrame` and playing state.
-        2.  **(DONE) `update(deltaTime)` Method:** If `isHitFlashing`, decrement `hitFlashTimer`. If timer expires, revert `this.pixiSprite.textures` to `this.normalAnimationFrames`, maintaining `currentFrame` and playing state.
-    *   **E.5: (DONE) Testing:** Trigger `enemy.hit()` via defender attacks. (Verified working by user).
-
----
-## Key PixiJS Concepts
-
-*   `PIXI.Application`, `PIXI.Assets` (or `PIXI.Loader`), `PIXI.Texture`, `PIXI.Sprite`, `PIXI.AnimatedSprite`, `PIXI.Graphics`, `PIXI.Container`, `app.stage`, `app.ticker`.
-
-## Currently Active Plan: Phase 4 Cleanup (Iterative)
-
-The goal is to remove all obsolete canvas rendering code and properties, ensuring the game relies solely on PixiJS for rendering. Each step involves identifying and removing specific obsolete code, followed by testing.
-
-**Preamble: `utils/renderUtils.js`**
-*   **Status:** Already confirmed as removed and no longer imported. (Task 7 from previous detailed plan).
-
-**Step 1: Analyze and Address `Game.render()` Method in `models/game.js`**
-    *   **Action:**
-        1.  Examine the current `Game.render()` method (around line 792 in `models/game.js`).
-        2.  Determine if it contains any logic that is still active or necessary. According to `plan.md` (Phase 1, Task 3), it should have been gutted.
-        3.  Confirm if it's being called anywhere, particularly from the main game loop in `startGameLoop()`.
-        4.  If it's empty or contains only obsolete logic and is not critical to the game loop, remove the method.
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Ensure the game loop continues to function correctly (entities update, animations play).
-        *   Verify that no errors are introduced and the game remains fully playable.
-
-**Step 2: Remove `Game.drawBackground()` and Related Properties in `models/game.js`**
-    *   **Action:**
-        1.  Locate the `drawBackground()` method in `models/game.js` (around line 639). It uses `this.bgCtx` and `this.bgCanvas`.
-        2.  Verify that this method is not being called from anywhere in the active codebase. Background rendering should be handled by a PixiJS Sprite added during `Game.initialize()` (as per `plan.md` Phase 1, Task 2).
-        3.  If confirmed as unused, remove the `drawBackground()` method.
-        4.  Remove the associated properties `this.bgImage`, `this.bgCtx`, and `this.bgCanvas` from the `Game` class (constructor and any assignments).
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Confirm the game background still loads and displays correctly via the PixiJS sprite.
-        *   Ensure no visual regressions or errors.
-
-**Step 3: Remove `renderZBuffer(ctx)` from `strikeManager.js`**
-    *   **Action:**
-        1.  Locate the `renderZBuffer(ctx)` method in `strikeManager.js` (around line 433). It contains old canvas drawing calls.
-        2.  Verify this method is not being called. The heatmap functionality was refactored to use PixiJS (`this.heatmapDrawingGraphic` and `this.heatmapSprite` as per `plan.md` Task 18). The old `renderZBuffer(ctx)` should be dead code.
-        3.  If confirmed as unused, remove the `renderZBuffer(ctx)` method.
-    *   **Files to Check/Edit:** `strikeManager.js`.
-    *   **Test:**
-        *   If there's a debug flag to show the heatmap (e.g., `this.showStrikeManagerHeatmap` or `this.renderHeatmapDebug` in `StrikeManager`), toggle it to ensure the PixiJS heatmap still renders correctly.
-        *   Check for any new console errors or issues related to strike/bombing functionality.
-
-**Step 4: Remove `renderEffects(ctx)` from `models/defender.js`**
-    *   **Action:**
-        1.  Locate the `renderEffects(ctx)` method in `models/defender.js`. It contains old canvas drawing calls for effects.
-        2.  Verify this method is not being called. Puddle effects, a key defender visual, are now handled by `PIXI.Graphics` objects added to `this.game.puddleLayer` (as per `plan.md` Phase 3.B, "Defender Effects (Puddles)"). Other effects should also be Pixi-based if this phase is complete.
-        3.  If confirmed as unused, remove the `renderEffects(ctx)` method.
-    *   **Files to Check/Edit:** `models/defender.js`.
-    *   **Test:**
-        *   Ensure defender attack effects (especially puddles) render correctly using PixiJS.
-        *   Verify defender behavior and game stability.
-
-**Step 5: Clean Up Remaining Obsolete Canvas Properties in `models/game.js`**
-    *   **Action:**
-        1.  Review the `Game` class constructor and other methods in `models/game.js` for any remaining old canvas-related properties, such as `this.ctx` (if it's the 2D context for the main canvas), `this.fgCanvas`, `this.fgCtx`, or `this.layers`.
-        2.  The property `this.canvas` (initialized around line 32) seems to be used for setting initial dimensions for the PixiJS app. Analyze its usage:
-            *   Is it the *old* main canvas element?
-            *   After `this.app = new Application(); await this.app.init(...)` and `this.container.appendChild(this.app.canvas)`, is `this.canvas` still needed, or does `this.app.canvas` supersede it for all purposes?
-            *   If it's only used for initial dimensioning and not for drawing, it might be acceptable or could potentially be refactored to pass dimensions more directly. For now, focus on properties clearly tied to old 2D context drawing.
-        3.  Remove any properties confirmed to be part of the old, direct canvas drawing system and are no longer used.
-    *   **Files to Check/Edit:** `models/game.js`.
-    *   **Test:**
-        *   Game initializes correctly.
-        *   Screen dimensions and layout are correct.
-        *   No new errors related to canvas or rendering.
-
-**Step 6: Event Handling Final Review (`Controller.js` & `Game.js`)**
-    *   **Action:**
-        1.  Briefly re-confirm that mouse event handling in `Controller.js` (for defence placement, UI interaction) uses `this.gameInstance.app.canvas` and relies on game logic (e.g., `isPositionValidForPlacement`) rather than old canvas coordinate systems or rendering states for its logic.
-        2.  This step is mostly a final check, as earlier analysis suggested it's likely okay.
-    *   **Files to Check:** `Controller.js`, `models/game.js`.
-    *   **Test:**
-        *   Defence placement UI (preview, clicking to place) works as expected.
-        *   Any other UI interactions are responsive.
-
-**Step 7: Final Codebase Search for Canvas Context Usage**
-    *   **Action:**
-        1.  Perform a final grep search across the codebase (excluding `reference/` and `dist/` folders) for any remaining canvas 2D context method calls (e.g., `ctx.fillRect`, `.drawImage`, etc.) to catch any missed instances.
-        2.  Address any findings by removing or refactoring to PixiJS.
-    *   **Files to Check/Edit:** Project-wide (`*.js`).
-    *   **Test:**
-        *   Full playthrough or comprehensive feature test to ensure no regressions.
+## In Progress: Striker Animations (Shadow & Explosion)
+
+This plan details the implementation of shadow and explosion animations for striker bombs using PixiJS.
+
+**I. Asset Preparation and Configuration (`strike.json`, `StrikeManager.js`)**
+
+1.  **Shadow Asset & Configuration (in `strike.json`):**
+    *   Create a pre-blurred, semi-transparent oval shadow image (e.g., `bomber_shadow.png`) using an image editor.
+    *   Add a new section to `strike.json` for the shadow plane:
+        ```json
+        "shadowPlane": {
+            "texturePath": "public/assets/images/effects/bomber_shadow.png", // You'll need to create this image and path
+            "animationSpeed": 1200, // Pixels per second for its movement across the map (adjust for feel)
+            "scaleY": 0.4,         // Example: To make it look like a flat, wide shadow
+            "alpha": 0.35,         // Base transparency
+            "verticalOffset": -60 // Pixels above the target Y, adjust for visual depth
+        }
+        ```
+2.  **Explosion Animation Configuration (Updates in `strike.json`):**
+    *   The `Explosion1` folder contains 36 frames, named `0001.png` to `0036.png`.
+    *   Update/confirm the `explosionAnimation` section in `strike.json`:
+        ```json
+        "explosionAnimation": {
+            "folderPath": "public/assets/images/PixelSimulations/Explosion1/", // Ensure this path is correct from project root
+            "filePrefix": "", 
+            "fileSuffix": ".png",
+            "frameCount": 36,
+            "digitsForZeroPadding": 4,
+            "frameDuration": 50,  // Milliseconds per frame (50ms * 36 frames = 1.8s animation). Adjust for desired speed.
+            "scale": 1.75,        // Adjust as needed for visual impact relative to other assets
+            "anchorX": 0.5,
+            "anchorY": 0.5
+        }
+        ```
+3.  **Asset Loading in `StrikeManager.js`:**
+    *   **Shadow Texture:**
+        *   In `StrikeManager.loadConfig()`, load the shadow texture: `const shadowTexture = await PIXI.Assets.load(config.shadowPlane.texturePath);`.
+        *   Store this loaded `PIXI.Texture` (e.g., `this.shadowTexture`) and the `shadowPlane` config object (e.g., `this.shadowPlaneConfig`).
+    *   **Explosion Textures (Modify `_loadExplosionFrames()`):**
+        *   This method currently loads `Image` objects. It **must be changed** to load `PIXI.Texture` objects.
+        *   Inside the loop: `const texture = await PIXI.Assets.load(fullPath);`
+        *   Store the array of loaded `PIXI.Texture` objects in a property like `this.explosionPixiTextures`.
+        *   The `this.loadedAnimationData` property should be updated or replaced by a new one (e.g., `this.pixiExplosionAnimationData`) to hold:
+            *   `textures: PIXI.Texture[]` (the array of loaded PIXI textures)
+            *   `frameDuration`, `scale`, `anchorX`, `anchorY` from the config.
+
+**II. `Striker.js` - Animation Orchestration**
+
+1.  **Constructor (`Striker.js`):**
+    *   Modify the constructor to accept and store:
+        *   `gameInstance`: The main `Game` object (passed from `StrikeManager`).
+        *   `shadowTexture: PIXI.Texture`
+        *   `shadowConfig: object`
+        *   `explosionAnimationData: object` (containing `textures: PIXI.Texture[]`, `frameDuration`, etc.)
+    *   These will likely be passed via the `bombPayload` object from `StrikeManager`.
+    *   Example: `this.game = gameInstance; this.shadowTexture = bombPayload.shadowTexture; ...`
+2.  **New Internal Method: `async _playShadowAnimation(targetY)`:**
+    *   Creates `const shadowSprite = new PIXI.Sprite(this.shadowTexture);`.
+    *   Sets `anchor.set(0.5, 0.5)`, `alpha`, `scale.y` based on `this.shadowConfig`.
+    *   Sets initial `y` position: `targetY + this.shadowConfig.verticalOffset`.
+    *   Sets initial `x` position: off-screen left (e.g., `-shadowSprite.width / 2`). Make sure sprite width is determined after texture load if not fixed.
+    *   Adds to `this.game.effectsLayer.addChild(shadowSprite);`.
+    *   Animation:
+        *   Calculate total distance: `this.game.mapWidth + shadowSprite.width`.
+        *   Calculate `durationMs = (totalDistance / this.shadowConfig.animationSpeed) * 1000;`.
+        *   Use a `Promise` with `requestAnimationFrame` or a simple tween logic to animate `shadowSprite.x` across the screen.
+        *   Alternatively, use `this.game.app.ticker` for animation updates.
+    *   Cleanup: When animation is complete, remove the sprite and destroy it: `shadowSprite.destroy();`.
+    *   Return a `Promise` that resolves when the shadow animation is fully completed and cleaned up.
+3.  **New Internal Method: `_playExplosionAnimation(impactCoords)`:**
+    *   Creates `const explosionSprite = new PIXI.AnimatedSprite(this.explosionAnimationData.textures);`.
+    *   Sets properties:
+        *   `explosionSprite.animationSpeed = (1000 / this.explosionAnimationData.frameDuration) / 60;` (Assuming 60 FPS target for speed interpretation. Adjust or test this formula for desired playback speed).
+        *   `explosionSprite.loop = false;`
+        *   `explosionSprite.anchor.set(this.explosionAnimationData.anchorX, this.explosionAnimationData.anchorY);`
+        *   `explosionSprite.scale.set(this.explosionAnimationData.scale);`
+    *   Sets position: `explosionSprite.position.set(impactCoords.x, impactCoords.y);`.
+    *   Z-Ordering: `explosionSprite.zIndex = impactCoords.y;`.
+    *   Adds to `this.game.groundLayer.addChild(explosionSprite);`.
+    *   Handles completion:
+        ```javascript
+        explosionSprite.onComplete = () => {
+            if (explosionSprite.parent) {
+                explosionSprite.parent.removeChild(explosionSprite);
+            }
+            // Do not destroy base textures if they are shared.
+            explosionSprite.destroy({ children: true, texture: false, baseTexture: false }); 
+        };
+        ```
+    *   Starts animation: `explosionSprite.play();`.
+4.  **Refactor `Striker` Execution Flow:**
+    *   Create a new primary internal async method, e.g., `async _orchestrateStrikeSequence()`:
+        ```javascript
+        async _orchestrateStrikeSequence() {
+            // 1. Play shadow animation and wait for it. Uses INTENDED target Y.
+            await this._playShadowAnimation(this.targetCoords.y);
+
+            // 2. Wait 1 second (1000ms).
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // 3. Calculate ACTUAL impact coordinates (existing logic).
+            const actualImpactCoords = this._calculateImpactCoordinates();
+            if (!actualImpactCoords) { /* error handling */ }
+
+            // 4. Perform damage calculation.
+            //    Move the core damage logic from the current _executeStrikeInternal 
+            //    (or its equivalent after prior refactors) into a new synchronous method, 
+            //    e.g., _applyDamageAndCalculateDeltaR(actualImpactCoords).
+            this._damageDealtR = this._applyDamageAndCalculateDeltaR(actualImpactCoords);
+
+            // 5. Play explosion animation at ACTUAL impact coordinates.
+            //    This is fire-and-forget from the sequence's perspective.
+            this._playExplosionAnimation(actualImpactCoords);
+
+            return this._damageDealtR; // Return the calculated damage.
+        }
+        ```
+    *   The `completionPromise` in the `Striker` constructor should now call `_orchestrateStrikeSequence()`:
+        ```javascript
+        this.completionPromise = new Promise(async (resolve, reject) => {
+            if (!this._isInitializedSuccessfully) { /* reject */ return; }
+            try {
+                const damageDealt = await this._orchestrateStrikeSequence();
+                resolve(damageDealt);
+            } catch (error) { /* reject */ }
+        });
+        ```
+    *   The original `_executeStrikeInternal` is effectively replaced by `_orchestrateStrikeSequence` and `_applyDamageAndCalculateDeltaR`.
+
+**III. `StrikeManager.js` - Passing Animation Data**
+
+1.  **Update `calculateBombStrength()` (or where `bombPayload` is assembled):**
+    *   When `this.bombPayload` is created/updated, it needs to include the animation data for the `Striker`.
+    *   Instead of (or in addition to) just `animation: this.getLoadedAnimationData()`, it should be structured so `Striker` can access:
+        *   `explosionAnimation: this.pixiExplosionAnimationData` (with `PIXI.Texture[]`)
+        *   `shadowTexture: this.shadowTexture`
+        *   `shadowConfig: this.shadowPlaneConfig`
+2.  **`dispatchStriker(targetCoords, strikeContext)`:**
+    *   Ensure the `bombPayload` passed to `new Striker(...)` contains all necessary data:
+        ```javascript
+        // In StrikeManager.calculateBombStrength or a similar setup method:
+        this.bombPayload = {
+            strengthA: this.bombStrengthA,
+            impactStdDevPixels: this.impactStdDevPixels,
+            explosionAnimation: this.pixiExplosionAnimationData, // Populated by _loadExplosionFrames
+            shadowTexture: this.shadowTexture,                 // Populated by loadConfig
+            shadowConfig: this.shadowPlaneConfig               // Populated by loadConfig
+        };
+
+        // In StrikeManager.dispatchStriker:
+        // ...
+        // The 'this.game' instance needs to be passed separately to the Striker constructor
+        // if it's not already part of strikeContext in a way Striker expects.
+        // Current Striker constructor: constructor(bombPayload, targetCoords, context)
+        // We need to ensure 'context' can be the game instance or provide game instance additionally.
+        // For clarity, let's assume Striker's constructor will be adjusted:
+        // new Striker(this.bombPayload, targetCoords, strikeContext, this.game);
+        // OR, if strikeContext is always this.game for real strikes:
+        const striker = new Striker(this.bombPayload, targetCoords, this.game); // Simpler if context is game
+        // Striker's constructor will then unpack from bombPayload and use the game instance.
+        ```
+
+**IV. `Game.js` - Effects Layer**
+
+1.  **Initialize `effectsLayer`:**
+    *   In `Game.initialize()` (or constructor):
+        ```javascript
+        this.effectsLayer = new PIXI.Container();
+        this.app.stage.addChild(this.effectsLayer);
+        // Ensure it's above groundLayer, potentially by reordering stage children
+        // or if groundLayer is added after, ensure effectsLayer is added after groundLayer
+        // A common pattern:
+        // this.app.stage.addChild(this.backgroundSprite);
+        // this.app.stage.addChild(this.puddleLayer);
+        // this.app.stage.addChild(this.groundLayer);
+        // this.app.stage.addChild(this.effectsLayer); // <--- Add here
+        // this.app.stage.addChild(this.uiLayer); 
+        ```
+    *   Set `this.effectsLayer.zIndex` if your stage uses zIndex for direct children ordering (less common than containers). If `groundLayer` has a zIndex, `effectsLayer` needs a higher one. Simpler is explicit add order if not using zIndex on stage children.
+
+**V. Create Shadow Asset**
+1.  Open an image editor (Photoshop, GIMP, Krita, etc.).
+2.  Create a new image with a transparent background (e.g., 256x64 pixels, adjust as needed).
+3.  Draw a black or very dark grey oval.
+4.  Apply a blur effect to make the edges soft.
+5.  Adjust transparency of the layer/oval if needed.
+6.  Export as `bomber_shadow.png` to the path specified in `strike.json` (e.g., `public/assets/images/effects/`).
+
+This refined plan prioritizes performance for the shadow and clarifies data flow.
