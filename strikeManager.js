@@ -1,5 +1,6 @@
 import { distanceBetween } from './utils/geometryUtils.js';
 import Striker from './models/striker.js';
+import * as PIXI from 'pixi.js';
 
 export default class StrikeManager {
     constructor(game) {
@@ -75,6 +76,17 @@ export default class StrikeManager {
         // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
         this.bombCost = null; // Store for potential future use
         this.targetDamageUpdatePoints = null; // Store for potential future use
+        // --- END ADDED ---
+
+        // Strikers
+        this.strikers = [];
+        this.nextStrikerId = 0;
+
+        // --- ADDED: PixiJS Heatmap Properties ---
+        this.renderHeatmapDebug = false; // Set to true in console to show heatmap
+        this.heatmapDrawingGraphic = new PIXI.Graphics(); // Off-screen graphic for drawing
+        this.heatmapRenderTexture = null; // Will be initialized in _initializeHeatmapPixiObjects
+        this.heatmapSprite = null;        // Sprite to display the render texture, added to stage
         // --- END ADDED ---
     }
 
@@ -171,6 +183,10 @@ export default class StrikeManager {
 
             // --- ADDED: Call to load explosion frames ---
             await this._loadExplosionFrames(); 
+            // --- END ADDED ---
+
+            // --- ADDED: Initialize Heatmap Pixi Objects ---
+            this._initializeHeatmapPixiObjects();
             // --- END ADDED ---
 
         } catch (error) {
@@ -344,7 +360,7 @@ export default class StrikeManager {
             const defenderGridRow = defender.gridRow;
 
             // Skip if defender has no health, no grid position yet, OR if wear is not enabled
-            if (hp <= 0 || defenderGridCol === null /*|| !defender.wearEnabled*/) {
+            if (hp <= 0 || defenderGridCol === null || !defender.wearEnabled) {
                 continue;
             }
 
@@ -1062,5 +1078,141 @@ export default class StrikeManager {
             this.bountyCollectedSinceLastCheckpoint -= this.bountyUpdateThreshold_B_star;
             // console.log(`StrikeManager.recordBountyEarned: Remaining collected bounty: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}`);
         }
+    }
+
+    // --- ADDED: Heatmap Pixi Object Initialization ---
+    _initializeHeatmapPixiObjects() {
+        if (this.mapWidth > 0 && this.mapHeight > 0 && this.game.app?.renderer) {
+            if (this.heatmapRenderTexture) {
+                this.heatmapRenderTexture.destroy(true);
+            }
+            this.heatmapRenderTexture = PIXI.RenderTexture.create({ width: this.mapWidth, height: this.mapHeight });
+
+            if (this.heatmapSprite) {
+                this.heatmapSprite.destroy();
+            }
+            this.heatmapSprite = new PIXI.Sprite(this.heatmapRenderTexture);
+            this.heatmapSprite.visible = this.renderHeatmapDebug; // Set initial visibility
+
+            // Add to stage - consider a specific layer or zIndex if needed
+            // For now, add directly to the stage. Ensure it's on top of the game world.
+            // Example: this.heatmapSprite.zIndex = 100; // If parent container sorts children
+            this.game.app.stage.addChild(this.heatmapSprite);
+        } else {
+            console.warn("StrikeManager: Cannot initialize heatmap Pixi objects - map dimensions or renderer not ready.");
+        }
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Method to update PixiJS Heatmap Texture ---
+    _updateHeatmapTexture() {
+        if (!this.configLoaded || !this.zBuffer || !this.heatmapDrawingGraphic || !this.heatmapRenderTexture || !this.game.app?.renderer) {
+            // console.warn("StrikeManager: Cannot update heatmap texture - dependencies not ready.");
+            if (this.heatmapSprite) this.heatmapSprite.visible = false; // Hide if we can't draw
+            return;
+        }
+
+        this.heatmapDrawingGraphic.clear();
+
+        let maxZ = 0;
+        for (let r = 0; r < this.gridHeight; r++) {
+            for (let c = 0; c < this.gridWidth; c++) {
+                if (this.zBuffer[r][c] > maxZ) {
+                    maxZ = this.zBuffer[r][c];
+                }
+            }
+        }
+
+        for (let r = 0; r < this.gridHeight; r++) {
+            for (let c = 0; c < this.gridWidth; c++) {
+                const zValue = this.zBuffer[r][c];
+                if (zValue > 0) {
+                    // Adapted from old renderZBuffer logic, using PIXI colors/alpha
+                    const intensity = (maxZ > 0) ? (zValue / (maxZ * 1.0)) : 0.1; // Normalize, ensure float division, provide base for zValue > 0 but maxZ might be low
+                    const alpha = Math.min(1.0, 0.15 + intensity * 0.6); // Base alpha 0.15, scales up to 0.75
+                    let cellColorHex = 0xff0000; // Red
+
+                    if (maxZ > 0 && zValue === maxZ) {
+                        cellColorHex = 0x00ff00; // Green for max Z value
+                    }
+
+                    const drawX = c * this.cellWidth;
+                    const drawY = r * this.cellHeight;
+                    
+                    this.heatmapDrawingGraphic.rect(drawX, drawY, this.cellWidth, this.cellHeight)
+                                             .fill({ color: cellColorHex, alpha: alpha });
+                }
+            }
+        }
+        
+        // Render the drawing graphic to the render texture
+        this.game.app.renderer.render({
+            container: this.heatmapDrawingGraphic,
+            target: this.heatmapRenderTexture,
+            clear: true,
+        });
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Target Finding Logic ---
+    update(timestamp, deltaTime) {
+        // Update existing strikers
+        for (let i = this.strikers.length - 1; i >= 0; i--) {
+            const striker = this.strikers[i];
+            striker.update(deltaTime);
+            if (striker.isDone()) {
+                striker.destroy(); // Ensure Pixi objects are cleaned up
+                this.strikers.splice(i, 1);
+            }
+        }
+
+        // --- ADDED: Heatmap Update Logic ---
+        if (this.heatmapSprite && this.game.app?.renderer) { // Ensure Pixi objects are ready
+            if (this.renderHeatmapDebug) {
+                if (!this.heatmapSprite.visible) {
+                    this.heatmapSprite.visible = true;
+                }
+                // Assuming calculateZBuffer() is called elsewhere (e.g., in Game.js update or before this manager's update)
+                // and it updates this.zBuffer
+                this._updateHeatmapTexture();
+            } else {
+                if (this.heatmapSprite.visible) {
+                    this.heatmapSprite.visible = false;
+                    // Optionally clear the drawing graphic if you want to free memory,
+                    // though just hiding the sprite is usually enough.
+                    // this.heatmapDrawingGraphic.clear(); 
+                }
+            }
+        } else if (this.renderHeatmapDebug) {
+            // Attempt to re-initialize if it failed before and debug flag is on
+            this._initializeHeatmapPixiObjects();
+        }
+        // --- END ADDED ---
+    }
+
+    destroy() {
+        // Destroy existing strikers
+        this.strikers.forEach(striker => striker.destroy());
+        this.strikers = [];
+
+        // --- ADDED: Cleanup Heatmap Pixi Objects ---
+        if (this.heatmapSprite) {
+            if (this.heatmapSprite.parent) { // Check if it's on stage
+                this.heatmapSprite.parent.removeChild(this.heatmapSprite);
+            }
+            this.heatmapSprite.destroy({ children: true, texture: false, baseTexture: false }); // Don't destroy render texture here
+            this.heatmapSprite = null;
+        }
+        if (this.heatmapRenderTexture) {
+            this.heatmapRenderTexture.destroy(true); // Destroy the render texture and its base texture
+            this.heatmapRenderTexture = null;
+        }
+        if (this.heatmapDrawingGraphic) {
+            this.heatmapDrawingGraphic.destroy();
+            this.heatmapDrawingGraphic = null;
+        }
+        // --- END ADDED ---
+
+        // console.log("StrikeManager destroyed.");
     }
 } 

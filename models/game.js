@@ -774,6 +774,12 @@ export default class Game {
         }
         // --- END MOVED ---
 
+        // --- ADDED: Update StrikeManager ---
+        if (this.strikeManager?.isConfigLoaded()) {
+            this.strikeManager.update(timestamp, effectiveDeltaTime);
+        }
+        // --- END ADDED ---
+
         // --- ADDED: Call Controller UI Update ---
         if (this.controller && typeof this.controller.updateUI === 'function') {
              this.controller.updateUI();

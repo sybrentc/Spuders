@@ -8,8 +8,6 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 **Phase 3.B: Other UI Elements & Effects**
 
-18. **Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
-    *   Refactor `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage.
 19. **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
     *   Load explosion frames as a sequence of `PIXI.Texture`s.
     *   `Striker.js` creates and plays a `PIXI.AnimatedSprite` for explosions, adding it to an effects container on the PixiJS stage and removing it on completion.
@@ -29,6 +27,11 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 ---
 
 ## Completed Tasks
+
+**(DONE) Phase 3.B: Other UI Elements & Effects - Item 18 (Heatmap)**
+
+18. **(DONE) Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
+    *   Refactored `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage. (Implemented using `PIXI.RenderTexture` and `PIXI.Sprite` for better performance, with a `PIXI.Graphics` object drawn to the `RenderTexture`).
 
 **(DONE)**
     *   **Review `utils/renderUtils.js` for deletion:** Once `HealthBarDisplay` is fully integrated into ALL relevant entities (Base, Enemies, Defenders), `utils/renderUtils.js` should be checked. If `drawHealthBar` is its only export and no other code uses it, the file can be deleted. (User restored this file as other entities still use it).
