@@ -300,25 +300,9 @@ export default class DefenceManager extends EventTarget {
         // --- End Filter ---
     }
 
-    render(ctx) {
-        // Render all active defence instances
-        this.activeDefences.forEach(defence => {
-            defence.render(ctx);
-        });
-    }
-
     // Method to access the raw definitions (e.g., for UI)
     getDefinitions() {
         return this.defenceDefinitions;
-    }
-
-    // Method to render effects (called before enemies)
-    renderEffects(ctx) {
-        this.activeDefences.forEach(defence => {
-            if (typeof defence.renderEffects === 'function') {
-                defence.renderEffects(ctx);
-            }
-        });
     }
 
     // Method called by TuningManager when new data is fetched

@@ -85,9 +85,9 @@ export default class DefenceEntity {
         // --- End Effects Setup --- 
         
         // --- Display Properties --- 
-        this.displayScale = definition.display?.scale // Keep for potential other uses or remove if only for old render
-        this.displayAnchorX = definition.display?.anchorX // Keep for potential other uses or remove if only for old render
-        this.displayAnchorY = definition.display?.anchorY // Keep for potential other uses or remove if only for old render
+        // this.displayScale = definition.display?.scale // REMOVE
+        // this.displayAnchorX = definition.display?.anchorX // REMOVE
+        // this.displayAnchorY = definition.display?.anchorY // REMOVE
         // this.frameTimeAccumulator = 0; // Moved to PixiJS Sprite Setup section
         // --- End Display Properties ---
     }
@@ -357,70 +357,6 @@ export default class DefenceEntity {
         // TODO: Add other update logic (animations, health regen, etc.)
     }
 
-    render(ctx) {
-        // Draw sprite if available
-        if (this.pixiSprite && this.pixiContainer) {
-            const { frameWidth, frameHeight } = this.allSpriteFrames[0].texture.baseTexture;
-
-            // --- Calculate Source Frame --- 
-            const row = this.directionRowIndex; // Use the calculated direction row
-            const col = this.currentFrame; // Use the calculated frame
-
-            const sourceX = col * frameWidth;
-            const sourceY = row * frameHeight;
-            // --- End Source Frame Calculation --- 
-
-            // --- Calculate Destination Size and Position --- 
-            const destWidth = frameWidth * this.displayScale;
-            const destHeight = frameHeight * this.displayScale;
-            // Adjust position based on anchor point
-            const drawX = this.x - (destWidth * this.displayAnchorX);
-            const drawY = this.y - (destHeight * this.displayAnchorY);
-            // --- End Destination Calculation --- 
-
-            ctx.save();
-            ctx.drawImage(
-                this.pixiSprite.texture.baseTexture, 
-                sourceX, sourceY,           // Source x, y (top-left corner of frame)
-                frameWidth, frameHeight,    // Source width, height (size of frame)
-                drawX, drawY,               // Destination x, y (where to draw on canvas)
-                destWidth, destHeight       // Destination width, height (how big to draw it)
-            );
-
-            // --- Draw Wear/Durability Bar --- 
-            // if (this.wearEnabled) { // <-- REMOVE OLD HEALTH BAR DRAWING
-            //     drawHealthBar(ctx, this.hp, this.maxHp, drawX, drawY, destWidth, destHeight); // Use hp and maxHp
-            // }
-            // --- End Draw Wear Bar ---
-
-            ctx.restore();
-        } else {
-            // Fallback rendering if sprite isn't loaded/defined
-            ctx.save();
-            ctx.fillStyle = (this.effects && this.effectSpeedFactor !== undefined) ? 'cyan' : (this.attackStrength > 0 ? 'red' : 'grey');
-            const size = 30;
-            ctx.fillRect(this.x - size / 2, this.y - size / 2, size, size);
-            ctx.restore();
-        }
-    }
-
-    // Renders effects (like puddles) - called separately to draw under enemies
-    renderEffects(ctx) {
-        // Check if this entity creates puddles
-        if (this.effects && this.effectRadius !== undefined && this.effectDuration !== undefined && this.effectSpeedFactor !== undefined) {
-             // Get color from the defender's own definition/effects
-             const puddleColor = this.effects?.color || 'rgba(0, 0, 0, 0.1)'; // Fallback to dim black if missing
-            ctx.save();
-            ctx.fillStyle = puddleColor;
-            this.puddles.forEach(puddle => {
-                ctx.beginPath();
-                ctx.arc(puddle.x, puddle.y, puddle.radius, 0, Math.PI * 2);
-                ctx.fill();
-            });
-            ctx.restore();
-        }
-    }
-
     // Method to apply updates from new definitions
     applyUpdate(updatedDef) {
         // Update stats 
@@ -487,16 +423,16 @@ export default class DefenceEntity {
         }
 
         if (updatedDef.display) {
-            this.displayScale = updatedDef.display.scale ?? this.displayScale;
-            this.displayAnchorX = updatedDef.display.anchorX ?? this.displayAnchorX;
-            this.displayAnchorY = updatedDef.display.anchorY ?? this.displayAnchorY;
+            // this.displayScale = updatedDef.display.scale ?? this.displayScale; // REMOVE
+            // this.displayAnchorX = updatedDef.display.anchorX ?? this.displayAnchorX; // REMOVE
+            // this.displayAnchorY = updatedDef.display.anchorY ?? this.displayAnchorY; // REMOVE
         } else {
              // Handle case where display info might be removed
              // Reset to defaults or keep existing? Decide based on desired behavior.
              // Keeping existing for now:
-             // this.displayScale = 1.0; 
-             // this.displayAnchorX = 0.5;
-             // this.displayAnchorY = 0.5;
+             // // this.displayScale = 1.0; // REMOVE (already commented)
+             // // this.displayAnchorX = 0.5; // REMOVE (already commented)
+             // // this.displayAnchorY = 0.5; // REMOVE (already commented)
         }
         // --- End Sprite and Display Update ---
 

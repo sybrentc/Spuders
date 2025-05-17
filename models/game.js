@@ -217,17 +217,20 @@ export default class Game {
             //console.log(`Game: Initialized TuningManager with interval: ${tuningInterval}ms`);
 
             // Load level data FIRST (paths for enemies, waves, base, canvas dimensions, map image)
-            await this.loadLevel(1); // This will now also handle Pixi App creation and background
+            const loadedLevelInfo = await this.loadLevel(1); // NEW: loadLevel returns info
 
             // *** Create PixiJS Application ***
-            // Ensure this.canvas.width and this.canvas.height are set by loadLevel
-            if (!this.canvas || !this.canvas.width || !this.canvas.height) {
+            // Ensure this.canvas.width and this.canvas.height are set by loadLevel - OLD COMMENT
+            // if (!this.canvas || !this.canvas.width || !this.canvas.height) { // OLD CHECK
+            if (!loadedLevelInfo || !loadedLevelInfo.width || !loadedLevelInfo.height) { // NEW CHECK
                 throw new Error("Game Initialize: Canvas dimensions not loaded by loadLevel.");
             }
             this.app = new Application();
             await this.app.init({
-                width: this.canvas.width,
-                height: this.canvas.height,
+                // width: this.canvas.width, // OLD
+                // height: this.canvas.height, // OLD
+                width: loadedLevelInfo.width, // NEW
+                height: loadedLevelInfo.height, // NEW
                 backgroundColor: 0x000000 // Default background, will be covered by map
             });
 
@@ -326,7 +329,10 @@ export default class Game {
 
             // --- ADDED: Initialize StrikeManager ---
             this.strikeManager = new StrikeManager(this);
-            await this.strikeManager.loadConfig(); // Load its configuration
+            if (!loadedLevelInfo || !loadedLevelInfo.width || !loadedLevelInfo.height) { // Add check before using
+                throw new Error("Game Initialize: Cannot load StrikeManager config, level dimensions missing.");
+            }
+            await this.strikeManager.loadConfig(loadedLevelInfo.width, loadedLevelInfo.height); // NEW Call
             // ------------------------------------
 
             // --- Calculate initial break-even alpha factor --- 
@@ -493,11 +499,9 @@ export default class Game {
             this.levelData = await response.json();
             
             // Set canvas dimensions from level data
-            this.canvas = {
-                width: this.levelData.canvas.width,
-                height: this.levelData.canvas.height
-            };
-            
+            const levelCanvasWidth = this.levelData.canvas.width;
+            const levelCanvasHeight = this.levelData.canvas.height;
+
             // Check for betaFactor from levelData
             if (typeof this.levelData.betaFactor === 'number' && this.levelData.betaFactor >= 0) {
                  this.betaFactor = this.levelData.betaFactor; // Use betaFactor
@@ -516,7 +520,7 @@ export default class Game {
                     const bgImage = new Image();
                     bgImage.src = this.levelData.mapImage;
                     bgImage.onload = () => {
-                        this.bgImage = bgImage; // Store the image for later drawing
+                        // this.bgImage = bgImage; // Store the image for later drawing - REMOVED
                         this.bgImagePath = this.levelData.mapImage; // Store path for Pixi
                         resolve();
                     };
@@ -630,15 +634,15 @@ export default class Game {
             // Store paths for other components to use or for later loading steps
             this.levelConfig = this.levelData;
             
-            return this.levelData;
+            return {
+                width: levelCanvasWidth,
+                height: levelCanvasHeight,
+                // bgImagePath: this.bgImagePath, // bgImagePath is already set as a class property by loadLevel
+                // levelData: this.levelData    // levelData is already set as a class property by loadLevel
+            };
         } catch (error) {
             console.error(`Failed to load level ${levelId}:`, error);
-        }
-    }
-    
-    drawBackground() {
-        if (this.bgImage) {
-            this.bgCtx.drawImage(this.bgImage, 0, 0, this.bgCanvas.width, this.bgCanvas.height);
+            throw error; // Re-throw to allow initialize to catch it
         }
     }
     
@@ -789,13 +793,13 @@ export default class Game {
         // --- END ADDED ---
     }
     
-    render() {
-        // This method is now gutted as PixiJS handles rendering.
-        // All direct drawing calls (e.g., this.fgCtx.clearRect) are removed.
-        // Calls to manager.render() are removed.
-        // Entity rendering will be handled by entities updating their PIXI.Sprite properties,
-        // and those sprites being on the PIXI.stage.
-    }
+    // render() { // Method to be removed
+    //     // This method is now gutted as PixiJS handles rendering.
+    //     // All direct drawing calls (e.g., this.fgCtx.clearRect) are removed.
+    //     // Calls to manager.render() are removed.
+    //     // Entity rendering will be handled by entities updating their PIXI.Sprite properties,
+    //     // and those sprites being on the PIXI.stage.
+    // }
 
     // --- Game Setup ---
     setupGame() {

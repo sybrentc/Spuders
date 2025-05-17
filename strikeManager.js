@@ -90,7 +90,7 @@ export default class StrikeManager {
         // --- END ADDED ---
     }
 
-    async loadConfig(path = 'assets/strike.json') {
+    async loadConfig(mapWidth, mapHeight, path = 'assets/strike.json') {
         try {
             const response = await fetch(path);
             if (!response.ok) {
@@ -152,8 +152,8 @@ export default class StrikeManager {
                 this.impactStdDevPixels = 0;
             } else {
                  // Get map dimensions from game canvas (needs to be done before this)
-                 this.mapWidth = this.game.canvas.width;
-                 this.mapHeight = this.game.canvas.height;
+                 this.mapWidth = mapWidth;
+                 this.mapHeight = mapHeight;
 
                  this.impactStdDevPixels = config.impactStdDevPercentWidth * this.mapWidth;
                  //console.log(`StrikeManager: Impact std deviation set to ${this.impactStdDevPixels.toFixed(2)} pixels (${config.impactStdDevPercentWidth * 100}% of width).`);
@@ -161,8 +161,10 @@ export default class StrikeManager {
             // --- END ADDED ---
 
             // Get map dimensions from game canvas
-            this.mapWidth = this.game.canvas.width;
-            this.mapHeight = this.game.canvas.height;
+            if (!this.mapWidth || !this.mapHeight) {
+                this.mapWidth = mapWidth;
+                this.mapHeight = mapHeight;
+            }
 
             // Calculate Z-buffer grid properties
             this.gridWidth = this.zBufferResolution.width;
@@ -428,64 +430,6 @@ export default class StrikeManager {
                 }
             }
         }
-    }
-
-    renderZBuffer(ctx) {
-        // DEBUG: Check if function is called - MOVED TO VERY TOP
-        //console.log("StrikeManager: renderZBuffer called - Entry Point");
-
-        if (!this.configLoaded || !this.zBuffer) {
-            return; // Don't render if not ready
-        }
-
-        // --- Find Max Z-Value --- 
-        let maxZ = 0;
-        for (let r = 0; r < this.gridHeight; r++) {
-            for (let c = 0; c < this.gridWidth; c++) {
-                if (this.zBuffer[r][c] > maxZ) {
-                    maxZ = this.zBuffer[r][c];
-                }
-            }
-        }
-        // --- End Find Max Z --- 
-
-        ctx.save();
-        let cellsDrawn = 0; // DEBUG: Count cells
-        // Iterate through the Z-buffer grid
-        for (let r = 0; r < this.gridHeight; r++) {
-            for (let c = 0; c < this.gridWidth; c++) {
-                const zValue = this.zBuffer[r][c];
-
-                if (zValue > 0) {
-                    cellsDrawn++; // DEBUG: Increment count
-
-                    // Check if this cell has the max value
-                    if (maxZ > 0 && zValue === maxZ) {
-                        // --- Max Value Color (Green) ---
-                        ctx.fillStyle = 'rgba(0, 255, 0, 0.7)'; // Semi-transparent green
-                    } else {
-                        // --- Regular Heatmap Color (Red) ---
-                        // const visualZValue = zValue * 50; // REMOVED Amplification
-                        // Simple intensity scaling - USE zValue directly, adjust divisor to 5.0
-                        const intensity = Math.min(1.0, zValue / 5.0);
-                        // Use a semi-transparent red for the heatmap - INCREASED ALPHA
-                        ctx.fillStyle = `rgba(255, 0, 0, ${0.2 + intensity * 0.5})`; // Start with base alpha, increase with intensity
-                    }
-
-                    // Calculate world coordinates for the top-left of the cell
-                    const drawX = c * this.cellWidth;
-                    const drawY = r * this.cellHeight;
-
-                    // Draw the cell
-                    ctx.fillRect(drawX, drawY, this.cellWidth, this.cellHeight);
-                }
-            }
-        }
-        // DEBUG: Log if any cells were drawn
-        // if (cellsDrawn > 0) {
-        //     console.log(`StrikeManager: Drew ${cellsDrawn} heatmap cells.`);
-        // }
-        ctx.restore();
     }
 
     // --- ADDED: Target Finding Logic ---

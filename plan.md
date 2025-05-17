@@ -1,3 +1,43 @@
+## Currently Active Plan: Striker Explosion Animations
+
+This phase focuses on implementing explosion animations for striker bombs using PixiJS.
+
+**Key Task (from Phase 3.B, Item 19):**
+*   **Striker Explosion Animation (`Striker.js`, `StrikeManager.js`):**
+    *   Load explosion frames as a sequence of `PIXI.Texture`s (managed by `StrikeManager` via `_loadExplosionFrames()` which populates `this.loadedAnimationData`).
+    *   `StrikeManager.js` needs to ensure `bombPayload.animation` (derived from `loadedAnimationData`) contains an array of `PIXI.Texture` objects and other necessary animation parameters (duration, scale, anchor).
+    *   `Striker.js` will accept this animation data in its constructor.
+    *   When a strike is executed, the `Striker` instance will:
+        1.  Create a `PIXI.AnimatedSprite` using the provided textures and animation speed (derived from frame duration and number of frames).
+        2.  Configure its properties: `loop = false`, position (at impact site), anchor, scale.
+        3.  Add the `AnimatedSprite` to an appropriate container on the PixiJS stage (e.g., `this.game.groundLayer` or a dedicated effects layer if z-ordering needs adjustment).
+        4.  Implement logic for the `onComplete` event of the `AnimatedSprite` to remove it from its parent container and destroy it, ensuring no memory leaks.
+    *   This involves updates to `StrikeManager.js` (passing data) and `Striker.js` (creating, playing, and cleaning up the animation).
+
+**Steps:**
+1.  **Verify Asset Loading & Data Structure (`StrikeManager.js`):**
+    *   Ensure `StrikeManager._loadExplosionFrames()` correctly loads frames as `PIXI.Texture` objects.
+    *   Confirm `this.loadedAnimationData` (and thus `bombPayload.animation`) has the structure expected by `Striker.js` (e.g., an array of textures, frame duration or animation speed, scale, anchor).
+2.  **Modify `Striker.js` Constructor:**
+    *   Accept animation data (e.g., `{ textures: PIXI.Texture[], animationSpeed: number, scale: number, anchorX: number, anchorY: number }`).
+    *   Store this data.
+3.  **Implement Explosion Animation Logic in `Striker.js`:**
+    *   Likely within the `_executeStrike` method, or a new method called by it (e.g., `_playExplosionAnimation`).
+    *   Create the `PIXI.AnimatedSprite`.
+    *   Set its properties (`position`, `anchor`, `scale`, `animationSpeed`, `loop = false`).
+    *   Add it to the stage (e.g., `this.strikeContext.game.groundLayer.addChild(explosionSprite);` assuming `strikeContext` is the game).
+    *   Define the `onComplete` handler: `explosionSprite.onComplete = () => { explosionSprite.destroy(); };` (ensure it's also removed from parent if `destroy()` doesn't handle that).
+    *   Play the animation: `explosionSprite.play();`.
+4.  **Update `StrikeManager.dispatchStriker()`:**
+    *   Ensure the `bombPayload` passed to the `Striker` constructor contains the correctly structured animation data.
+5.  **Testing:**
+    *   Trigger strikes to verify explosions animate as expected.
+    *   Confirm correct positioning, scaling, and speed.
+    *   Ensure sprites are removed and destroyed after animation.
+    *   Test with multiple simultaneous explosions if applicable.
+
+---
+
 # PixiJS Refactoring Plan
 
 This plan outlines the steps to refactor the game's rendering pipeline to use PixiJS.
@@ -28,10 +68,90 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 
 ## Completed Tasks
 
+## (DONE) Phase 4 Cleanup (Iterative)
+
+The goal is to remove all obsolete canvas rendering code and properties, ensuring the game relies solely on PixiJS for rendering. Each step involves identifying and removing specific obsolete code, followed by testing.
+
+**Preamble: `utils/renderUtils.js`**
+*   **Status:** Already confirmed as removed and no longer imported. (Task 7 from previous detailed plan).
+
+**Step 1: Analyze and Address `Game.render()` Method in `models/game.js`**
+    *   **Action:**
+        1.  Examine the current `Game.render()` method (around line 792 in `models/game.js`).
+        2.  Determine if it contains any logic that is still active or necessary. According to `plan.md` (Phase 1, Task 3), it should have been gutted.
+        3.  Confirm if it's being called anywhere, particularly from the main game loop in `startGameLoop()`.
+        4.  If it's empty or contains only obsolete logic and is not critical to the game loop, remove the method.
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Ensure the game loop continues to function correctly (entities update, animations play).
+        *   Verify that no errors are introduced and the game remains fully playable.
+
+**Step 2: Remove `Game.drawBackground()` and Related Properties in `models/game.js`**
+    *   **Action:**
+        1.  Locate the `drawBackground()` method in `models/game.js` (around line 639). It uses `this.bgCtx` and `this.bgCanvas`.
+        2.  Verify that this method is not being called from anywhere in the active codebase. Background rendering should be handled by a PixiJS Sprite added during `Game.initialize()` (as per `plan.md` Phase 1, Task 2).
+        3.  If confirmed as unused, remove the `drawBackground()` method.
+        4.  Remove the associated properties `this.bgImage`, `this.bgCtx`, and `this.bgCanvas` from the `Game` class (constructor and any assignments).
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Confirm the game background still loads and displays correctly via the PixiJS sprite.
+        *   Ensure no visual regressions or errors.
+
+**Step 3: Remove `renderZBuffer(ctx)` from `strikeManager.js`**
+    *   **Action:**
+        1.  Locate the `renderZBuffer(ctx)` method in `strikeManager.js` (around line 433). It contains old canvas drawing calls.
+        2.  Verify this method is not being called. The heatmap functionality was refactored to use PixiJS (`this.heatmapDrawingGraphic` and `this.heatmapSprite` as per `plan.md` Task 18). The old `renderZBuffer(ctx)` should be dead code.
+        3.  If confirmed as unused, remove the `renderZBuffer(ctx)` method.
+    *   **Files to Check/Edit:** `strikeManager.js`.
+    *   **Test:**
+        *   If there's a debug flag to show the heatmap (e.g., `this.showStrikeManagerHeatmap` or `this.renderHeatmapDebug` in `StrikeManager`), toggle it to ensure the PixiJS heatmap still renders correctly.
+        *   Check for any new console errors or issues related to strike/bombing functionality.
+
+**Step 4: Remove `renderEffects(ctx)` from `models/defender.js`**
+    *   **Action:**
+        1.  Locate the `renderEffects(ctx)` method in `models/defender.js`. It contains old canvas drawing calls for effects.
+        2.  Verify this method is not being called. Puddle effects, a key defender visual, are now handled by `PIXI.Graphics` objects added to `this.game.puddleLayer` (as per `plan.md` Phase 3.B, "Defender Effects (Puddles)"). Other effects should also be Pixi-based if this phase is complete.
+        3.  If confirmed as unused, remove the `renderEffects(ctx)` method.
+    *   **Files to Check/Edit:** `models/defender.js`.
+    *   **Test:**
+        *   Ensure defender attack effects (especially puddles) render correctly using PixiJS.
+        *   Verify defender behavior and game stability.
+
+**Step 5: Clean Up Remaining Obsolete Canvas Properties in `models/game.js`**
+    *   **Action:**
+        1.  Review the `Game` class constructor and other methods in `models/game.js` for any remaining old canvas-related properties, such as `this.ctx` (if it's the 2D context for the main canvas), `this.fgCanvas`, `this.fgCtx`, or `this.layers`.
+        2.  The property `this.canvas` (initialized around line 32) seems to be used for setting initial dimensions for the PixiJS app. Analyze its usage:
+            *   Is it the *old* main canvas element?
+            *   After `this.app = new Application(); await this.app.init(...)` and `this.container.appendChild(this.app.canvas)`, is `this.canvas` still needed, or does `this.app.canvas` supersede it for all purposes?
+            *   If it's only used for initial dimensioning and not for drawing, it might be acceptable or could potentially be refactored to pass dimensions more directly. For now, focus on properties clearly tied to old 2D context drawing.
+        3.  Remove any properties confirmed to be part of the old, direct canvas drawing system and are no longer used.
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Game initializes correctly.
+        *   Screen dimensions and layout are correct.
+        *   No new errors related to canvas or rendering.
+
+**Step 6: Event Handling Final Review (`Controller.js` & `Game.js`)**
+    *   **Action:**
+        1.  Briefly re-confirm that mouse event handling in `Controller.js` (for defence placement, UI interaction) uses `this.gameInstance.app.canvas` and relies on game logic (e.g., `isPositionValidForPlacement`) rather than old canvas coordinate systems or rendering states for its logic.
+        2.  This step is mostly a final check, as earlier analysis suggested it's likely okay.
+    *   **Files to Check:** `Controller.js`, `models/game.js`.
+    *   **Test:**
+        *   Defence placement UI (preview, clicking to place) works as expected.
+        *   Any other UI interactions are responsive.
+
+**Step 7: Final Codebase Search for Canvas Context Usage**
+    *   **Action:**
+        1.  Perform a final grep search across the codebase (excluding `reference/` and `dist/` folders) for any remaining canvas 2D context method calls (e.g., `ctx.fillRect`, `.drawImage`, etc.) to catch any missed instances.
+        2.  Address any findings by removing or refactoring to PixiJS.
+    *   **Files to Check/Edit:** Project-wide (`*.js`).
+    *   **Test:**
+        *   Full playthrough or comprehensive feature test to ensure no regressions.
+
 **(DONE) Phase 3.B: Other UI Elements & Effects - Item 18 (Heatmap)**
 
 18. **(DONE) Strike Manager Z-Buffer/Heatmap (`StrikeManager.js`):**
-    *   Refactored `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage. (Implemented using `PIXI.RenderTexture` and `PIXI.Sprite` for better performance, with a `PIXI.Graphics` object drawn to the `RenderTexture`).
+    *   Refactored `renderZBuffer` to use `PIXI.Graphics` to draw the heatmap cells onto a `PIXI.Graphics` object added to the stage.
 
 **(DONE)**
     *   **Review `utils/renderUtils.js` for deletion:** Once `HealthBarDisplay` is fully integrated into ALL relevant entities (Base, Enemies, Defenders), `utils/renderUtils.js` should be checked. If `drawHealthBar` is its only export and no other code uses it, the file can be deleted. (User restored this file as other entities still use it).
@@ -318,3 +438,83 @@ This plan outlines the steps to refactor the game's rendering pipeline to use Pi
 ## Key PixiJS Concepts
 
 *   `PIXI.Application`, `PIXI.Assets` (or `PIXI.Loader`), `PIXI.Texture`, `PIXI.Sprite`, `PIXI.AnimatedSprite`, `PIXI.Graphics`, `PIXI.Container`, `app.stage`, `app.ticker`.
+
+## Currently Active Plan: Phase 4 Cleanup (Iterative)
+
+The goal is to remove all obsolete canvas rendering code and properties, ensuring the game relies solely on PixiJS for rendering. Each step involves identifying and removing specific obsolete code, followed by testing.
+
+**Preamble: `utils/renderUtils.js`**
+*   **Status:** Already confirmed as removed and no longer imported. (Task 7 from previous detailed plan).
+
+**Step 1: Analyze and Address `Game.render()` Method in `models/game.js`**
+    *   **Action:**
+        1.  Examine the current `Game.render()` method (around line 792 in `models/game.js`).
+        2.  Determine if it contains any logic that is still active or necessary. According to `plan.md` (Phase 1, Task 3), it should have been gutted.
+        3.  Confirm if it's being called anywhere, particularly from the main game loop in `startGameLoop()`.
+        4.  If it's empty or contains only obsolete logic and is not critical to the game loop, remove the method.
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Ensure the game loop continues to function correctly (entities update, animations play).
+        *   Verify that no errors are introduced and the game remains fully playable.
+
+**Step 2: Remove `Game.drawBackground()` and Related Properties in `models/game.js`**
+    *   **Action:**
+        1.  Locate the `drawBackground()` method in `models/game.js` (around line 639). It uses `this.bgCtx` and `this.bgCanvas`.
+        2.  Verify that this method is not being called from anywhere in the active codebase. Background rendering should be handled by a PixiJS Sprite added during `Game.initialize()` (as per `plan.md` Phase 1, Task 2).
+        3.  If confirmed as unused, remove the `drawBackground()` method.
+        4.  Remove the associated properties `this.bgImage`, `this.bgCtx`, and `this.bgCanvas` from the `Game` class (constructor and any assignments).
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Confirm the game background still loads and displays correctly via the PixiJS sprite.
+        *   Ensure no visual regressions or errors.
+
+**Step 3: Remove `renderZBuffer(ctx)` from `strikeManager.js`**
+    *   **Action:**
+        1.  Locate the `renderZBuffer(ctx)` method in `strikeManager.js` (around line 433). It contains old canvas drawing calls.
+        2.  Verify this method is not being called. The heatmap functionality was refactored to use PixiJS (`this.heatmapDrawingGraphic` and `this.heatmapSprite` as per `plan.md` Task 18). The old `renderZBuffer(ctx)` should be dead code.
+        3.  If confirmed as unused, remove the `renderZBuffer(ctx)` method.
+    *   **Files to Check/Edit:** `strikeManager.js`.
+    *   **Test:**
+        *   If there's a debug flag to show the heatmap (e.g., `this.showStrikeManagerHeatmap` or `this.renderHeatmapDebug` in `StrikeManager`), toggle it to ensure the PixiJS heatmap still renders correctly.
+        *   Check for any new console errors or issues related to strike/bombing functionality.
+
+**Step 4: Remove `renderEffects(ctx)` from `models/defender.js`**
+    *   **Action:**
+        1.  Locate the `renderEffects(ctx)` method in `models/defender.js`. It contains old canvas drawing calls for effects.
+        2.  Verify this method is not being called. Puddle effects, a key defender visual, are now handled by `PIXI.Graphics` objects added to `this.game.puddleLayer` (as per `plan.md` Phase 3.B, "Defender Effects (Puddles)"). Other effects should also be Pixi-based if this phase is complete.
+        3.  If confirmed as unused, remove the `renderEffects(ctx)` method.
+    *   **Files to Check/Edit:** `models/defender.js`.
+    *   **Test:**
+        *   Ensure defender attack effects (especially puddles) render correctly using PixiJS.
+        *   Verify defender behavior and game stability.
+
+**Step 5: Clean Up Remaining Obsolete Canvas Properties in `models/game.js`**
+    *   **Action:**
+        1.  Review the `Game` class constructor and other methods in `models/game.js` for any remaining old canvas-related properties, such as `this.ctx` (if it's the 2D context for the main canvas), `this.fgCanvas`, `this.fgCtx`, or `this.layers`.
+        2.  The property `this.canvas` (initialized around line 32) seems to be used for setting initial dimensions for the PixiJS app. Analyze its usage:
+            *   Is it the *old* main canvas element?
+            *   After `this.app = new Application(); await this.app.init(...)` and `this.container.appendChild(this.app.canvas)`, is `this.canvas` still needed, or does `this.app.canvas` supersede it for all purposes?
+            *   If it's only used for initial dimensioning and not for drawing, it might be acceptable or could potentially be refactored to pass dimensions more directly. For now, focus on properties clearly tied to old 2D context drawing.
+        3.  Remove any properties confirmed to be part of the old, direct canvas drawing system and are no longer used.
+    *   **Files to Check/Edit:** `models/game.js`.
+    *   **Test:**
+        *   Game initializes correctly.
+        *   Screen dimensions and layout are correct.
+        *   No new errors related to canvas or rendering.
+
+**Step 6: Event Handling Final Review (`Controller.js` & `Game.js`)**
+    *   **Action:**
+        1.  Briefly re-confirm that mouse event handling in `Controller.js` (for defence placement, UI interaction) uses `this.gameInstance.app.canvas` and relies on game logic (e.g., `isPositionValidForPlacement`) rather than old canvas coordinate systems or rendering states for its logic.
+        2.  This step is mostly a final check, as earlier analysis suggested it's likely okay.
+    *   **Files to Check:** `Controller.js`, `models/game.js`.
+    *   **Test:**
+        *   Defence placement UI (preview, clicking to place) works as expected.
+        *   Any other UI interactions are responsive.
+
+**Step 7: Final Codebase Search for Canvas Context Usage**
+    *   **Action:**
+        1.  Perform a final grep search across the codebase (excluding `reference/` and `dist/` folders) for any remaining canvas 2D context method calls (e.g., `ctx.fillRect`, `.drawImage`, etc.) to catch any missed instances.
+        2.  Address any findings by removing or refactoring to PixiJS.
+    *   **Files to Check/Edit:** Project-wide (`*.js`).
+    *   **Test:**
+        *   Full playthrough or comprehensive feature test to ensure no regressions.
