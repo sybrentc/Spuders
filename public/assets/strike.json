@@ -1,5 +1,7 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
+  "bombCost": 15000,
+  "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,
     "height": 256

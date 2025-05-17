@@ -267,51 +267,49 @@
 
 \[\frac{dR_n}{dB}=-\frac{d_nT_n}{B_n}R_n.\tag{41}\]
 
-<p>To solve this differential equation, we first separate the variables:</p>
-\[ \frac{1}{R_n} dR_n = - \frac{d_n T_n}{B_n} dB \]
-<p>Next, we integrate both sides. The integration for \(R_n\) is from its value at the start of the wave, \(R_n(0)\) (when no bounty \(B\) for the current wave has yet been collected), to its value \(R_n(B)\) after a certain amount of bounty \(B\) has been collected. The integration for \(B\) is from \(0\) to \(B\):</p>
-\[ \int_{R_n(0)}^{R_n(B)} \frac{1}{R'_n} dR'_n = - \frac{d_n T_n}{B_n} \int_{0}^{B} dB' \]
-<p>Evaluating these integrals yields:</p>
-\[ \ln\left(\frac{R_n(B)}{R_n(0)}\right) = - \frac{d_n T_n B}{B_n} \]
-<p>Exponentiating both sides gives the earning rate \(R_n(B)\) as a function of the bounty \(B\) collected so far in the wave:</p>
+<p>We separate variables and integrate both sides to obtain the earning rate \(R_n(B)\) as a function of the bounty \(B\) collected so far in the wave</p>
 
 \[ R_n(B) = R_n(0) e^{-d_n T_n (B/B_n)}. \tag{42}\]
 
-<p>At runtime, we accumulate \(\Delta R\) during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run. The accumulation can be carried out by adding a contribution \(\delta R\) to the running total \(\Delta R\) each time a discrete bounty \(\delta B\) is earned. Since bounty values are not infinitesimal, we cannot derive these contributions from eqt. 41 but need to derive them from eqt. 42</p>
+<p>At runtime, we accumulate a running total target damage during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run.</p>
 
-\[ \delta R_n = R_n(B) \left(1 - e^{-d_n T_n (\delta B/B_n)}\right). \tag{43} \]
+<p>The accumulation is carried out numerically by adding a contribution to the running total target damage each time a discrete threshold amount of bounty \(B^*\) is earned. This process begins at the start of wave \(n\) by setting an initial checkpoint earning rate, \(R_{\text{chk}}\), to \(R_n(0)\) (the value of Eq. 42 at \(B=0\)). When a bounty amount \(B^*\) is accumulated, the earning rate expected after this batch is calculated as \(R'_{\text{chk}} = R_{\text{chk}} \cdot e^{-K_n B^*}\), where \(K_n = d_n T_n / B_n\) is the wave-specific decay constant (derived from the exponent in Eq. 42). The contribution added to the running total target damage is then \(\delta R = R_{\text{chk}} - R'_{\text{chk}}\). For the next batch within the same wave, \(R_{\text{chk}}\) is updated to \(R'_{\text{chk}}\), and the process repeats. Any bounty collected at the end of the wave that is less than a full \(B^*\) is processed using this same iterative method, ensuring all earned bounty for wave \(n\) contributes to the target destruction consistent with Eq. 42.</p>
 
-<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing \(\Delta R_n\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k/k_0\), where \(k\) is the number of its total \(k_0\) attacks a defender has left before it is entirely worn out. This yields</p>
+<h2>Scaled enemy and defender health</h2>
 
-\[\Delta R_n=\frac{1}{\alpha}\Delta C^* = \frac{R}{k_0}\Delta k. \tag{44}\]
+<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing a given amount of damage \(\Delta R\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k/k_0\), where \(k\) is the number of its total \(k_0\) attacks a defender has left before it is entirely worn out. This yields</p>
+
+\[\Delta R=\frac{1}{\alpha}\Delta C^* = \frac{R}{k_0}\Delta k. \tag{43}\]
 
 <p>The above result for a single defender can be generalised to a population by simple summation to yield</p>
 
-\[ \Delta R_n = \sum_{i=1}^{N} \frac{R_i}{k_{0,i}}\Delta k_i. \tag{45} \]
+\[ \Delta R = \sum_{i=1}^{N} \frac{R_i}{k_{0,i}}\Delta k_i. \tag{44} \]
 
-<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R_n\), we redefine eqt. 45 in terms of a rescaled defender health \(h^d_i\) such that</p>
+<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R\), we redefine eqt. 44 in terms of a rescaled defender health \(h^d_i\) such that</p>
 
-\[\Delta R_n \equiv \sum_{i=1}^{N} \Delta h^d_i. \tag{46}\]
+\[\Delta R \equiv \sum_{i=1}^{N} \Delta h^d_i. \tag{45}\]
 
-<p>Comparing eqts. 45 and 46 yields an expression for \(h^d_i\)</p>
+<p>Comparing eqts. 44 and 45 yields an expression for \(h^d_i\)</p>
 
-\[h^d_i = \frac{R_i}{k_{0,i}}k_i, \tag{47}\]
+\[h^d_i = \frac{R_i}{k_{0,i}}k_i, \tag{46}\]
 
 <p>We note that the rescaled defender health has units of earning rate, with \(h^d_i=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since each enemy has an associated bounty in units of currency and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i\) is the current health of enemy \(i\)</p>
 
-\[h^e_i=\frac{\beta s_i}{\alpha}h_i. \tag{48} \]
+\[h^e_i=\frac{\beta s_i}{\alpha}h_i. \tag{47} \]
 
 <h2>Airstrikes</h2>
 
 <p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i\) and ask what the maximum distance \(r^w_i\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
 
-\[ r^w_i = \sqrt{\frac{A}{h^d_i}}. \tag{49} \]
+\[ r^w_i = \sqrt{\frac{A}{h^d_i}}. \tag{48} \]
 
-<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 49 and 47, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i=1\), is a certain percentage of the map width, say 25%.</p>
+<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 48 and 46, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i=1\), is a certain percentage of the map width, say 25%.</p>
 
 <p>We work on the basis that it is the best interests of the enemy to remove as much earning rate from the pool per explosion as possible, since that translates into the greatest instantaneous boost to their chances of success. To pick the optimal location for the epicentre of the explosion therefore, we add all defender wipe-out circles to a z-buffer, each weighted by its associated defender earning rate, and randomly select a pixel of maximum z-value to be the target location.</p>
 
-<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R_n\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
+<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
+
+<p>The threshold bounty \(B^*\) is set algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
