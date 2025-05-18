@@ -1,6 +1,7 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
   "empiricalAverageBombDeltaR": 5,
+  "strikeTriggerBufferScalar": 0.5,
   "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,
@@ -13,7 +14,7 @@
   "impactStdDevPercentWidth": 0.03,
   "strikerShadow": {
     "texturePath": "public/assets/images/bomber-blur.png",
-    "animationSpeed": 4000,
+    "animationSpeed": 5000,
     "scale": 0.15,
     "alpha": 0.35,
     "shadowToBombDelayMs": 300

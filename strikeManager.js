@@ -105,6 +105,8 @@ export default class StrikeManager {
         this.seedAverageBombDeltaR = 0; // Will be loaded from config
         // --- END ADDED ---
 
+        this.strikeTriggerBufferScalar = 0;
+        
         this.minWearDecrementForPayload = 0; // Initialize for bomb payload
     }
 
@@ -126,6 +128,16 @@ export default class StrikeManager {
             } else {
                 this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR;
             }
+
+            // --- ADDED: Load Strike Trigger Buffer Percent ---
+            if (config.strikeTriggerBufferScalar !== undefined) {
+                if (typeof config.strikeTriggerBufferScalar === 'number' && config.strikeTriggerBufferScalar >= 0) {
+                    this.strikeTriggerBufferScalar = config.strikeTriggerBufferScalar;
+                } else {
+                    console.warn(`StrikeManager: Invalid strikeTriggerBufferScalar (${config.strikeTriggerBufferScalar}) in config. Must be a non-negative number. Using default ${this.strikeTriggerBufferScalar}.`);
+                }
+            } // Else, it keeps the default from constructor
+            // --- END ADDED ---
 
             if (typeof config.targetDamageUpdatePoints !== 'number' || config.targetDamageUpdatePoints <= 0) {
                 throw new Error("Strike config file is missing required field 'targetDamageUpdatePoints' or it's invalid (must be a positive number).");
@@ -1161,7 +1173,7 @@ export default class StrikeManager {
         if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0) {
             const outstandingDamage = this.getOutstandingTargetDamageR();
             const averageDamage = this.getAverageBombDamageR();
-            if (averageDamage > 0 && outstandingDamage >= averageDamage) {
+            if (averageDamage > 0 && outstandingDamage >= averageDamage * (1 + this.strikeTriggerBufferScalar)) {
                 this.strike().catch(error => console.error("Automated strike failed:", error));
             }
         }
