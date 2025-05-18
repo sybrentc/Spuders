@@ -6,6 +6,7 @@ export default class Enemy {
         id, name, extendedPath, sprite, sharedHitSprite,
         frameWidth, frameHeight, framesPerRow, totalFrames, frameDuration,
         scale, anchorX, anchorY,
+        hitDiskFractionOfTotalSpriteSize, // <-- ADDED
         hp, // This will be the SCALED max HP
         bounty, // This is the pre-calculated bounty
         healthScaleFactor, // The factor used for scaling
@@ -57,6 +58,17 @@ export default class Enemy {
         this.anchorY = anchorY;
         this.currentFrame = 0;
         this.lastFrameTime = 0;
+        
+        // Calculate hitboxRadius
+        // Ensure defaults for properties that might be missing for robustness
+        const fw = this.frameWidth || 0;
+        const fh = this.frameHeight || 0;
+        const sc = this.scale || 1.0; // Default scale to 1.0 if not provided
+        // Use the provided hitDiskFractionOfTotalSpriteSize, default to 0.7 as specified by user if undefined
+        const hdf = hitDiskFractionOfTotalSpriteSize !== undefined ? hitDiskFractionOfTotalSpriteSize : 0.7;
+
+        const baseRadius = (Math.min(fw, fh) / 2) * sc;
+        this.hitboxRadius = baseRadius * hdf;
         
         // Stats
         this.hp = hp;             // Initial HP is the scaled max HP

@@ -345,9 +345,12 @@ export default class DefenceEntity {
                 }
                 // Apply slow effect to enemies in range of this puddle
                 enemies.forEach(enemy => {
-                    if (!enemy.isDead && 
-                        enemy.isInRange(puddle.metadata, puddle.metadata.radius)) {
-                        enemy.setSlow(puddle.metadata.speedFactor); 
+                    if (!enemy.isDead) {
+                        const enemyHitboxRadius = enemy.hitboxRadius || 0; // Get enemy's hitbox radius, default to 0 if undefined
+                        const effectiveRangeThreshold = puddle.metadata.radius + enemyHitboxRadius;
+                        if (enemy.isInRange(puddle.metadata, effectiveRangeThreshold)) {
+                            enemy.setSlow(puddle.metadata.speedFactor); 
+                        }
                     }
                 });
                 return true;
