@@ -59,15 +59,20 @@ export default class StrikeManager {
 
         // --- ADDED: Explosion Animation Properties ---
         this.explosionAnimationConfig = null; // To store the raw config object
-        this.explosionFrames = []; // To store loaded Image objects for frames
+        this.explosionFrames = []; // To store loaded Image objects for frames - WILL BECOME PIXI TEXTURES
         this.explosionFrameWidth = 0; // Width of a single animation frame
         this.explosionFrameHeight = 0; // Height of a single animation frame
-        this.explosionFrameDuration = 0; // Duration each frame is displayed
+        this.explosionFrameDuration = 0; // Duration each frame is displayed - WILL USE frameDurationMs
         this.explosionScale = 1.0; // Display scale of the explosion
         this.explosionAnchorX = 0.5; // Horizontal anchor
         this.explosionAnchorY = 0.5; // Vertical anchor
-        this.loadedAnimationData = null; // Will hold all processed animation data
+        this.loadedAnimationData = null; // Will hold all processed animation data - TO BE REPLACED/AUGMENTED
         // --- END ADDED ---
+
+        // --- NEW: Properties for Pixi-based animations ---
+        this.strikerShadowData = null; // Will hold { texture: PIXI.Texture, config: object }
+        this.pixiExplosionAnimationData = null; // Will hold { textures: PIXI.Texture[], frameDurationMs, scale, anchorX, anchorY, totalFrames }
+        // --- END NEW ---
 
         // --- ADDED: bombPayload (Plan I.2b) ---
         this.bombPayload = null;
@@ -90,7 +95,7 @@ export default class StrikeManager {
         // --- END ADDED ---
     }
 
-    async loadConfig(mapWidth, mapHeight, path = 'assets/strike.json') {
+    async loadConfig(mapWidth, mapHeight, path = 'public/assets/strike.json') {
         try {
             const response = await fetch(path);
             if (!response.ok) {
@@ -112,20 +117,40 @@ export default class StrikeManager {
                  console.warn(`StrikeManager: targetMaxWipeoutRadiusPercent (${config.targetMaxWipeoutRadiusPercent}) should be between 0 and 1. Clamping or using as is? Using as is for now.`);
             }
 
-            // --- ADDED: Load Explosion Animation Config ---
+            // --- NEW: Load Striker Shadow Config and Texture ---
+            if (!config.strikerShadow || 
+                !config.strikerShadow.texturePath || 
+                typeof config.strikerShadow.animationSpeed !== 'number' || 
+                typeof config.strikerShadow.scale !== 'number' || 
+                typeof config.strikerShadow.alpha !== 'number' ||
+                typeof config.strikerShadow.shadowToBombDelayMs !== 'number' ||
+                config.strikerShadow.shadowToBombDelayMs < 0) {
+                throw new Error("Strike config file is missing 'strikerShadow' object or it has invalid/missing fields (texturePath, animationSpeed, scale, alpha, shadowToBombDelayMs).");
+            }
+            this.strikerShadowData = {
+                texture: await PIXI.Assets.load(config.strikerShadow.texturePath),
+                config: config.strikerShadow
+            };
+            // --- END NEW ---
+
+            // --- ADDED: Load Explosion Animation Config --- // MODIFIED TO USE NEW FIELDS
             if (!config.explosionAnimation) {
                 throw new Error("Strike config file is missing 'explosionAnimation' object.");
             }
             const animConfig = config.explosionAnimation;
-            if (!animConfig.folderPath || typeof animConfig.frameDuration !== 'number' || typeof animConfig.scale !== 'number' || typeof animConfig.anchorX !== 'number' || typeof animConfig.anchorY !== 'number') {
-                throw new Error("Strike config 'explosionAnimation' is missing required fields (folderPath, frameDuration, scale, anchorX, anchorY) or they are of incorrect type.");
+            if (!animConfig.folderPath || typeof animConfig.frameDurationMs !== 'number' || 
+                typeof animConfig.scale !== 'number' || typeof animConfig.anchorX !== 'number' || 
+                typeof animConfig.anchorY !== 'number' || typeof animConfig.frameCount !== 'number' || 
+                typeof animConfig.digitsForZeroPadding !== 'number' || typeof animConfig.filePrefix !== 'string' || typeof animConfig.fileSuffix !== 'string') {
+                throw new Error("Strike config 'explosionAnimation' is missing required fields (folderPath, frameDurationMs, scale, anchorX, anchorY, frameCount, digitsForZeroPadding, filePrefix, fileSuffix) or they are of incorrect type.");
             }
-            this.explosionAnimationConfig = animConfig; // Store the raw config
-            this.explosionFrameDuration = animConfig.frameDuration;
+            this.explosionAnimationConfig = animConfig; // Store the raw config for _loadExplosionFrames
+            // These individual properties on StrikeManager are now less important if _loadExplosionFrames populates pixiExplosionAnimationData directly
+            // but can be kept for legacy access or direct use if _loadExplosionFrames doesn't set everything on pixiExplosionAnimationData.config
+            this.explosionFrameDuration = animConfig.frameDurationMs; // Note: was frameDuration
             this.explosionScale = animConfig.scale;
             this.explosionAnchorX = animConfig.anchorX;
             this.explosionAnchorY = animConfig.anchorY;
-            // Note: explosionFrames, explosionFrameWidth, explosionFrameHeight will be populated by a separate method after this.
             // --- END ADDED ---
 
             // Store loaded config values
@@ -183,8 +208,8 @@ export default class StrikeManager {
             this._precomputeStampMap();
             // --- END Call ---
 
-            // --- ADDED: Call to load explosion frames ---
-            await this._loadExplosionFrames(); 
+            // --- ADDED: Call to load explosion frames --- // This will now load PIXI.Textures
+            await this._loadExplosionFrames(); // This will call _tryAssembleBombPayload internally
             // --- END ADDED ---
 
             // --- ADDED: Initialize Heatmap Pixi Objects ---
@@ -209,7 +234,8 @@ export default class StrikeManager {
             return;
         }
         if (!this.defenceManager.isLoaded) {
-             console.warn("StrikeManager.calculateBombStrength: DefenceManager definitions not loaded yet. Skipping calculation.");
+             console.warn("StrikeManager.calculateBombStrength: DefenceManager definitions not loaded yet. Skipping calculation. bombStrengthA remains null.");
+             this._tryAssembleBombPayload();
              return;
         }
 
@@ -226,7 +252,8 @@ export default class StrikeManager {
 
         if (!isFinite(minWearDecrement)) {
             console.error("StrikeManager.calculateBombStrength: Could not find a valid minimum non-zero wear decrement. Cannot calculate Bomb Strength A. Ensure wear is enabled and calculated for at least one defender.");
-            this.bombStrengthA = 0; // Set A to 0 as a fallback?
+            this.bombStrengthA = 0; 
+            this._tryAssembleBombPayload(); 
             return;
         }
 
@@ -235,31 +262,9 @@ export default class StrikeManager {
 
         // Calculate A = r^2 * h_min (where h_min is minWearDecrement)
         const calculatedA = targetRadiusPx * targetRadiusPx * minWearDecrement;
-        this.bombStrengthA = Math.max(0, calculatedA); // Ensure non-negative
+        this.bombStrengthA = Math.max(0, calculatedA); 
 
-        // --- ADDED: Initialize bombPayload (Plan I.2b) ---
-        if (this.bombStrengthA !== null && this.bombStrengthA > 0) { 
-            const animationData = this.getLoadedAnimationData();
-            // Ensure impactStdDevPixels is a number (it could be 0 for no spread)
-            if (animationData && typeof this.impactStdDevPixels === 'number') {
-                 this.bombPayload = {
-                    strengthA: this.bombStrengthA,
-                    animation: animationData,
-                    impactStdDevPixels: this.impactStdDevPixels
-                };
-                // console.log("StrikeManager: bombPayload initialized.", this.bombPayload); // Optional log for verification
-            } else {
-                console.warn("StrikeManager: Could not initialize bombPayload. Missing animation data or impactStdDevPixels is not set.", 
-                             { animationDataReady: !!animationData, impactStdDevPixels: this.impactStdDevPixels });
-            }
-        } else {
-            // If bombStrengthA is 0 or null, bombPayload remains null, which is fine.
-            // dispatchStriker should later check if bombPayload is ready.
-            // console.warn("StrikeManager: bombStrengthA is not valid (<=0 or null), bombPayload not initialized."); // Optional log
-        }
-        // --- END ADDED ---
-
-        //console.log(`StrikeManager: Calculated Bomb Strength A = ${this.bombStrengthA.toFixed(2)} (using minWearDecrement=${minWearDecrement.toFixed(4)}, targetRadius=${targetRadiusPx.toFixed(1)}px)`);
+        this._tryAssembleBombPayload(); 
 
     }
     // --- END ADDED ---
@@ -727,24 +732,24 @@ export default class StrikeManager {
      * @returns {number} The Delta R (damage dealt to defenders) from this bomb, or 0 if failed.
      */
     async dispatchStriker(targetCoords, strikeContext) {
-        if (!this.game) { 
-            console.error("StrikeManager.dispatchStriker: Game instance not available.");
-            return 0;
+        if (!this.isConfigLoaded()) {
+            console.error("StrikeManager.dispatchStriker: Config not loaded. Cannot dispatch striker.");
+            return Promise.reject("Config not loaded");
         }
         if (!this.bombPayload) {
-            console.error("StrikeManager.dispatchStriker: bombPayload is not initialized. Cannot dispatch striker.");
-            return 0;
+            console.error("StrikeManager.dispatchStriker: Bomb payload not ready. Cannot dispatch striker.");
+            return Promise.reject("Bomb payload not ready");
         }
-        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
-            console.error("StrikeManager.dispatchStriker: Invalid targetCoords provided.", targetCoords);
-            return 0;
-        }
-        if (!strikeContext) {
-            console.error("StrikeManager.dispatchStriker: strikeContext (game or clonedDefenders) not provided.");
-            return 0;
+        if (!this.strikerShadowData) {
+            console.warn("StrikeManager.dispatchStriker: Striker shadow data not ready. Proceeding without shadow for this strike, but this is unexpected.");
+            // Potentially create a dummy/null strikerShadowData if we want to allow strikes without shadows gracefully
+            // For now, it will likely cause an error in Striker constructor if it expects an object.
+            // The Striker constructor was updated to allow null for strikerShadow, so this should be fine but log a warning.
         }
 
-        const striker = new Striker(this.bombPayload, targetCoords, strikeContext);
+        // const striker = new Striker(this.bombPayload, targetCoords, strikeContext);
+        // NEW CALL with gameInstance and strikerShadowData:
+        const striker = new Striker(this.game, this.strikerShadowData, this.bombPayload, targetCoords, strikeContext);
 
         // Striker's constructor will set up and start an async operation.
         // It needs to expose: 
@@ -804,129 +809,101 @@ export default class StrikeManager {
     }
     // --- END ADDED ---
 
-    // --- ADDED: Getter for loaded animation data ---
-    getLoadedAnimationData() {
-        if (!this.loadedAnimationData && this.configLoaded && this.explosionAnimationConfig) {
-            // This is a placeholder. In a real scenario, _loadExplosionFrames would populate this.
-            // For now, we'll construct it if the base elements are there.
-            // This assumes _loadExplosionFrames has been called and populated the frame-specific details.
-             if (this.explosionFrames.length > 0 && this.explosionFrameWidth > 0 && this.explosionFrameHeight > 0) {
-                this.loadedAnimationData = {
-                    frames: this.explosionFrames,
-                    frameWidth: this.explosionFrameWidth,
-                    frameHeight: this.explosionFrameHeight,
-                    frameDuration: this.explosionFrameDuration,
-                    scale: this.explosionScale,
-                    anchorX: this.explosionAnchorX,
-                    anchorY: this.explosionAnchorY,
-                    totalFrames: this.explosionFrames.length
-                };
-             } else {
-                // console.warn("StrikeManager.getLoadedAnimationData: Explosion frames not loaded or dimensions undetermined.");
-                return null;
-             }
-        }
-        return this.loadedAnimationData;
-    }
-    // --- END ADDED ---
-
-    // --- ADDED: Method to load explosion frame images ---
+    // --- ADDED: Method to load explosion frame images --- // MODIFIED FOR PIXI TEXTURES
     async _loadExplosionFrames() {
         if (!this.explosionAnimationConfig || !this.explosionAnimationConfig.folderPath) {
             console.error("StrikeManager._loadExplosionFrames: Explosion animation folderPath not configured.");
+            this.pixiExplosionAnimationData = null;
             return;
         }
+        // These checks are now more detailed in loadConfig, but good to have specific ones here too.
         if (typeof this.explosionAnimationConfig.frameCount !== 'number' || this.explosionAnimationConfig.frameCount <= 0) {
             console.error("StrikeManager._loadExplosionFrames: Invalid or missing frameCount in explosionAnimation config.");
+            this.pixiExplosionAnimationData = null;
             return;
         }
         if (typeof this.explosionAnimationConfig.digitsForZeroPadding !== 'number' || this.explosionAnimationConfig.digitsForZeroPadding <= 0) {
             console.error("StrikeManager._loadExplosionFrames: Invalid or missing digitsForZeroPadding in explosionAnimation config.");
+            this.pixiExplosionAnimationData = null;
             return;
         }
 
         const folderPath = this.explosionAnimationConfig.folderPath;
         const frameCount = this.explosionAnimationConfig.frameCount;
         const digits = this.explosionAnimationConfig.digitsForZeroPadding;
-        const fileSuffix = '.png'; // Assuming .png, could be made configurable if needed
+        const filePrefix = this.explosionAnimationConfig.filePrefix || "";
+        const fileSuffix = this.explosionAnimationConfig.fileSuffix || ".png";
 
         try {
-            let fileNames = [];
+            let loadedPixiTextures = [];
             for (let i = 1; i <= frameCount; i++) {
                 const frameNumberStr = i.toString().padStart(digits, '0');
-                fileNames.push(frameNumberStr + fileSuffix);
-            }
-
-            // Actual image loading logic (conceptual for now, replace with real JS Image loading)
-            // In your actual JS environment, this.explosionFrames should end up as an array of Image objects.
-            this.explosionFrames = []; // Reset before loading
-            const imagePromises = fileNames.map(fileName => {
-                const fullPath = folderPath + fileName; // Ensure folderPath ends with '/'
-                // In real JS:
-                return new Promise((resolve) => { // Simplified error handling for clarity, real version might reject or resolve with null
-                    const img = new Image();
-                    img.onload = () => {
-                        // console.log(`Successfully loaded image: ${fullPath}`);
-                        resolve(img);
-                    };
-                    img.onerror = () => {
-                        console.error(`Failed to load image: ${fullPath}`);
-                        resolve(null); // Resolve with null on error to not break Promise.all
-                    };
-                    img.src = fullPath;
-                });
-                // return Promise.resolve(fullPath); // Placeholder: resolves with path for now, representing successful load intent
-            });
-
-            const loadedImages = await Promise.all(imagePromises);
-            // Filter out any nulls from failed loads and ensure they are Image objects
-            this.explosionFrames = loadedImages.filter(img => img instanceof Image);
-
-            if (this.explosionFrames.length > 0) {
-                const firstImage = this.explosionFrames[0];
-                // Ensure the first image is actually loaded and has dimensions
-                if (firstImage.complete && firstImage.naturalWidth > 0 && firstImage.naturalHeight > 0) {
-                    this.explosionFrameWidth = firstImage.naturalWidth;
-                    this.explosionFrameHeight = firstImage.naturalHeight;
-                } else {
-                    // This case might happen if the first image object exists but its data isn't ready
-                    // or it failed to load in a way not caught by onerror (less common)
-                    // Or if it's a 0x0 image.
-                    console.error("StrikeManager._loadExplosionFrames: First frame image not fully loaded or has no dimensions. Using config/defaults.");
-                    this.explosionFrameWidth = this.explosionAnimationConfig.frameWidth || 64; // Fallback
-                    this.explosionFrameHeight = this.explosionAnimationConfig.frameHeight || 64; // Fallback
+                const fileName = filePrefix + frameNumberStr + fileSuffix;
+                const fullPath = folderPath + fileName; 
+                try {
+                    const texture = await PIXI.Assets.load(fullPath);
+                    loadedPixiTextures.push(texture);
+                } catch (textureLoadError) {
+                    console.error(`StrikeManager._loadExplosionFrames: Failed to load texture ${fullPath}:`, textureLoadError);
+                    // Decide if one failed texture load should prevent all: for now, it will try to load others.
+                    // If a complete set is crucial, you might throw here or set a flag.
                 }
-            } else {
-                console.error("StrikeManager._loadExplosionFrames: No explosion frames were successfully loaded as Image objects.");
-                // Keep width/height as 0 or default from config if needed elsewhere
-                this.explosionFrameWidth = this.explosionAnimationConfig.frameWidth || 0;
-                this.explosionFrameHeight = this.explosionAnimationConfig.frameHeight || 0;
             }
 
-            // Populate loadedAnimationData once frames are processed
-            if (this.explosionFrames.length > 0 && this.explosionFrameWidth > 0 && this.explosionFrameHeight > 0) {
-                this.loadedAnimationData = {
-                    frames: this.explosionFrames, // Array of Image objects (or paths for now)
-                    frameWidth: this.explosionFrameWidth,
-                    frameHeight: this.explosionFrameHeight,
-                    frameDuration: this.explosionFrameDuration,
-                    scale: this.explosionScale,
-                    anchorX: this.explosionAnchorX,
-                    anchorY: this.explosionAnchorY,
-                    totalFrames: this.explosionFrames.length
+            this.explosionFrames = []; // Clear old Image objects if any were populated
+            
+            if (loadedPixiTextures.length === frameCount) { // Ensure all frames loaded successfully
+                this.pixiExplosionAnimationData = {
+                    textures: loadedPixiTextures,
+                    frameDurationMs: this.explosionAnimationConfig.frameDurationMs,
+                    scale: this.explosionAnimationConfig.scale,
+                    anchorX: this.explosionAnimationConfig.anchorX,
+                    anchorY: this.explosionAnimationConfig.anchorY,
+                    totalFrames: loadedPixiTextures.length
+                    // frameWidth & frameHeight can be derived from textures[0].width/height if needed by Striker
                 };
+                // console.log("StrikeManager: Successfully loaded all explosion PIXI.Textures and prepared pixiExplosionAnimationData.");
             } else {
-                 this.loadedAnimationData = null; // Ensure it's null if loading fails
-                 // Error already logged if no frames were loaded, or if dimensions are zero.
+                console.error(`StrikeManager._loadExplosionFrames: Failed to load all ${frameCount} explosion frames. Loaded ${loadedPixiTextures.length}. Animation data will be null.`);
+                this.pixiExplosionAnimationData = null;
             }
 
         } catch (error) {
-            console.error(`StrikeManager._loadExplosionFrames: Error processing explosion frames from ${folderPath}:`, error);
-            this.explosionFrames = [];
-            this.loadedAnimationData = null;
+            console.error(`StrikeManager._loadExplosionFrames: General error processing explosion frames from ${folderPath}:`, error);
+            this.pixiExplosionAnimationData = null;
         }
+        this._tryAssembleBombPayload(); // Attempt to assemble bomb payload now that explosion frames are processed
     }
     // --- END ADDED ---
+
+    // --- NEW METHOD: Attempt to assemble bomb payload ---
+    _tryAssembleBombPayload() {
+        if (this.bombPayload) return; // Already assembled
+
+        if (this.bombStrengthA !== null && // bombStrengthA can be 0, so just check for null
+            this.pixiExplosionAnimationData && 
+            this.strikerShadowData && 
+            typeof this.impactStdDevPixels === 'number') {
+            
+            this.bombPayload = {
+                strengthA: this.bombStrengthA,
+                impactStdDevPixels: this.impactStdDevPixels,
+                explosionAnimation: this.pixiExplosionAnimationData,
+                shadow: this.strikerShadowData
+            };
+            // console.log("StrikeManager: bombPayload successfully assembled.", this.bombPayload);
+        } else {
+            // Not an error, just means not all components are ready yet.
+            // This method will be called again when other components become ready.
+            // console.log("StrikeManager: Could not assemble bombPayload yet. Missing components.", {
+            //     bombStrengthA_isSet: this.bombStrengthA !== null,
+            //     pixiExplosionAnimationDataReady: !!this.pixiExplosionAnimationData,
+            //     strikerShadowDataReady: !!this.strikerShadowData,
+            //     impactStdDevPixels_isSet: typeof this.impactStdDevPixels === 'number'
+            // });
+        }
+    }
+    // --- END NEW METHOD ---
 
     // --- ADDED: Test function to trigger a strike ---
     async strike() {

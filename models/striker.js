@@ -1,196 +1,97 @@
 import { distanceBetween } from '../utils/geometryUtils.js';
+import * as PIXI from 'pixi.js'; // Import the PIXI library
 
 const MIN_EFFECTIVE_DISTANCE = 1.0; // Moved to module scope for clarity, or could be static class member
 
 export default class Striker {
     /**
-     * Represents a single bomb strike event, handling its damage application.
-     * @param {object} bombPayload - Contains bomb strength, animation, and impactStdDevPixels.
+     * Represents a single bomb strike event, handling its animation and damage application.
+     * @param {object} gameInstance - The main Game object (e.g., for accessing PIXI layers, app).
+     * @param {object} strikerShadow - Contains shadow texture and configuration for the shadow animation.
+     * @param {object} bombPayload - Contains bomb properties (strength, explosion animation data, impact std dev).
      * @param {object} targetCoords - The intended {x, y} coordinates for the bomb's target.
      * @param {object} context - Either the main Game instance (for real strike) or an array of cloned defenders (for simulation).
      */
-    constructor(bombPayload, targetCoords, context) {
-        // console.log("[Striker CONSTRUCTOR START]"); // Log 1
-
+    constructor(gameInstance, strikerShadow, bombPayload, targetCoords, context) {
         this._isInitializedSuccessfully = false;
-        this._damageDealtR = 0; // To store the final result of the strike
-        this.completionPromise = null; // Will be set to a Promise
+        this._damageDealtR = 0;
+        this.completionPromise = null;
 
-        // Validate bombPayload
-        if (!bombPayload || 
-            typeof bombPayload.strengthA !== 'number' || bombPayload.strengthA <= 0 ||
-            !bombPayload.animation || // Assuming animation object is always expected
-            typeof bombPayload.impactStdDevPixels !== 'number' || bombPayload.impactStdDevPixels < 0) {
-            console.error("Striker constructor: Invalid bombPayload provided.", bombPayload);
-            // console.log("[Striker CONSTRUCTOR END - bombPayload validation failed]"); // Log 2a
-            return; // Initialization failed
-        }
-        // console.log("[Striker Constructor] bombPayload VALID"); // Log 2b
-
-        // Validate targetCoords
-        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
-            console.error("Striker constructor: Invalid targetCoords provided.", targetCoords);
-            // console.log("[Striker CONSTRUCTOR END - targetCoords validation failed]"); // Log 3a
-            return; // Initialization failed
-        }
-        // console.log("[Striker Constructor] targetCoords VALID"); // Log 3b
-
-        // Validate context and determine strike type
-        if (!context) {
-            console.error("Striker constructor: Invalid context (game or clonedDefenders) provided.");
-            // console.log("[Striker CONSTRUCTOR END - context validation failed (null/undefined)]"); // Log 4a
-            return; // Initialization failed
-        }
-        // console.log("[Striker Constructor] context IS NOT NULL/UNDEFINED"); // Log 4b
-
+        // Store parameters
+        this.gameInstance = gameInstance; 
+        this.strikerShadow = strikerShadow; 
         this.bombPayload = bombPayload;
         this.targetCoords = targetCoords;
-        // _spareNormal is already initialized if we followed Plan II.1
-        if (typeof this._spareNormal === 'undefined') { // Safety check, should be null from prior step
-          this._spareNormal = null;
-        }
+        this._spareNormal = null; // Initialize for _generateNormalRandom
 
-        // Determine if it's a real strike and store relevant refs
-        if (context.defenceManager && context.enemyManager && typeof context.getPathCoverageLookup === 'function') { // Added a more specific check for game object
-            this.isRealStrike = true;
-            this.gameRef = context; // It's the game object
-            this.optionalClonedDefenders = null;
-            // console.log("[Striker Constructor] Context determined: REAL STRIKE"); // Log 5a
-        } else if (Array.isArray(context)) {
-            this.isRealStrike = false;
-            this.gameRef = null; 
-            this.optionalClonedDefenders = context; // It's an array of cloned defenders
-            // console.log("[Striker Constructor] Context determined: SIMULATED STRIKE"); // Log 5b
-        } else {
-            console.error("Striker constructor: Context is not a valid game instance or an array of defenders.", context);
-            // console.log("[Striker CONSTRUCTOR END - context validation failed (invalid type)]"); // Log 5c
+        // --- Validate Core New Parameters ---
+        if (!gameInstance || typeof gameInstance !== 'object') {
+            console.error("Striker constructor: Invalid gameInstance provided.", gameInstance);
+            return; // Initialization failed
+        }
+        // strikerShadow can be null or an object. If object, validate its structure if needed, or assume valid from StrikeManager.
+        if (strikerShadow && typeof strikerShadow !== 'object') { 
+            console.error("Striker constructor: Invalid strikerShadow provided (if not null, must be object).", strikerShadow);
             return; // Initialization failed
         }
 
-        // console.log("[Striker Constructor] Attempting to set isInitializedSuccessfully = true"); // Log 6
-        this._isInitializedSuccessfully = true;
-        // console.log(`[Striker Constructor] this._isInitializedSuccessfully is now: ${this._isInitializedSuccessfully}`); // Log 7
+        // --- Validate bombPayload (copied from previous correct version) ---
+        if (!bombPayload ||
+            typeof bombPayload.strengthA !== 'number' ||
+            (bombPayload.strengthA < 0) || 
+            !bombPayload.explosionAnimation || 
+            typeof bombPayload.impactStdDevPixels !== 'number' || bombPayload.impactStdDevPixels < 0) {
+            console.error("Striker constructor: Invalid bombPayload provided.", bombPayload);
+            return; // Initialization failed
+        }
 
-        // --- AUTONOMOUS STRIKE EXECUTION & PROMISE SETUP ---
-        // The actual strike logic will be wrapped in a promise.
-        // For now, this is a placeholder. The real execution will happen in _executeStrikeInternal (a new private method).
+        // --- Validate targetCoords (copied from previous correct version) ---
+        if (!targetCoords || typeof targetCoords.x !== 'number' || typeof targetCoords.y !== 'number') {
+            console.error("Striker constructor: Invalid targetCoords provided.", targetCoords);
+            return; // Initialization failed
+        }
+
+        // --- Validate context and determine strike type (Original Logic based on 'context') ---
+        if (!context) {
+            console.error("Striker constructor: Invalid context (game or clonedDefenders) provided.");
+            return; // Initialization failed
+        }
+
+        if (context.defenceManager && context.enemyManager) {
+            this.isRealStrike = true;
+            this.gameRef = context; // gameRef is the game instance FOR DAMAGE LOGIC
+            this.optionalClonedDefenders = null;
+        } else if (Array.isArray(context)) {
+            this.isRealStrike = false;
+            this.gameRef = null;
+            this.optionalClonedDefenders = context; // context is cloned defenders FOR DAMAGE LOGIC
+        } else {
+            console.error("Striker constructor: Context is not a valid game instance or an array of defenders.", context);
+            return; // Initialization failed
+        }
+        // --- End Original Context Logic ---
+
+        this._isInitializedSuccessfully = true;
+
         this.completionPromise = new Promise(async (resolve, reject) => {
-            // console.log("[Striker Constructor] completionPromise executor started."); // Log 8
             if (!this._isInitializedSuccessfully) {
-                // This case should ideally be caught before promise creation, but as a safeguard.
-                // console.error("[Striker completionPromise] Strike not initialized successfully, rejecting promise.");
                 reject(new Error("Striker not initialized successfully before attempting to execute strike."));
                 return;
             }
             try {
-                // In future steps, we will call an internal method here that performs the strike logic
-                // e.g., this._damageDealtR = await this._executeStrikeInternal();
-                // For now, let's assume _executeStrikeInternal will be defined later and resolve immediately for testing.
-                // console.log("Striker: Placeholder for _executeStrikeInternal call.");
-                // Simulating an async operation that will eventually calculate damage.
-                // Replace this with the actual call to _executeStrikeInternal in later steps.
-                // setTimeout(() => { // Simulate async work
-                //     // this._damageDealtR will be set by the actual strike logic later.
-                //     // For now, just resolving with a placeholder. When _executeStrikeInternal is done, it will set this._damageDealtR.
-                //     resolve(this._damageDealtR); // Resolve with the stored damage
-                // }, 0);
-                this._damageDealtR = await this._executeStrikeInternal();
-                resolve(this._damageDealtR);
+                const damageDealt = await this._orchestrateStrikeSequence(); 
+                resolve(damageDealt);
             } catch (error) {
-                console.error("Striker: Error during internal strike execution (within promise):", error);
+                console.error("Striker: Error during strike sequence orchestration:", error);
                 reject(error);
             }
         });
-        // --- END AUTONOMOUS STRIKE EXECUTION ---
-        // console.log("[Striker CONSTRUCTOR END - SUCCESS]"); // Log 9
     }
 
-    // Placeholder for the synchronous initialization check method
-    // This is called by StrikeManager
     isInitializedSuccessfully() {
-        // console.log(`[Striker isInitializedSuccessfully() CALLED] Returning: ${this._isInitializedSuccessfully}`); // Log 10
         return this._isInitializedSuccessfully;
     }
 
-    /**
-     * Applies bomb damage to defenders and, if real, to enemies.
-     * @param {boolean} isRealStrike - True if this is a real bomb, false if a simulation.
-     * @param {Array<DefenceEntity>} [optionalClonedDefenders=null] - For simulation, a list of cloned defenders.
-     * @returns {number} The total Delta R (damage dealt to defenders).
-     */
-    // applyExplosionDamage(isRealStrike, optionalClonedDefenders = null) { // Method to be removed
-    //     if (!this.valid) {
-    //         console.error("Striker.applyExplosionDamage: Striker instance is not valid. Aborting damage application.");
-    //         return 0;
-    //     }
-
-    //     let totalDeltaRFromDefenders = 0;
-    //     const MIN_EFFECTIVE_DISTANCE = 1.0; // Prevent division by zero/extreme damage
-
-    //     let defendersToProcess;
-    //     if (isRealStrike) {
-    //         if (!this.gameRef.defenceManager) {
-    //             console.error("Striker.applyExplosionDamage: DefenceManager not found on gameRef for real strike.");
-    //             return 0;
-    //         }
-    //         defendersToProcess = this.gameRef.defenceManager.getActiveDefences();
-    //     } else {
-    //         if (!optionalClonedDefenders || !Array.isArray(optionalClonedDefenders)) {
-    //             console.error("Striker.applyExplosionDamage: Invalid or missing optionalClonedDefenders for simulated strike.");
-    //             return 0;
-    //         }
-    //         defendersToProcess = optionalClonedDefenders;
-    //     }
-
-    //     // Process Defenders
-    //     if (defendersToProcess && Array.isArray(defendersToProcess)) {
-    //         for (const defender of defendersToProcess) {
-    //             if (defender.isDestroyed) {
-    //                 continue;
-    //             }
-    //             const dist = distanceBetween({ x: defender.x, y: defender.y }, this.impactCoords);
-    //             const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
-    //             const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
-
-    //             if (potentialDamage > 0) {
-    //                 const damageTaken = defender.hit(potentialDamage);
-    //                 totalDeltaRFromDefenders += damageTaken;
-    //             }
-    //         }
-    //     }
-
-    //     // Process Enemies (Collateral Damage for Real Strikes)
-    //     if (isRealStrike) {
-    //         if (!this.gameRef.enemyManager) {
-    //             console.error("Striker.applyExplosionDamage: EnemyManager not found on gameRef for real strike.");
-    //             // Continue with defender damage, but log error for enemies
-    //         } else {
-    //             const enemiesToProcess = this.gameRef.enemyManager.getActiveEnemies();
-    //             if (enemiesToProcess && Array.isArray(enemiesToProcess)) {
-    //                 for (const enemy of enemiesToProcess) {
-    //                     if (enemy.isDead) {
-    //                         continue;
-    //                     }
-    //                     const enemyPos = enemy.getCurrentPosition ? enemy.getCurrentPosition() : { x: enemy.x, y: enemy.y };
-    //                     if (!enemyPos || typeof enemyPos.x !== 'number' || typeof enemyPos.y !== 'number') {
-    //                         console.warn("Striker.applyExplosionDamage: Could not determine valid position for an enemy. Skipping it.", enemy);
-    //                         continue;
-    //                     }
-    //                     const dist = distanceBetween(enemyPos, this.impactCoords);
-    //                     const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
-    //                     const potentialDamage = this.bombStrengthA / (effectiveDistance * effectiveDistance);
-
-    //                     if (potentialDamage > 0) {
-    //                         enemy.hit(potentialDamage);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     return totalDeltaRFromDefenders;
-    // }
-
-    // --- ADDED FROM STRIKEMANAGER (Plan II.1) ---
     /**
      * Generates a normally distributed random number.
      * Uses the Box-Muller transform.
@@ -199,21 +100,17 @@ export default class Striker {
      * @returns {number} A random number from the specified normal distribution.
      */
     _generateNormalRandom(mean, stdDev) {
-        // Use Box-Muller transform
-        // Check if we have a spare value from the previous calculation
         if (this._spareNormal !== null) {
             const result = mean + stdDev * this._spareNormal;
-            this._spareNormal = null; // Consume the spare value
+            this._spareNormal = null;
             return result;
         }
 
-        // No spare value, generate two new standard normals
         let u1, u2;
         do {
-            // Math.random() gives [0, 1). We need (0, 1) for log().
             u1 = Math.random();
         } while (u1 === 0);
-        u2 = Math.random(); // This one can be 0
+        u2 = Math.random();
 
         const radius = Math.sqrt(-2.0 * Math.log(u1));
         const angle = 2.0 * Math.PI * u2;
@@ -221,69 +118,57 @@ export default class Striker {
         const standardNormal1 = radius * Math.cos(angle);
         const standardNormal2 = radius * Math.sin(angle);
 
-        // Store the second value for the next call
         this._spareNormal = standardNormal2;
 
-        // Return the first value, scaled and shifted
         return mean + stdDev * standardNormal1;
     }
-    // --- END ADDED ---
 
-    // --- ADDED: Plan II.3 --- 
-    /**
-     * Calculates the randomized impact coordinates based on target coordinates
-     * using a normal distribution for inaccuracy.
-     * @returns {object} The calculated impact coordinates {x, y}. Returns targetCoords if spread is 0 or not configured.
-     * @private Internal method
-     */
     _calculateImpactCoordinates() {
-        if (!this.targetCoords) { // Should have been validated in constructor
+        if (!this.targetCoords) {
             console.error("Striker._calculateImpactCoordinates: targetCoords not available.");
-            return { x: 0, y: 0 }; // Should not happen if constructor validated
+            return { x: 0, y: 0 };
         }
         if (!this.bombPayload || typeof this.bombPayload.impactStdDevPixels !== 'number') {
             console.error("Striker._calculateImpactCoordinates: bombPayload or impactStdDevPixels not available/valid.");
-            return { ...this.targetCoords }; // Return original target if misconfigured
+            return { ...this.targetCoords };
         }
 
         const stdDev = this.bombPayload.impactStdDevPixels;
 
         if (stdDev <= 0) {
-            // No spread, return target coordinates directly
             return { ...this.targetCoords };
         }
 
-        // Generate random offsets using normal distribution (mean 0)
         const offsetX = this._generateNormalRandom(0, stdDev);
         const offsetY = this._generateNormalRandom(0, stdDev);
 
-        // Calculate impact coordinates
         const impactX = this.targetCoords.x + offsetX;
         const impactY = this.targetCoords.y + offsetY;
 
-        // Note: Clamping to map bounds could be added here if necessary, 
-        // but current plan doesn't specify it for Striker directly.
-        // StrikeManager used to do it, but it depended on mapWidth/mapHeight directly.
-        // If clamping is needed, Striker would need access to map dimensions.
         return { x: impactX, y: impactY };
     }
-    // --- END ADDED ---
 
-    // --- ADDED: Plan II.4 --- 
     async _executeStrikeInternal() {
-        // console.log("[Striker _executeStrikeInternal() CALLED]"); // Log 11
         let totalDeltaRFromDefenders = 0;
+        this.actualImpactCoords = null; // Initialize actualImpactCoords for this strike instance
 
-        // Step 1: Determine Impact Point
-        const actualImpactCoords = this._calculateImpactCoordinates();
-        if (!actualImpactCoords) { // Should not happen if _calculateImpactCoordinates is robust
+        this.actualImpactCoords = this._calculateImpactCoordinates(); // Store on this instance
+        if (!this.actualImpactCoords) {
             console.error("Striker._executeStrikeInternal: Failed to calculate impact coordinates.");
-            throw new Error("Failed to calculate impact coordinates in Striker."); // Propagate error to promise
+            throw new Error("Failed to calculate impact coordinates in Striker.");
         }
 
-        // Step 2: Identify Targets
+        // --- Play explosion animation FIRST ---
+        if (this.bombPayload && this.bombPayload.explosionAnimation && this.actualImpactCoords) {
+            this._playExplosionAnimation(this.actualImpactCoords);
+        } else if (!this.actualImpactCoords) {
+            console.warn("Striker: Explosion animation skipped as actualImpactCoords were not set (in _executeStrikeInternal).");
+        }
+        // --- END Explosion Animation ---
+
+        // --- THEN Apply Damage ---
         let defendersToProcess = [];
-        let enemiesToProcess = []; // Only used for real strikes
+        let enemiesToProcess = [];
 
         if (this.isRealStrike) {
             if (!this.gameRef || !this.gameRef.defenceManager || !this.gameRef.enemyManager) {
@@ -298,22 +183,20 @@ export default class Striker {
                 throw new Error("Invalid cloned defenders for simulated strike in Striker.");
             }
             defendersToProcess = this.optionalClonedDefenders;
-            // No enemies for simulated strikes as per plan
         }
 
-        // Step 3: Apply Damage and Calculate Defender Delta R
-        if (defendersToProcess) { // Check if defendersToProcess is not null/undefined
+        // Process Defenders
+        if (defendersToProcess) {
             for (const defender of defendersToProcess) {
-                if (!defender || defender.isDestroyed) { // Basic check for valid defender object and not destroyed
+                if (!defender || defender.isDestroyed) {
                     continue;
                 }
-                // Ensure defender has position (x, y) and hit method
                 if (typeof defender.x !== 'number' || typeof defender.y !== 'number' || typeof defender.hit !== 'function') {
                     console.warn("Striker: Skipping defender due to missing position or hit method.", defender);
                     continue;
                 }
 
-                const dist = distanceBetween({ x: defender.x, y: defender.y }, actualImpactCoords);
+                const dist = distanceBetween({ x: defender.x, y: defender.y }, this.actualImpactCoords);
                 const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
                 const potentialDamage = this.bombPayload.strengthA / (effectiveDistance * effectiveDistance);
 
@@ -327,19 +210,18 @@ export default class Striker {
         }
 
         // Process Enemies (Collateral Damage for Real Strikes)
-        if (this.isRealStrike && enemiesToProcess) { // Check if enemiesToProcess is not null/undefined
+        if (this.isRealStrike && enemiesToProcess) { 
             for (const enemy of enemiesToProcess) {
-                 if (!enemy || enemy.isDead) { // Basic check for valid enemy object and not dead
+                 if (!enemy || enemy.isDead) { 
                     continue;
                 }
-                // Ensure enemy has position (via getCurrentPosition or x,y) and hit method
                 const enemyPos = enemy.getCurrentPosition ? enemy.getCurrentPosition() : (typeof enemy.x === 'number' && typeof enemy.y === 'number' ? { x: enemy.x, y: enemy.y } : null);
                 if (!enemyPos || typeof enemy.hit !== 'function') {
                     console.warn("Striker: Skipping enemy due to missing position or hit method.", enemy);
                     continue;
                 }
 
-                const dist = distanceBetween(enemyPos, actualImpactCoords);
+                const dist = distanceBetween(enemyPos, this.actualImpactCoords); 
                 const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
                 const potentialDamage = this.bombPayload.strengthA / (effectiveDistance * effectiveDistance);
 
@@ -348,9 +230,166 @@ export default class Striker {
                 }
             }
         }
+        // --- END Apply Damage ---
         
-        // console.log(`Striker._executeStrikeInternal: Calculated totalDeltaRFromDefenders: ${totalDeltaRFromDefenders}`);
         return totalDeltaRFromDefenders;
+    }
+
+    // --- ADDED: Plan II.4.b - Orchestration Method Shell ---
+    async _orchestrateStrikeSequence() {
+        // 1. Play shadow animation and wait for it. Uses INTENDED target Y.
+        //    Handle cases where shadow animation might not be available or fails.
+        if (this.strikerShadow && this.strikerShadow.texture && this.strikerShadow.config) {
+            try {
+                await this._playShadowAnimation(this.targetCoords.y);
+            } catch (shadowError) {
+                console.warn("Striker: Shadow animation failed, proceeding without it.", shadowError);
+            }
+        }
+
+        // 2. Wait for the configured delay (or default if not set).
+        let delayMs = 1000; // Default delay
+        if (this.strikerShadow && this.strikerShadow.config && typeof this.strikerShadow.config.shadowToBombDelayMs === 'number' && this.strikerShadow.config.shadowToBombDelayMs >= 0) {
+            delayMs = this.strikerShadow.config.shadowToBombDelayMs;
+        } else if (this.strikerShadow && this.strikerShadow.config && (typeof this.strikerShadow.config.shadowToBombDelayMs !== 'number' || this.strikerShadow.config.shadowToBombDelayMs < 0)){
+            console.warn(`Striker: Invalid shadowToBombDelayMs (${this.strikerShadow.config.shadowToBombDelayMs}) in config. Using default ${delayMs}ms.`);
+        }
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+
+        // 3. Call _executeStrikeInternal. This will now:
+        //    - Internally call _calculateImpactCoordinates() and store result in this.actualImpactCoords.
+        //    - Perform damage calculation using this.actualImpactCoords.
+        //    - Trigger the explosion animation via _playExplosionAnimation(this.actualImpactCoords).
+        //    - Return the total damage dealt.
+        this._damageDealtR = await this._executeStrikeInternal();
+
+        return this._damageDealtR; // Return the calculated damage.
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Plan II.2 - Shadow Animation ---
+    async _playShadowAnimation(targetY) {
+        return new Promise((resolve, reject) => {
+            if (!this.strikerShadow || !this.strikerShadow.texture || !this.strikerShadow.config || !this.gameInstance || !this.gameInstance.app || !this.gameInstance.effectsLayer) {
+                console.warn("Striker: Missing data for shadow animation (shadow config, texture, gameInstance, app, or effectsLayer). Skipping shadow.");
+                resolve(); // Resolve immediately if no shadow can be played
+                return;
+            }
+
+            const shadowConfig = this.strikerShadow.config;
+            const shadowSprite = new PIXI.Sprite(this.strikerShadow.texture);
+
+            shadowSprite.anchor.set(0.5, 0.5);
+            shadowSprite.alpha = shadowConfig.alpha;
+            shadowSprite.scale.set(shadowConfig.scale);
+            shadowSprite.y = targetY;
+
+            // Ensure sprite width is determined after texture and scale are set for accurate initial positioning
+            const initialX = -shadowConfig.scale * shadowSprite.width / 2; 
+            shadowSprite.x = initialX;
+
+            this.gameInstance.effectsLayer.addChild(shadowSprite);
+
+            const mapWidth = this.gameInstance.app.screen.width; // Use app screen width as map width
+            const totalDistance = mapWidth + (shadowConfig.scale * shadowSprite.width); // Sprite needs to go fully off-screen
+            const animationSpeedPixelsPerSec = shadowConfig.animationSpeed;
+
+            if (animationSpeedPixelsPerSec <= 0) {
+                console.warn("Striker: Shadow animationSpeed is zero or negative. Skipping animation logic.");
+                // Clean up immediately if speed is invalid, sprite is already added
+                if (shadowSprite.parent) {
+                    shadowSprite.parent.removeChild(shadowSprite);
+                }
+                shadowSprite.destroy({ children: true, texture: false, baseTexture: false });
+                resolve();
+                return;
+            }
+
+            const durationMs = (totalDistance / animationSpeedPixelsPerSec) * 1000;
+            let startTime = null;
+
+            const tickerFunction = (ticker) => {
+                if (!startTime) {
+                    startTime = ticker.lastTime; // Use ticker's lastTime on first frame for consistency
+                }
+
+                const elapsedTime = ticker.lastTime - startTime;
+                const progress = Math.min(elapsedTime / durationMs, 1);
+                
+                shadowSprite.x = initialX + (totalDistance * progress);
+
+                if (progress >= 1) {
+                    this.gameInstance.app.ticker.remove(tickerFunction);
+                    if (shadowSprite.parent) {
+                        shadowSprite.parent.removeChild(shadowSprite);
+                    }
+                    shadowSprite.destroy({ children: true, texture: false, baseTexture: false });
+                    resolve();
+                }
+            };
+
+            this.gameInstance.app.ticker.add(tickerFunction);
+        });
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Plan II.3 - Explosion Animation ---
+    _playExplosionAnimation(impactCoords) {
+        if (!this.bombPayload || !this.bombPayload.explosionAnimation || !this.bombPayload.explosionAnimation.textures || this.bombPayload.explosionAnimation.textures.length === 0) {
+            console.warn("Striker: Missing data for explosion animation (payload, animation data, or textures). Skipping explosion.");
+            return;
+        }
+        if (!this.gameInstance || !this.gameInstance.groundLayer) {
+            console.warn("Striker: Missing gameInstance or groundLayer. Skipping explosion.");
+            return;
+        }
+        if (!impactCoords || typeof impactCoords.x !== 'number' || typeof impactCoords.y !== 'number') {
+            console.warn("Striker: Invalid impactCoords for explosion. Skipping explosion.", impactCoords);
+            return;
+        }
+
+        const animData = this.bombPayload.explosionAnimation;
+        const explosionSprite = new PIXI.AnimatedSprite(animData.textures);
+
+        // Calculate animationSpeed for PIXI.AnimatedSprite
+        // PIXI.AnimatedSprite.animationSpeed is a multiplier of Ticker.deltaMS (or a replacement for Ticker.speed if > 0)
+        // If animData.frameDurationMs is, e.g., 50ms, we want 1 frame per 50ms.
+        // If ticker runs at 60FPS, deltaTime is approx 16.67ms.
+        // Speed = desired_frame_duration / typical_ticker_delta_time_ms. This is not quite right.
+        // animationSpeed is frames per Ticker.deltaMS * Ticker.speed. Or frames per tick if Ticker.speed = 1.
+        // If we want N frames per second: animationSpeed = N / 60 (assuming 60FPS ticker update rate).
+        // If frameDurationMs is 50ms, then we want 1000/50 = 20 FPS for the animation.
+        // So, animationSpeed = (1000 / animData.frameDurationMs) / 60.0; (This was from plan)
+        // Let's test with this. PIXI docs say: "The speed that the AnimatedSprite will play at. Higher is faster, lower is slower."
+        // And default is 1. If animData.frameDurationMs is the duration of one frame, then fps = 1000/frameDurationMs.
+        // AnimatedSprite.animationSpeed seems to relate to how many animation frames to play per game frame. 
+        // If ticker is 60fps, animationSpeed = 1 means 1 animation frame per game frame (very fast if many animation frames).
+        // A better way: time between frames = animData.frameDurationMs. 
+        // PIXI.AnimatedSprite.animationSpeed = 1 / (frames_per_animation_frame_update * Ticker.targetFPMS)
+        // Let's try the plan's formula first and adjust if needed. Typical Ticker update is about 16.67ms (60FPS).
+        if (animData.frameDurationMs > 0) {
+            explosionSprite.animationSpeed = (1000 / animData.frameDurationMs) / (this.gameInstance.app?.ticker?.FPS || 60); // Normalize against actual FPS if possible
+        } else {
+            explosionSprite.animationSpeed = 1; // Default speed if frameDuration is 0 or invalid
+        }
+        
+        explosionSprite.loop = false;
+        explosionSprite.anchor.set(animData.anchorX, animData.anchorY);
+        explosionSprite.scale.set(animData.scale);
+        explosionSprite.position.set(impactCoords.x, impactCoords.y);
+        explosionSprite.zIndex = impactCoords.y; // For sorting on groundLayer if sortableChildren is true
+
+        this.gameInstance.groundLayer.addChild(explosionSprite);
+
+        explosionSprite.onComplete = () => {
+            if (explosionSprite.parent) {
+                explosionSprite.parent.removeChild(explosionSprite);
+            }
+            // Do not destroy base textures if they are shared.
+            explosionSprite.destroy({ children: true, texture: false, baseTexture: false });
+        };
+
+        explosionSprite.play();
     }
     // --- END ADDED ---
 } 

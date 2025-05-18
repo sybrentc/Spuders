@@ -73,7 +73,9 @@ export default class Game {
         this.placementPreviewGraphic = new Graphics(); // ADDED: For placement preview
         this.placementPreviewGraphic.visible = false; // ADDED: Start hidden
         this.groundLayer = new Container(); // MODIFIED: Use imported Container
+        this.groundLayer.sortableChildren = true; // <-- ADDED
         this.puddleLayer = new Container(); // ADDED: For puddle effects
+        this.effectsLayer = new Container(); // ADDED: For general effects like shadows
     }
     
     // --- ADD methods for placement preview --- 
@@ -247,10 +249,10 @@ export default class Game {
                 backgroundSprite.height = this.app.screen.height;
                 this.app.stage.addChild(backgroundSprite);
                 // Ensure groundLayer is added before placementPreviewGraphic for correct layering
-                this.app.stage.addChild(this.puddleLayer); // ADDED: Add puddleLayer first
-                this.app.stage.addChild(this.groundLayer); 
-                this.groundLayer.sortableChildren = true; 
-                this.app.stage.addChild(this.placementPreviewGraphic); 
+                this.app.stage.addChild(this.puddleLayer);     // Puddles beneath entities
+                this.app.stage.addChild(this.groundLayer);     // Main game entities (defenders, enemies, base)
+                this.app.stage.addChild(this.effectsLayer);  // NEW: For shadows, non-sorted explosions, etc.
+                this.app.stage.addChild(this.placementPreviewGraphic); // UI like placement preview on top
             }
 
             // *** Load Path Coverage Data AFTER loadLevel sets the path ***
