@@ -743,7 +743,7 @@ export default class StrikeManager {
         // --- REMOVED Old Time-Based Delta R Calculation --- 
         // The old logic based on effectiveDurationSec, Rn0_forCompletedWave, and dn_forCompletedWave is now gone.
         // this.totalAccumulatedTargetDamageR was the old property being updated here.
-        // --- END REMOVED --- 
+        // --- END REMOVED ---
 
         // console.log(`StrikeManager.finalizeWaveDamage: Wave ${waveNumber} finalized. totalTargetDestructionR is now ${this.totalTargetDestructionR.toFixed(2)}.`);
     }
@@ -755,7 +755,7 @@ export default class StrikeManager {
      * @param {object} impactCoords - The {x, y} coordinates for the bomb's impact.
      * @returns {number} The Delta R (damage dealt to defenders) from this bomb, or 0 if failed.
      */
-    async dispatchStriker(targetCoords, strikeContext) {
+    async dispatchStriker(targetCoords) {
         if (!this.isConfigLoaded()) {
             console.error("StrikeManager.dispatchStriker: Config not loaded. Cannot dispatch striker.");
             return Promise.reject("Config not loaded");
@@ -771,9 +771,7 @@ export default class StrikeManager {
             // The Striker constructor was updated to allow null for strikerShadow, so this should be fine but log a warning.
         }
 
-        // const striker = new Striker(this.bombPayload, targetCoords, strikeContext);
-        // NEW CALL with gameInstance and strikerShadowData:
-        const striker = new Striker(this.game, this.strikerShadowData, this.bombPayload, targetCoords, strikeContext);
+        const striker = new Striker(this.game, this.strikerShadowData, this.bombPayload, targetCoords, this.game);
 
         // Striker's constructor will set up and start an async operation.
         // It needs to expose: 
@@ -815,6 +813,14 @@ export default class StrikeManager {
             console.error("StrikeManager.dispatchStriker: Striker could not be initialized successfully.");
             return 0; 
         }
+
+        striker.isStrikeOperationComplete = false; // Initialize completion flag
+        striker.completionPromise.finally(() => {
+            striker.isStrikeOperationComplete = true;
+        });
+
+        // Add the successfully initialized striker to the array to be managed
+        this.strikers.push(striker);
 
         try {
             // striker.completionPromise is a property/getter on the Striker instance,
@@ -948,8 +954,8 @@ export default class StrikeManager {
             //console.log(`StrikeManager.strike(): Optimal target found at (${targetCoords.x.toFixed(1)}, ${targetCoords.y.toFixed(1)}). Dispatching striker...`);
             try {
                 // dispatchStriker is async and returns a promise that resolves with damageDealtR
-                const deltaR = await this.dispatchStriker(targetCoords, this.game);
-                console.log(`StrikeManager.strike(): Strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
+                const deltaR = await this.dispatchStriker(targetCoords); // Pass only targetCoords
+                //console.log(`StrikeManager.strike(): Strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
                 
                 // --- MODIFIED: Update average bomb damage trackers with new formula ---
                 if (typeof deltaR === 'number' && deltaR >= 0) { 
@@ -1121,9 +1127,7 @@ export default class StrikeManager {
         // Update existing strikers
         for (let i = this.strikers.length - 1; i >= 0; i--) {
             const striker = this.strikers[i];
-            striker.update(deltaTime);
-            if (striker.isDone()) {
-                striker.destroy(); // Ensure Pixi objects are cleaned up
+            if (striker.isStrikeOperationComplete) {
                 this.strikers.splice(i, 1);
             }
         }
@@ -1148,6 +1152,16 @@ export default class StrikeManager {
         } else if (this.renderHeatmapDebug) {
             // Attempt to re-initialize if it failed before and debug flag is on
             this._initializeHeatmapPixiObjects();
+        }
+        // --- END ADDED ---
+
+        // --- ADDED: Automated Strike Logic ---
+        if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0) {
+            const outstandingDamage = this.getOutstandingTargetDamageR();
+            const averageDamage = this.getAverageBombDamageR();
+            if (averageDamage > 0 && outstandingDamage >= averageDamage) {
+                this.strike().catch(error => console.error("Automated strike failed:", error));
+            }
         }
         // --- END ADDED ---
     }
