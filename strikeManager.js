@@ -44,7 +44,7 @@ export default class StrikeManager {
         this.Rn_at_wave_start = 0;                  // I.3
         this.Rn_at_last_bounty_checkpoint = 0;      // I.4
         this.bountyCollectedSinceLastCheckpoint = 0;// I.5
-        this.bountyUpdateThreshold_B_star = null;   // I.6
+        this.bountyUpdateThreshold_B_star = Infinity;   // I.6
         this.totalBountyForCurrentWave_Bn = 0;      // I.7
         this.projectedDurationCurrentWave_Tn = 0;   // I.8
         // --- END NEW PROPERTIES ---
@@ -79,7 +79,6 @@ export default class StrikeManager {
         // --- END ADDED ---
 
         // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
-        this.bombCost = null; // Store for potential future use
         this.targetDamageUpdatePoints = null; // Store for potential future use
         // --- END ADDED ---
 
@@ -92,6 +91,18 @@ export default class StrikeManager {
         this.heatmapDrawingGraphic = new PIXI.Graphics(); // Off-screen graphic for drawing
         this.heatmapRenderTexture = null; // Will be initialized in _initializeHeatmapPixiObjects
         this.heatmapSprite = null;        // Sprite to display the render texture, added to stage
+        // --- END ADDED ---
+
+        // --- ADDED: Properties for Average Bomb Damage Tracking ---
+        this.cumulativeBombDamageDealtByStrikesR = 0;
+        // --- END ADDED ---
+
+        // --- MODIFIED: Property for the new averaging method ---
+        this.averageBombDamageR = null; // Initialize to null for seeding logic
+        // --- END MODIFIED ---
+
+        // --- ADDED: Property for seed value ---
+        this.seedAverageBombDeltaR = 0; // Will be loaded from config
         // --- END ADDED ---
     }
 
@@ -107,12 +118,21 @@ export default class StrikeManager {
             if (config.targetMaxWipeoutRadiusPercent === undefined || !config.zBufferResolution || !config.stampMapResolution) {
                 throw new Error("Strike config file is missing required fields (targetMaxWipeoutRadiusPercent, zBufferResolution, stampMapResolution).");
             }
-            if (typeof config.bombCost !== 'number' || config.bombCost <= 0) {
-                throw new Error("Strike config file is missing required field 'bombCost' or it's invalid (must be a positive number).");
+            if (typeof config.empiricalAverageBombDeltaR !== 'number' || config.empiricalAverageBombDeltaR < 0) {
+                console.warn("StrikeManager: empiricalAverageBombDeltaR missing or invalid in strike.json. Seeding for average bomb R will default to 0.");
+                this.seedAverageBombDeltaR = 0;
+            } else {
+                this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR;
             }
+
             if (typeof config.targetDamageUpdatePoints !== 'number' || config.targetDamageUpdatePoints <= 0) {
                 throw new Error("Strike config file is missing required field 'targetDamageUpdatePoints' or it's invalid (must be a positive number).");
             }
+            this.targetDamageUpdatePoints = config.targetDamageUpdatePoints; 
+
+            // Initialize bountyUpdateThreshold_B_star to a safe default. It will be calculated later.
+            this.bountyUpdateThreshold_B_star = Infinity; 
+
             if (config.targetMaxWipeoutRadiusPercent <= 0 || config.targetMaxWipeoutRadiusPercent > 1) {
                  console.warn(`StrikeManager: targetMaxWipeoutRadiusPercent (${config.targetMaxWipeoutRadiusPercent}) should be between 0 and 1. Clamping or using as is? Using as is for now.`);
             }
@@ -159,17 +179,16 @@ export default class StrikeManager {
             this.stampMapResolution = config.stampMapResolution;
             this.bombStrengthA = null; // Explicitly null, calculated later
 
-            // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
-            this.bombCost = config.bombCost; // Store for potential future use
-            this.targetDamageUpdatePoints = config.targetDamageUpdatePoints; // Store for potential future use
-            this.bountyUpdateThreshold_B_star = this.bombCost / this.targetDamageUpdatePoints;
-            if (!isFinite(this.bountyUpdateThreshold_B_star) || this.bountyUpdateThreshold_B_star <= 0) {
-                console.error(`StrikeManager: Calculated bountyUpdateThreshold_B_star is invalid (${this.bountyUpdateThreshold_B_star}). Check bombCost and targetDamageUpdatePoints in strike.json.`);
-                // Potentially throw an error or set a default, for now, logging error and proceeding with potentially problematic value
-            } else {
-                // console.log(`StrikeManager: bountyUpdateThreshold_B_star calculated to ${this.bountyUpdateThreshold_B_star}`);
+            // --- MODIFIED: Seeding logic for averageBombDamageR ---
+            if (this.averageBombDamageR === null) { // Seed only if it hasn't been set yet
+                // Seeding now uses the pre-loaded empiricalAverageBombDeltaR
+                this.averageBombDamageR = this.seedAverageBombDeltaR;
+                // console.log(`StrikeManager: Average bomb Delta R seeded to ${this.averageBombDamageR.toFixed(4)} from empiricalAverageBombDeltaR.`);
+                
+                // REMOVED: Call to _updateBountyThreshold() here. It will be called by Game.startGame() via initializeBountyThreshold().
+                // this._updateBountyThreshold(); 
             }
-            // --- END ADDED ---
+            // --- END MODIFIED ---
 
             // --- ADDED: Load and calculate impact deviation --- 
             if (typeof config.impactStdDevPercentWidth !== 'number' || config.impactStdDevPercentWidth < 0) {
@@ -265,7 +284,6 @@ export default class StrikeManager {
         this.bombStrengthA = Math.max(0, calculatedA); 
 
         this._tryAssembleBombPayload(); 
-
     }
     // --- END ADDED ---
 
@@ -926,13 +944,23 @@ export default class StrikeManager {
                 const deltaR = await this.dispatchStriker(targetCoords, this.game);
                 console.log(`StrikeManager.strike(): Strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
                 
-                // If you need to update the totalBombDamageDealtR for real strikes, this is where it would happen
-                // (though the plan moved this responsibility outside dispatchStriker)
-                // For this test function, we're just logging.
-                // if (typeof deltaR === 'number' && deltaR > 0) {
-                //     this.totalBombDamageDealtR += deltaR;
-                //     console.log(`   Updated totalBombDamageDealtR: ${this.totalBombDamageDealtR.toFixed(4)}`);
-                // }
+                // --- MODIFIED: Update average bomb damage trackers with new formula ---
+                if (typeof deltaR === 'number' && deltaR >= 0) { 
+                    if (this.averageBombDamageR === null) {
+                        this.averageBombDamageR = deltaR; // First strike sets the average if not seeded
+                    } else {
+                        this.averageBombDamageR = (this.averageBombDamageR + deltaR) / 2;
+                    }
+                    // console.log(`StrikeManager.strike(): Updated averageBombDamageR: ${this.averageBombDamageR.toFixed(2)}`);
+                    
+                    // Update cumulativeBombDamageDealtByStrikesR (still needed for Outstanding Target Damage)
+                    this.cumulativeBombDamageDealtByStrikesR += deltaR;
+                    // console.log(`StrikeManager.strike(): Updated cumulativeBombDamageDealtByStrikesR: ${this.cumulativeBombDamageDealtByStrikesR.toFixed(2)}`);
+
+                    // After updating average, update the bounty threshold (this is for ongoing updates)
+                    this._updateBountyThreshold();
+                }
+                // --- END MODIFIED ---
 
             } catch (error) {
                 console.error("StrikeManager.strike(): Error during dispatchStriker or strike execution:", error);
@@ -1000,6 +1028,12 @@ export default class StrikeManager {
             // console.log(`StrikeManager.recordBountyEarned: Remaining collected bounty: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}`);
         }
     }
+
+    // --- MODIFIED: Getter for Average Bomb Damage ---
+    getAverageBombDamageR() {
+        return this.averageBombDamageR === null ? 0 : this.averageBombDamageR;
+    }
+    // --- END MODIFIED ---
 
     // --- ADDED: Heatmap Pixi Object Initialization ---
     _initializeHeatmapPixiObjects() {
@@ -1136,4 +1170,57 @@ export default class StrikeManager {
 
         // console.log("StrikeManager destroyed.");
     }
+
+    // --- ADDED: Getter for Outstanding Target Damage R ---
+    getOutstandingTargetDamageR() {
+        const outstandingDamage = this.getCumulativeTargetDamageR() - this.cumulativeBombDamageDealtByStrikesR;
+        return outstandingDamage;
+    }
+    // --- END ADDED ---
+
+    // --- NEW METHOD: To be called by Game when it's ready for initial B* calculation ---
+    initializeBountyThreshold() {
+        // console.log("StrikeManager: initializeBountyThreshold called by Game.");
+        this._updateBountyThreshold();
+    }
+    // --- END NEW METHOD ---
+
+    // --- NEW METHOD: _updateBountyThreshold (Plan II.5 related, but for B*) ---
+    /**
+     * Calculates and updates bountyUpdateThreshold_B_star based on current alpha and averageBombDamageR.
+     * B* = (alpha * averageBombDamageR) / targetDamageUpdatePoints
+     * @private
+     */
+    _updateBountyThreshold() {
+        if (!this.game || typeof this.game.getAlpha !== 'function' || this.averageBombDamageR === null || typeof this.averageBombDamageR !== 'number' || this.targetDamageUpdatePoints === null || this.targetDamageUpdatePoints <= 0) {
+            // console.warn("StrikeManager._updateBountyThreshold: Conditions not met for calculation (game, alpha, avgR, or targetDamageUpdatePoints invalid). Setting B* to Infinity.");
+            this.bountyUpdateThreshold_B_star = Infinity;
+            return;
+        }
+
+        const alpha = this.game.getAlpha();
+
+        if (alpha === null || typeof alpha !== 'number' || alpha <= 0 || this.averageBombDamageR < 0) {
+            // console.warn(`StrikeManager._updateBountyThreshold: Alpha (${alpha}) or averageBombDamageR (${this.averageBombDamageR}) is invalid for B* calculation. Setting B* to Infinity.`);
+            this.bountyUpdateThreshold_B_star = Infinity;
+            return;
+        }
+
+        // If averageBombDamageR is 0, B* will be 0. This causes an infinite loop in recordBountyEarned.
+        // So, if the numerator (alpha * averageBombDamageR) is 0, B* should be Infinity.
+        const numerator = alpha * this.averageBombDamageR;
+        if (numerator === 0) {
+            this.bountyUpdateThreshold_B_star = Infinity;
+        } else {
+            this.bountyUpdateThreshold_B_star = numerator / this.targetDamageUpdatePoints;
+        }
+
+        if (!isFinite(this.bountyUpdateThreshold_B_star) || this.bountyUpdateThreshold_B_star < 0) {
+            // console.error(`StrikeManager: Calculated bountyUpdateThreshold_B_star is invalid (${this.bountyUpdateThreshold_B_star}). Setting to Infinity.`);
+            this.bountyUpdateThreshold_B_star = Infinity;
+        } else {
+            // console.log(`StrikeManager: bountyUpdateThreshold_B_star updated to ${this.bountyUpdateThreshold_B_star.toFixed(4)} (alpha: ${alpha.toFixed(4)}, avgR: ${this.averageBombDamageR.toFixed(4)}, updPoints: ${this.targetDamageUpdatePoints})`);
+        }
+    }
+    // --- END NEW METHOD ---
 } 

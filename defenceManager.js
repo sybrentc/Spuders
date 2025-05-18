@@ -569,7 +569,20 @@ export default class DefenceManager extends EventTarget {
             def.stats.wearEnabled = wearIsEnabled;
             
             const Ri = Ci / effective_alpha;
-            def.stats.maxHp = Math.max(1, Ri); // Ensure maxHp is at least 1
+            // def.stats.maxHp = Math.max(1, Ri); // Old logic
+
+            // New logic for maxHp determination
+            if (Ri > 0) {
+                def.stats.maxHp = Ri;
+            } else {
+                // Defender has no (or negative) earning rate. Rely on scaledHP.
+                if (typeof def.stats.scaledHP === 'number' && def.stats.scaledHP > 0) {
+                    def.stats.maxHp = def.stats.scaledHP;
+                } else {
+                    // Ri is <= 0 AND scaledHP is not a valid positive number.
+                    throw new Error(`Defender ${defenceId} (cost: ${Ci.toFixed(2)}, alpha: ${effective_alpha.toFixed(4)} => Ri: ${Ri.toFixed(4)}) has Ri <= 0 and no valid 'scaledHP' configured in stats. Cannot determine maxHp.`);
+                }
+            }
             
             let k_theoretical = Infinity;
             if (wearIsEnabled) {

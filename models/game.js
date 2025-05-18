@@ -1102,6 +1102,13 @@ export default class Game {
             this.waveManager.start();
         }
         // --- END ADDED ---
+
+        // --- ADDED: Initialize StrikeManager's bounty threshold now that game is starting and alpha is set ---
+        if (this.strikeManager && typeof this.strikeManager.initializeBountyThreshold === 'function') {
+            // console.log("Game.startGame(): Calling strikeManager.initializeBountyThreshold()");
+            this.strikeManager.initializeBountyThreshold();
+        }
+        // --- END ADDED ---
     }
 
     /**

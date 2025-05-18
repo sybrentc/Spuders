@@ -1,6 +1,6 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
-  "bombCost": 15000,
+  "empiricalAverageBombDeltaR": 5,
   "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,

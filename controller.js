@@ -308,11 +308,12 @@ class Controller {
 
         // Update Target Damage Display
         if (this.gameInstance.strikeManager) {
-            const timestamp = performance.now();
-            const targetDeltaR = this.gameInstance.strikeManager.getCumulativeTargetDamageR(timestamp);
-            this.targetDamageDisplay.textContent = `Target ΔR: ${targetDeltaR.toFixed(2)}`;
+            const outstandingTargetDamage = this.gameInstance.strikeManager.getOutstandingTargetDamageR();
+            const avgBombDamage = this.gameInstance.strikeManager.getAverageBombDamageR();
+
+            this.targetDamageDisplay.innerHTML = `Outstanding ΔR: ${outstandingTargetDamage.toFixed(2)}<br>Avg Bomb ΔR: ${avgBombDamage.toFixed(2)}`;
         } else {
-            this.targetDamageDisplay.textContent = `Target ΔR: N/A`;
+            this.targetDamageDisplay.textContent = `N/A`;
         }
 
         // Update Button Affordability AND Price Text
