@@ -180,17 +180,6 @@ body {
     /* padding: 5px; */
 }
 
-/* --- ADDED: Styles for Target Delta R Display --- */
-#targetDamageDisplay {
-    position: absolute; /* Position relative to its containing element (uiOverlay or gameContainer) */
-    bottom: 10px;       /* Distance from the bottom */
-    left: 10px;         /* Distance from the left */
-    font-size: 0.9em;   /* Slightly smaller font size */
-    color: white;     /* White text */
-    /* Text shadow is now inherited from #uiOverlay */
-}
-/* --- END ADDED --- */
-
 /* --- NEW: Overlay Styles --- */
 .overlay {
     position: fixed; /* Cover the whole viewport */

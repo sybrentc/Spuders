@@ -15,7 +15,6 @@ class Controller {
         this.difficultyButtons = null;
         this.fundsDisplay = null;
         this.waveInfoDisplay = null;
-        this.targetDamageDisplay = null;
         this.defenceMenuElement = null;
         this.gameCanvas = null;
     }
@@ -29,24 +28,23 @@ class Controller {
         this.difficultyButtons = document.querySelectorAll('.difficulty-button');
         this.fundsDisplay = document.getElementById('fundsDisplay');
         this.waveInfoDisplay = document.getElementById('waveInfoDisplay');
-        this.targetDamageDisplay = document.getElementById('targetDamageDisplay');
         this.defenceMenuElement = document.getElementById('defenceMenu');
         this.gameCanvas = this.gameInstance.app?.canvas;
 
-        // Basic validation
-        if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement /*|| !this.gameCanvas*/) {
-            // Temporarily remove gameCanvas from this check as it might not exist if gameInstance.app is not ready
-            // Or, ensure gameInstance is fully initialized (including app) before controller initializes.
-            // For now, let's assume gameInstance.app will be ready.
-            if (!this.gameCanvas) {
-                 console.warn("Controller Initialize: PixiJS game canvas (gameInstance.app.canvas) not found yet!");
-                 // Decide if this is fatal or if listeners can be set up later.
-                 // For now, we will let it proceed, but listeners might fail if canvas is null.
-            }
-            if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.defenceMenuElement) {
-                 console.error("Controller Initialize: One or more required UI elements not found!");
-                 return; // Stop initialization if critical UI elements are missing
-            }
+        // Debugging: Log the retrieved elements
+        // console.log(`Retrieved elements: overlay=${!!this.overlay}, popupTitle=${!!this.popupTitle}, buttons=${this.difficultyButtons.length}, funds=${!!this.fundsDisplay}, waveInfo=${!!this.waveInfoDisplay}, targetDamage=${!!this.targetDamageDisplay}, defenceMenu=${!!this.defenceMenuElement}`);
+
+        if (!this.overlay || !this.popupTitle || !this.difficultyButtons || !this.fundsDisplay || !this.waveInfoDisplay /* || !this.targetDamageDisplay */ || !this.defenceMenuElement /*|| !this.gameCanvas*/) {
+            console.error("UI elements not found at initUI!", {
+                overlay: !!this.overlay,
+                popupTitle: !!this.popupTitle,
+                buttons: this.difficultyButtons.length,
+                fundsDisplay: !!this.fundsDisplay,
+                waveInfoDisplay: !!this.waveInfoDisplay,
+                defenceMenuElement: !!this.defenceMenuElement
+                // gameCanvas: !!this.gameCanvas // Not yet assigned from gameInstance
+            });
+            return; // Abort if critical elements are missing
         }
 
         // --- Add Event Listeners ---
@@ -282,7 +280,7 @@ class Controller {
     // UI Update Method (called by Game loop)
     updateUI() {
         // Guard clauses for necessary components
-        if (!this.gameInstance || !this.gameInstance.base || !this.gameInstance.waveManager || !this.fundsDisplay || !this.waveInfoDisplay || !this.targetDamageDisplay || !this.gameInstance.priceManager || !this.defenceMenuElement) {
+        if (!this.gameInstance || !this.gameInstance.base || !this.gameInstance.waveManager || !this.fundsDisplay || !this.waveInfoDisplay || !this.gameInstance.priceManager || !this.defenceMenuElement) {
             // Optional: Log warning if called too early
             // console.warn("updateUI called before controller/game fully initialized.");
            return;
@@ -305,16 +303,6 @@ class Controller {
             waveText = "Get Ready!";
         }
         this.waveInfoDisplay.textContent = waveText;
-
-        // Update Target Damage Display
-        if (this.gameInstance.strikeManager) {
-            const outstandingTargetDamage = this.gameInstance.strikeManager.getOutstandingTargetDamageR();
-            const avgBombDamage = this.gameInstance.strikeManager.getAverageBombDamageR();
-
-            this.targetDamageDisplay.innerHTML = `Outstanding ΔR: ${outstandingTargetDamage.toFixed(2)}<br>Avg Bomb ΔR: ${avgBombDamage.toFixed(2)}`;
-        } else {
-            this.targetDamageDisplay.textContent = `N/A`;
-        }
 
         // Update Button Affordability AND Price Text
         const currentFunds = this.gameInstance.base.currentFunds;
