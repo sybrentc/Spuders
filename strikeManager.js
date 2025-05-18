@@ -104,6 +104,8 @@ export default class StrikeManager {
         // --- ADDED: Property for seed value ---
         this.seedAverageBombDeltaR = 0; // Will be loaded from config
         // --- END ADDED ---
+
+        this.minWearDecrementForPayload = 0; // Initialize for bomb payload
     }
 
     async loadConfig(mapWidth, mapHeight, path = 'public/assets/strike.json') {
@@ -254,6 +256,7 @@ export default class StrikeManager {
         }
         if (!this.defenceManager.isLoaded) {
              console.warn("StrikeManager.calculateBombStrength: DefenceManager definitions not loaded yet. Skipping calculation. bombStrengthA remains null.");
+             this.minWearDecrementForPayload = 0; // Ensure it's reset if definitions not loaded
              this._tryAssembleBombPayload();
              return;
         }
@@ -271,10 +274,13 @@ export default class StrikeManager {
 
         if (!isFinite(minWearDecrement)) {
             console.error("StrikeManager.calculateBombStrength: Could not find a valid minimum non-zero wear decrement. Cannot calculate Bomb Strength A. Ensure wear is enabled and calculated for at least one defender.");
-            this.bombStrengthA = 0; 
-            this._tryAssembleBombPayload(); 
+            this.bombStrengthA = 0;
+            this.minWearDecrementForPayload = 0; // Fallback to zero if none found
+            this._tryAssembleBombPayload();
             return;
         }
+
+        this.minWearDecrementForPayload = minWearDecrement; // Store for payload
 
         // Calculate target radius in pixels
         const targetRadiusPx = this.targetMaxWipeoutRadiusPercent * this.mapWidth;
@@ -907,7 +913,8 @@ export default class StrikeManager {
                 strengthA: this.bombStrengthA,
                 impactStdDevPixels: this.impactStdDevPixels,
                 explosionAnimation: this.pixiExplosionAnimationData,
-                shadow: this.strikerShadowData
+                shadow: this.strikerShadowData,
+                minDamageThreshold: this.minWearDecrementForPayload
             };
             // console.log("StrikeManager: bombPayload successfully assembled.", this.bombPayload);
         } else {

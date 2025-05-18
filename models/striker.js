@@ -40,7 +40,8 @@ export default class Striker {
             typeof bombPayload.strengthA !== 'number' ||
             (bombPayload.strengthA < 0) || 
             !bombPayload.explosionAnimation || 
-            typeof bombPayload.impactStdDevPixels !== 'number' || bombPayload.impactStdDevPixels < 0) {
+            typeof bombPayload.impactStdDevPixels !== 'number' || bombPayload.impactStdDevPixels < 0 ||
+            typeof bombPayload.minDamageThreshold !== 'number' || bombPayload.minDamageThreshold < 0 ) {
             console.error("Striker constructor: Invalid bombPayload provided.", bombPayload);
             return; // Initialization failed
         }
@@ -200,7 +201,7 @@ export default class Striker {
                 const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
                 const potentialDamage = this.bombPayload.strengthA / (effectiveDistance * effectiveDistance);
 
-                if (potentialDamage > 0) {
+                if (potentialDamage >= (this.bombPayload.minDamageThreshold ?? 0)) {
                     const damageTaken = defender.hit(potentialDamage);
                     if (typeof damageTaken === 'number') {
                         totalDeltaRFromDefenders += damageTaken;
@@ -225,7 +226,7 @@ export default class Striker {
                 const effectiveDistance = Math.max(dist, MIN_EFFECTIVE_DISTANCE);
                 const potentialDamage = this.bombPayload.strengthA / (effectiveDistance * effectiveDistance);
 
-                if (potentialDamage > 0) {
+                if (potentialDamage >= (this.bombPayload.minDamageThreshold ?? 0)) {
                     enemy.hit(potentialDamage);
                 }
             }
@@ -335,6 +336,10 @@ export default class Striker {
 
     // --- ADDED: Plan II.3 - Explosion Animation ---
     _playExplosionAnimation(impactCoords) {
+        // --- ADDED: Trigger screen shake ---
+        this._triggerScreenShake(300, 8, 20); // durationMs, maxOffsetPx, frequencyHz
+        // --- END ADDED ---
+
         if (!this.bombPayload || !this.bombPayload.explosionAnimation || !this.bombPayload.explosionAnimation.textures || this.bombPayload.explosionAnimation.textures.length === 0) {
             console.warn("Striker: Missing data for explosion animation (payload, animation data, or textures). Skipping explosion.");
             return;
@@ -390,6 +395,57 @@ export default class Striker {
         };
 
         explosionSprite.play();
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Screen Shake Effect ---
+    _triggerScreenShake(durationMs, maxOffsetPx, frequencyHz) {
+        const gameContainer = document.getElementById('gameContainer');
+        const defenceMenu = document.getElementById('defenceMenu');
+
+        if (!gameContainer || !defenceMenu) {
+            console.warn("Striker: Could not find 'gameContainer' or 'defenceMenu' for screen shake.");
+            return;
+        }
+
+        const startTime = performance.now();
+
+        function animateShake(currentTime) {
+            const elapsedTimeMs = currentTime - startTime;
+            let progress = elapsedTimeMs / durationMs;
+
+            if (progress >= 1) {
+                progress = 1; // Ensure we end exactly at 0 offset
+            }
+
+            const decayFactor = 1 - progress; // Linear decay
+            // For a more pronounced decay, one could use: Math.pow(1 - progress, 2) or Math.pow(1 - progress, 3)
+            
+            const timeSeconds = elapsedTimeMs / 1000;
+            // Ensure that at the very end (progress = 1), sine wave or not, offset becomes 0 due to decayFactor
+            const currentOffset = progress === 1 ? 0 : maxOffsetPx * decayFactor * Math.sin(2 * Math.PI * frequencyHz * timeSeconds);
+
+            if (gameContainer) {
+                gameContainer.style.transform = `translateX(${currentOffset}px)`;
+            }
+            if (defenceMenu) {
+                defenceMenu.style.transform = `translateX(${currentOffset}px)`;
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(animateShake);
+            } else {
+                // Explicitly clear transform if elements still exist
+                if (gameContainer) {
+                    gameContainer.style.transform = 'translateX(0px)';
+                }
+                if (defenceMenu) {
+                    defenceMenu.style.transform = 'translateX(0px)';
+                }
+            }
+        }
+
+        requestAnimationFrame(animateShake);
     }
     // --- END ADDED ---
 } 
