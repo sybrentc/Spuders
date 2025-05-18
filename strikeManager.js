@@ -948,6 +948,7 @@ export default class StrikeManager {
         }
 
         //console.log("StrikeManager.strike(): Attempting to find optimal target...");
+        this.calculateZBuffer(); // Calculate Z-Buffer before finding target
         const targetCoords = this.findOptimalTarget();
 
         if (targetCoords) {
@@ -1140,6 +1141,7 @@ export default class StrikeManager {
                 }
                 // Assuming calculateZBuffer() is called elsewhere (e.g., in Game.js update or before this manager's update)
                 // and it updates this.zBuffer
+                this.calculateZBuffer(); // Call before updating texture
                 this._updateHeatmapTexture();
             } else {
                 if (this.heatmapSprite.visible) {

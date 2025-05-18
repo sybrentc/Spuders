@@ -773,13 +773,6 @@ export default class Game {
         }
         // --- END ADDED ---
 
-        // --- MOVED: Update StrikeManager Z-Buffer Calculation ---
-        // Moved slightly earlier, but could stay here too.
-        if (this.strikeManager?.isConfigLoaded()) {
-            this.strikeManager.calculateZBuffer(); 
-        }
-        // --- END MOVED ---
-
         // --- ADDED: Update StrikeManager ---
         if (this.strikeManager?.isConfigLoaded()) {
             this.strikeManager.update(timestamp, effectiveDeltaTime);
