@@ -1,40 +1,44 @@
-# Game Reset Plan of Action
+# Game Initialise/Reset Refactor
 
 **Phase 1: Implement `resetForNewGame()` in `strikeManager.js`**
-*(This part of the plan remains the same as it's not covered in `Game.reset()`)*
+0. Move all initialisation logic into an initState() function
+        *   check the following parameters are present inter alia `this.totalTargetDestructionR;`
+        *    `this.cumulativeBombDamageDealtByStrikesR;`
+        *    `this.averageBombDamageR`
+        *   all wave-specific properties (`currentWaveNumber`, `currentWaveStartTime`, `currentWaveStartTotalR`, `currentDn`, `K_current_wave`, `Rn_at_wave_start`, `Rn_at_last_bounty_checkpoint`, `bountyCollectedSinceLastCheckpoint`, `totalBountyForCurrentWave_Bn`, `projectedDurationCurrentWave_Tn`) 
+        *   Call to `this.initializeBountyThreshold();` to recalculate `bountyUpdateThreshold_B_star` with the seeded `averageBombDamageR`?
+        * bounty threshold, etc.?
 1.  Create a `resetForNewGame()` method in `strikeManager.js`.
     *   This method will:
-        *   Reset `this.totalTargetDestructionR = 0;`
-        *   Reset `this.cumulativeBombDamageDealtByStrikesR = 0;`
-        *   Reset `this.averageBombDamageR = this.seedAverageBombDeltaR;` (its configured initial seed value).
-        *   Reset all wave-specific properties (`currentWaveNumber`, `currentWaveStartTime`, `currentWaveStartTotalR`, `currentDn`, `K_current_wave`, `Rn_at_wave_start`, `Rn_at_last_bounty_checkpoint`, `bountyCollectedSinceLastCheckpoint`, `totalBountyForCurrentWave_Bn`, `projectedDurationCurrentWave_Tn`) to their initial zero/null states.
-        *   Call `this.initializeBountyThreshold();` to recalculate `bountyUpdateThreshold_B_star` with the reset `averageBombDamageR`.
         *   Iterate through `this.strikers`, call `destroy()` on each active striker, and then clear the array: `this.strikers = [];`.
+        * call the initState() function
 
 **Phase 2: Implement `resetForNewGame()` in `enemyManager.js`**
-*(This method will handle the detailed cleanup that `Game.reset()` currently omits for enemies)*
+0. Move all initialisation logic into an initState() function
+    * cover inter alia   `this.currentWaveDeathDistances`
+            *   `this.lastDeathInfo`
 1.  Create a `resetForNewGame()` method in `enemyManager.js`.
     *   This method will:
         *   Iterate through all enemies in `this.activeEnemies`. For each `enemy`:
             *   If `enemy.pixiContainer` exists and `enemy.pixiContainer.parent` is not null (i.e., it's on the stage/a layer), remove it: `enemy.pixiContainer.parent.removeChild(enemy.pixiContainer);`. (It's added to `this.game.groundLayer` in `createEnemy`).
             *   Call `enemy.destroyPixiObjects();` to clean up its sprites and health bar.
-        *   After iterating and cleaning up, clear the main array: `this.activeEnemies = [];`.
-        *   Reset other relevant `enemyManager` state:
-            *   `this.currentWaveDeathDistances = [];`
-            *   `this.lastDeathInfo = { distance: null, originalX: null, originalY: null };`
+        *   After iterating and cleaning up, clear the main array: `this.activeEnemies = [];`. But perhaps this is best integrated into initState()
+        *   call initState()
+            
 
 **Phase 3: Implement `resetForNewGame()` in `defenceManager.js`**
-*(This method will handle the detailed cleanup that `Game.reset()` currently omits for defences and their effects like puddles)*
+0. move initialisation logic to initState()
 1.  Create a `resetForNewGame()` method in `defenceManager.js`.
     *   This method will:
         *   Iterate through all defences in `this.activeDefences`. For each `defence`:
             *   If `defence.pixiContainer` exists and `defence.pixiContainer.parent` is not null, remove it: `defence.pixiContainer.parent.removeChild(defence.pixiContainer);`. (It's added to `this.game.groundLayer` in `placeDefence`).
             *   Call `defence.destroyPixiObjects();` to clean up its sprites, health bar, and clear its internal puddle references.
-        *   After iterating and cleaning up, clear the main array: `this.activeDefences = [];`.
+        *   After iterating and cleaning up, clear the main array: `this.activeDefences = [];`. But perhaps this is best integrated into initState()
         *   **Explicit Puddle Layer Cleanup:** To ensure all visual puddle effects are gone (as `DefenceEntity.destroyPixiObjects()` only clears its *references* and individual puddles expire over time), this method should also clear the `game.puddleLayer`:
             *   Check if `this.game && this.game.puddleLayer` exists.
             *   If so, iterate `this.game.puddleLayer.children`, call `destroy()` on each child graphic.
             *   Then call `this.game.puddleLayer.removeChildren();`.
+        * call initState()
 
 **Phase 4: Modify `Game.reset()` in `game.js`**
 *(Integrate the new manager-specific reset methods and ensure PIXI layers are fully cleared)*

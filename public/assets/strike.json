@@ -1,7 +1,7 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
-  "empiricalAverageBombDeltaR": 5,
-  "strikeTriggerBufferScalar": 0.5,
+  "empiricalAverageBombDeltaR": 18,
+  "strikeTriggerBufferScalar": 0.2,
   "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,

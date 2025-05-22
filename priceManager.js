@@ -272,6 +272,18 @@ class PriceManager extends EventTarget {
     }
 
     /**
+     * Resets the PriceManager for a new game.
+     * Clears cached costs and triggers a recalculation.
+     */
+    async resetForNewGame() {
+        // Clear cached costs
+        this.cachedCosts = {};
+        
+        // Recalculate costs with fresh parameters
+        await this.recalculateAndStoreCosts();
+    }
+
+    /**
      * Gets the latest cached costs.
      * @returns {Object<string, number>} The cached costs.
      */

@@ -378,6 +378,14 @@ export default class Game {
             }
             // --- END ADDED ---
 
+            // --- ADDED: Initialize StrikeManager's dependent calculations ---
+            if (this.strikeManager && typeof this.strikeManager.onGameInitialized === 'function') {
+                this.strikeManager.onGameInitialized();
+            } else {
+                console.error("Game Initialize: StrikeManager or onGameInitialized method missing.");
+            }
+            // --- END ADDED ---
+
             // *** NOW Calculate Wear Parameters (Needs Alpha and Costs) ***
             if (this.defenceManager?.isLoaded && this.pathCoverageLoaded && this.priceManager && this.getAlpha() !== null) {
                 await this.defenceManager.calculateWearParameters();
@@ -1028,55 +1036,58 @@ export default class Game {
         // 1. Reset Wave Manager
         if (this.waveManager) {
             this.waveManager.reset(); // Call the manager's own reset method
-            /* // REMOVED manual reset logic
-             this.waveManager.currentWaveNumber = 0;
-             this.waveManager.isFinished = false;
-             this.waveManager.timeUntilNextWave = 0;
-             this.waveManager.activeWaveState = { groups: [] };
-             this.waveManager.waitingForClear = false;
-             this.waveManager.lastAverageDeathDistance = null;
-             this.waveManager.lastDisplayedSeconds = null; 
-             this.waveManager.isStarted = false; 
-            */
         }
 
         // 2. Reset Enemy Manager
-        if (this.enemyManager) {
-            this.enemyManager.activeEnemies = [];
-            this.enemyManager.currentWaveDeathDistances = [];
-            this.enemyManager.lastDeathInfo = { distance: null, originalX: null, originalY: null };
+        if (this.enemyManager && typeof this.enemyManager.resetForNewGame === 'function') {
+            this.enemyManager.resetForNewGame();
         }
 
-        // 3. Reset Defence Manager
-        if (this.defenceManager) {
-            this.defenceManager.activeDefences = [];
-            // TODO: Reset any other state within DefenceManager if needed
+        // 3. Reset Price Manager FIRST (before DefenceManager)
+        if (this.priceManager && typeof this.priceManager.resetForNewGame === 'function') {
+            this.priceManager.resetForNewGame();
         }
 
-        // 4. Reset Base (assuming a reset method exists or will be added)
+        // 4. Reset Defence Manager (after PriceManager)
+        if (this.defenceManager && typeof this.defenceManager.resetForNewGame === 'function') {
+            this.defenceManager.resetForNewGame();
+        }
+
+        // 5. Reset Base
         if (this.base) {
-            // TODO: Implement Base.reset() to restore health/funds
-            // For now, log the intent
-            // console.log("Game: Requesting Base reset (method needs implementation).");
-            // Example if Base.reset exists:
             this.base.reset(); // Call the newly added reset method
         }
 
-        // 5. Reset Game Loop Timer
+        // 6. Reset Strike Manager
+        if (this.strikeManager && typeof this.strikeManager.resetForNewGame === 'function') {
+            this.strikeManager.resetForNewGame();
+        }
+
+        // 7. Reset Game Loop Timer
         this.lastTimestamp = 0;
 
-        // 6. Reset Game Over / Slow-Mo State
+        // 8. Reset Game Over / Slow-Mo State
         this.isGameOver = false;
         this.timeScale = 1.0;
         this.slowMoStartTime = null;
 
-        // 7. IMPORTANT: Need mechanism to restart WaveManager's initial timer
-        // This is handled by Game.startGame() which is called by controller on restart
-        
-        // 8. Recalculate costs/wear based on initial state? (Optional)
-        // Might be good practice to ensure consistency after reset
-        // if (this.priceManager) this.priceManager.recalculateAndStoreCosts();
-        // if (this.defenceManager) this.defenceManager.calculateWearParameters();
+        // 9. Clean up effects layer
+        if (this.effectsLayer) {
+            // Destroy children explicitly if they are not managed elsewhere
+            // and then remove them.
+            this.effectsLayer.children.forEach(child => {
+                if (typeof child.destroy === 'function') {
+                    child.destroy({ children: true, texture: true, baseTexture: true }); // Thorough cleanup
+                }
+            });
+            this.effectsLayer.removeChildren();
+        }
+
+        // Clear placement preview
+        if (this.placementPreviewGraphic) {
+            this.placementPreviewGraphic.clear();
+            this.placementPreviewGraphic.visible = false;
+        }
 
         //console.log("Game: State reset complete.");
     }

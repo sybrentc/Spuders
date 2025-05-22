@@ -1,6 +1,5 @@
 import Enemy from './models/enemy.js'; // EnemyManager needs to know about Enemy
 import * as PIXI from 'pixi.js'; // Import PIXI
-import { Texture, Rectangle } from 'pixi.js';
 import { processSpritesheet } from './utils/dataLoaders.js'; // <-- IMPORT THE UTILITY
 
 // Helper function for distance calculation
@@ -26,20 +25,43 @@ export default class EnemyManager {
         this.base = base;                   
         this.game = game; // Store game instance
 
-        this.enemyTypes = {};       
-        this.enemySprites = {};     
-        this.activeEnemies = [];    
-        this.isLoaded = false;      
-        this.sharedHitSprite = null; // Add property to store the shared hit sprite
-        
-        // --- Data for Average Death Distance Calculation ---
-        this.currentWaveDeathDistances = []; 
-        this.lastDeathInfo = { distance: null, originalX: null, originalY: null }; 
-        // -------------------------------------------------
+        // Initialize static state (data that persists across game resets)
+        this.initStaticState();
+        // Initialize runtime state (data that resets with each game)
+        this.initRuntimeState();
+    }
 
-        // For PixiJS Refactor & Hit Flash
-        this.commonSpiderConfig = null;
-        this.allProcessedTextureArrays = [];
+    /**
+     * Initializes static state variables that persist across game resets.
+     * These are loaded from files and don't change during gameplay.
+     */
+    initStaticState() {
+        // Core data structures for loaded definitions
+        this.enemyTypes = {};       // Stores enemy definitions and calculated values
+        this.enemySprites = {};     // Stores enemy sprites (legacy, may be removable)
+        this.isLoaded = false;      // Flag indicating if data is loaded
+        
+        // Hit sprite and animation data
+        this.sharedHitSprite = null; // Shared hit sprite for all enemies
+        this.commonSpiderConfig = null; // Common configuration for spider animations
+        this.allProcessedTextureArrays = []; // Stores processed texture arrays for animations
+    }
+
+    /**
+     * Initializes runtime state variables that reset with each game.
+     * These are the values that change during gameplay.
+     */
+    initRuntimeState() {
+        // Active gameplay state
+        this.activeEnemies = [];    // Tracks currently active enemy instances
+        
+        // Death tracking data
+        this.currentWaveDeathDistances = []; // Tracks death distances for current wave
+        this.lastDeathInfo = { 
+            distance: null, 
+            originalX: null, 
+            originalY: null 
+        }; // Stores info about the last enemy death
     }
 
     // Method to load initial data (Definitions and Sprites ONLY)
@@ -523,4 +545,29 @@ export default class EnemyManager {
         //console.log("EnemyManager: Finished calculating scaled values.");
     }
     // --- END ADDED ---
+
+    /**
+     * Resets the EnemyManager for a new game.
+     * Cleans up any active enemies and resets runtime state variables.
+     */
+    resetForNewGame() {
+        // Clean up any active enemies
+        if (this.activeEnemies && this.activeEnemies.length > 0) {
+            this.activeEnemies.forEach(enemy => {
+                if (enemy && typeof enemy.destroyPixiObjects === 'function') {
+                    // Remove from stage if it has a container
+                    if (enemy.pixiContainer && this.game?.groundLayer) {
+                        this.game.groundLayer.removeChild(enemy.pixiContainer);
+                    }
+                    enemy.destroyPixiObjects();
+                }
+            });
+        }
+
+        // Reset only runtime state
+        this.initRuntimeState();
+
+        // Recalculate scaled values since they depend on game state
+        this.calculateAndStoreScaledValues();
+    }
 }

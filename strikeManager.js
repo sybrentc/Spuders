@@ -8,106 +8,103 @@ export default class StrikeManager {
             throw new Error("StrikeManager requires a valid Game instance.");
         }
         this.game = game;
-        this.defenceManager = game.defenceManager; // Assuming game has defenceManager
+        this.defenceManager = game.defenceManager;
 
+        // Initialize all state categories
+        this.initStaticState();
+        this.initInitializedState();
+        this.initRuntimeState();
+    }
+
+    /**
+     * Initializes static state variables that are loaded from config and never change.
+     * These are the raw configuration values.
+     */
+    initStaticState() {
         // Config properties
-        this.bombStrengthA = null;
         this.targetMaxWipeoutRadiusPercent = null;
         this.zBufferResolution = null;
         this.stampMapResolution = null;
         this.configLoaded = false;
+        this.targetDamageUpdatePoints = null;
+        this.minWearDecrementForPayload = 0;
+        this.strikeTriggerBufferScalar = 0;
+        this.seedAverageBombDeltaR = 0;
+        this.impactStdDevPixels = null;
+        this.explosionAnimationConfig = null;
+    }
 
+    /**
+     * Initializes state that is calculated/set up after config is loaded.
+     * These values persist across game resets.
+     */
+    initInitializedState() {
         // Z-buffer/grid properties
         this.zBuffer = null;
-        this.gridWidth = 0;  // Based on zBufferResolution
-        this.gridHeight = 0; // Based on zBufferResolution
+        this.gridWidth = 0;
+        this.gridHeight = 0;
         this.cellWidth = 0;
         this.cellHeight = 0;
-        this.mapWidth = 0;   // From game canvas
-        this.mapHeight = 0;  // From game canvas
+        this.mapWidth = 0;
+        this.mapHeight = 0;
 
         // Stamp map properties
         this.stampMap = null;
         this.stampMapCenterCol = 0;
         this.stampMapCenterRow = 0;
 
-        // --- ADDED: Properties for Target Damage Calculation ---
-        this.currentWaveNumber = 0;
-        this.currentWaveStartTime = 0; // Timestamp (ms) when the current wave started
-        this.currentWaveStartTotalR = 0; // Total R at the start of the current wave
-        this.currentDn = 0; // Store the calculated dn for the current wave
-        // --- END ADDED ---
+        // Animation properties
+        this.explosionFrames = [];
+        this.explosionFrameWidth = 0;
+        this.explosionFrameHeight = 0;
+        this.explosionFrameDuration = 0;
+        this.explosionScale = 1.0;
+        this.explosionAnchorX = 0.5;
+        this.explosionAnchorY = 0.5;
+        this.loadedAnimationData = null;
+        this.strikerShadowData = null;
+        this.pixiExplosionAnimationData = null;
 
-        // --- NEW PROPERTIES based on plan2.md ---
-        this.totalTargetDestructionR = 0;           // I.1
-        this.K_current_wave = null;                 // I.2
-        this.Rn_at_wave_start = 0;                  // I.3
-        this.Rn_at_last_bounty_checkpoint = 0;      // I.4
-        this.bountyCollectedSinceLastCheckpoint = 0;// I.5
-        this.bountyUpdateThreshold_B_star = Infinity;   // I.6
-        this.totalBountyForCurrentWave_Bn = 0;      // I.7
-        this.projectedDurationCurrentWave_Tn = 0;   // I.8
-        // --- END NEW PROPERTIES ---
-
-        // --- ADDED: Tracker for bomb damage dealt ---
-        this.totalBombDamageDealtR = 0; // Initialize tracker
-        // --- END ADDED ---
-
-        // --- ADDED: Impact Randomization --- 
-        this.impactStdDevPixels = null; // Standard deviation for impact inaccuracy
-        // --- END ADDED ---
-
-        // --- ADDED: Explosion Animation Properties ---
-        this.explosionAnimationConfig = null; // To store the raw config object
-        this.explosionFrames = []; // To store loaded Image objects for frames - WILL BECOME PIXI TEXTURES
-        this.explosionFrameWidth = 0; // Width of a single animation frame
-        this.explosionFrameHeight = 0; // Height of a single animation frame
-        this.explosionFrameDuration = 0; // Duration each frame is displayed - WILL USE frameDurationMs
-        this.explosionScale = 1.0; // Display scale of the explosion
-        this.explosionAnchorX = 0.5; // Horizontal anchor
-        this.explosionAnchorY = 0.5; // Vertical anchor
-        this.loadedAnimationData = null; // Will hold all processed animation data - TO BE REPLACED/AUGMENTED
-        // --- END ADDED ---
-
-        // --- NEW: Properties for Pixi-based animations ---
-        this.strikerShadowData = null; // Will hold { texture: PIXI.Texture, config: object }
-        this.pixiExplosionAnimationData = null; // Will hold { textures: PIXI.Texture[], frameDurationMs, scale, anchorX, anchorY, totalFrames }
-        // --- END NEW ---
-
-        // --- ADDED: bombPayload (Plan I.2b) ---
+        // Bomb properties
+        this.bombStrengthA = null;
         this.bombPayload = null;
-        // --- END ADDED ---
+        this.averageBombDamageR = null;
+    }
 
-        // --- ADDED: Store bombCost and targetDamageUpdatePoints, calculate bountyUpdateThreshold_B_star ---
-        this.targetDamageUpdatePoints = null; // Store for potential future use
-        // --- END ADDED ---
+    /**
+     * Initializes runtime state variables that reset with each game.
+     * These are the values that change during gameplay.
+     */
+    initRuntimeState() {
+        // Wave-specific properties
+        this.currentWaveNumber = 0;
+        this.currentWaveStartTime = 0;
+        this.currentWaveStartTotalR = 0;
+        this.currentDn = 0;
+
+        // Target damage and bounty properties
+        this.totalTargetDestructionR = 0;
+        this.K_current_wave = null;
+        this.Rn_at_wave_start = 0;
+        this.Rn_at_last_bounty_checkpoint = 0;
+        this.bountyCollectedSinceLastCheckpoint = 0;
+        this.bountyUpdateThreshold_B_star = Infinity;
+        this.totalBountyForCurrentWave_Bn = 0;
+        this.projectedDurationCurrentWave_Tn = 0;
+
+        // Bomb damage tracking
+        this.totalBombDamageDealtR = 0;
+        this.cumulativeBombDamageDealtByStrikesR = 0;
 
         // Strikers
         this.strikers = [];
         this.nextStrikerId = 0;
 
-        // --- ADDED: PixiJS Heatmap Properties ---
-        this.renderHeatmapDebug = false; // Set to true in console to show heatmap
-        this.heatmapDrawingGraphic = new PIXI.Graphics(); // Off-screen graphic for drawing
-        this.heatmapRenderTexture = null; // Will be initialized in _initializeHeatmapPixiObjects
-        this.heatmapSprite = null;        // Sprite to display the render texture, added to stage
-        // --- END ADDED ---
-
-        // --- ADDED: Properties for Average Bomb Damage Tracking ---
-        this.cumulativeBombDamageDealtByStrikesR = 0;
-        // --- END ADDED ---
-
-        // --- MODIFIED: Property for the new averaging method ---
-        this.averageBombDamageR = null; // Initialize to null for seeding logic
-        // --- END MODIFIED ---
-
-        // --- ADDED: Property for seed value ---
-        this.seedAverageBombDeltaR = 0; // Will be loaded from config
-        // --- END ADDED ---
-
-        this.strikeTriggerBufferScalar = 0;
-        
-        this.minWearDecrementForPayload = 0; // Initialize for bomb payload
+        // Heatmap properties
+        this.renderHeatmapDebug = false;
+        this.heatmapDrawingGraphic = new PIXI.Graphics();
+        this.heatmapRenderTexture = null;
+        this.heatmapSprite = null;
     }
 
     async loadConfig(mapWidth, mapHeight, path = 'public/assets/strike.json') {
@@ -118,113 +115,21 @@ export default class StrikeManager {
             }
             const config = await response.json();
 
-            // Check for required fields
-            if (config.targetMaxWipeoutRadiusPercent === undefined || !config.zBufferResolution || !config.stampMapResolution) {
-                throw new Error("Strike config file is missing required fields (targetMaxWipeoutRadiusPercent, zBufferResolution, stampMapResolution).");
-            }
-            if (typeof config.empiricalAverageBombDeltaR !== 'number' || config.empiricalAverageBombDeltaR < 0) {
-                console.warn("StrikeManager: empiricalAverageBombDeltaR missing or invalid in strike.json. Seeding for average bomb R will default to 0.");
-                this.seedAverageBombDeltaR = 0;
-            } else {
-                this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR;
-            }
-
-            // --- ADDED: Load Strike Trigger Buffer Percent ---
-            if (config.strikeTriggerBufferScalar !== undefined) {
-                if (typeof config.strikeTriggerBufferScalar === 'number' && config.strikeTriggerBufferScalar >= 0) {
-                    this.strikeTriggerBufferScalar = config.strikeTriggerBufferScalar;
-                } else {
-                    console.warn(`StrikeManager: Invalid strikeTriggerBufferScalar (${config.strikeTriggerBufferScalar}) in config. Must be a non-negative number. Using default ${this.strikeTriggerBufferScalar}.`);
-                }
-            } // Else, it keeps the default from constructor
-            // --- END ADDED ---
-
-            if (typeof config.targetDamageUpdatePoints !== 'number' || config.targetDamageUpdatePoints <= 0) {
-                throw new Error("Strike config file is missing required field 'targetDamageUpdatePoints' or it's invalid (must be a positive number).");
-            }
-            this.targetDamageUpdatePoints = config.targetDamageUpdatePoints; 
-
-            // Initialize bountyUpdateThreshold_B_star to a safe default. It will be calculated later.
-            this.bountyUpdateThreshold_B_star = Infinity; 
-
-            if (config.targetMaxWipeoutRadiusPercent <= 0 || config.targetMaxWipeoutRadiusPercent > 1) {
-                 console.warn(`StrikeManager: targetMaxWipeoutRadiusPercent (${config.targetMaxWipeoutRadiusPercent}) should be between 0 and 1. Clamping or using as is? Using as is for now.`);
-            }
-
-            // --- NEW: Load Striker Shadow Config and Texture ---
-            if (!config.strikerShadow || 
-                !config.strikerShadow.texturePath || 
-                typeof config.strikerShadow.animationSpeed !== 'number' || 
-                typeof config.strikerShadow.scale !== 'number' || 
-                typeof config.strikerShadow.alpha !== 'number' ||
-                typeof config.strikerShadow.shadowToBombDelayMs !== 'number' ||
-                config.strikerShadow.shadowToBombDelayMs < 0) {
-                throw new Error("Strike config file is missing 'strikerShadow' object or it has invalid/missing fields (texturePath, animationSpeed, scale, alpha, shadowToBombDelayMs).");
-            }
-            this.strikerShadowData = {
-                texture: await PIXI.Assets.load(config.strikerShadow.texturePath),
-                config: config.strikerShadow
-            };
-            // --- END NEW ---
-
-            // --- ADDED: Load Explosion Animation Config --- // MODIFIED TO USE NEW FIELDS
-            if (!config.explosionAnimation) {
-                throw new Error("Strike config file is missing 'explosionAnimation' object.");
-            }
-            const animConfig = config.explosionAnimation;
-            if (!animConfig.folderPath || typeof animConfig.frameDurationMs !== 'number' || 
-                typeof animConfig.scale !== 'number' || typeof animConfig.anchorX !== 'number' || 
-                typeof animConfig.anchorY !== 'number' || typeof animConfig.frameCount !== 'number' || 
-                typeof animConfig.digitsForZeroPadding !== 'number' || typeof animConfig.filePrefix !== 'string' || typeof animConfig.fileSuffix !== 'string') {
-                throw new Error("Strike config 'explosionAnimation' is missing required fields (folderPath, frameDurationMs, scale, anchorX, anchorY, frameCount, digitsForZeroPadding, filePrefix, fileSuffix) or they are of incorrect type.");
-            }
-            this.explosionAnimationConfig = animConfig; // Store the raw config for _loadExplosionFrames
-            // These individual properties on StrikeManager are now less important if _loadExplosionFrames populates pixiExplosionAnimationData directly
-            // but can be kept for legacy access or direct use if _loadExplosionFrames doesn't set everything on pixiExplosionAnimationData.config
-            this.explosionFrameDuration = animConfig.frameDurationMs; // Note: was frameDuration
-            this.explosionScale = animConfig.scale;
-            this.explosionAnchorX = animConfig.anchorX;
-            this.explosionAnchorY = animConfig.anchorY;
-            // --- END ADDED ---
-
-            // Store loaded config values
+            // Load static config values
             this.targetMaxWipeoutRadiusPercent = config.targetMaxWipeoutRadiusPercent;
             this.zBufferResolution = config.zBufferResolution;
             this.stampMapResolution = config.stampMapResolution;
-            this.bombStrengthA = null; // Explicitly null, calculated later
+            this.targetDamageUpdatePoints = config.targetDamageUpdatePoints;
+            this.strikeTriggerBufferScalar = config.strikeTriggerBufferScalar || 0;
+            this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR || 0;
+            this.impactStdDevPixels = config.impactStdDevPercentWidth * mapWidth;
+            this.explosionAnimationConfig = config.explosionAnimation;
 
-            // --- MODIFIED: Seeding logic for averageBombDamageR ---
-            if (this.averageBombDamageR === null) { // Seed only if it hasn't been set yet
-                // Seeding now uses the pre-loaded empiricalAverageBombDeltaR
-                this.averageBombDamageR = this.seedAverageBombDeltaR;
-                // console.log(`StrikeManager: Average bomb Delta R seeded to ${this.averageBombDamageR.toFixed(4)} from empiricalAverageBombDeltaR.`);
-                
-                // REMOVED: Call to _updateBountyThreshold() here. It will be called by Game.startGame() via initializeBountyThreshold().
-                // this._updateBountyThreshold(); 
-            }
-            // --- END MODIFIED ---
+            // Set map dimensions
+            this.mapWidth = mapWidth;
+            this.mapHeight = mapHeight;
 
-            // --- ADDED: Load and calculate impact deviation --- 
-            if (typeof config.impactStdDevPercentWidth !== 'number' || config.impactStdDevPercentWidth < 0) {
-                console.warn(`StrikeManager: Invalid or missing impactStdDevPercentWidth in config. Defaulting to 0 (no spread).`);
-                this.impactStdDevPixels = 0;
-            } else {
-                 // Get map dimensions from game canvas (needs to be done before this)
-                 this.mapWidth = mapWidth;
-                 this.mapHeight = mapHeight;
-
-                 this.impactStdDevPixels = config.impactStdDevPercentWidth * this.mapWidth;
-                 //console.log(`StrikeManager: Impact std deviation set to ${this.impactStdDevPixels.toFixed(2)} pixels (${config.impactStdDevPercentWidth * 100}% of width).`);
-            }
-            // --- END ADDED ---
-
-            // Get map dimensions from game canvas
-            if (!this.mapWidth || !this.mapHeight) {
-                this.mapWidth = mapWidth;
-                this.mapHeight = mapHeight;
-            }
-
-            // Calculate Z-buffer grid properties
+            // Calculate grid properties
             this.gridWidth = this.zBufferResolution.width;
             this.gridHeight = this.zBufferResolution.height;
             this.cellWidth = this.mapWidth / this.gridWidth;
@@ -233,31 +138,57 @@ export default class StrikeManager {
             // Initialize Z-buffer
             this.zBuffer = Array(this.gridHeight).fill(null).map(() => Array(this.gridWidth).fill(0));
 
-            // --- MOVED configLoaded flag setting ---
-            this.configLoaded = true; // Set flag BEFORE calling dependent functions
-            // --- END MOVED ---
+            // Mark config as loaded
+            this.configLoaded = true;
 
-            // --- Call stamp map precomputation ---
+            // Perform post-config initialization
             this._precomputeStampMap();
-            // --- END Call ---
-
-            // --- ADDED: Call to load explosion frames --- // This will now load PIXI.Textures
-            await this._loadExplosionFrames(); // This will call _tryAssembleBombPayload internally
-            // --- END ADDED ---
-
-            // --- ADDED: Initialize Heatmap Pixi Objects ---
+            await this._loadExplosionFrames();
+            await this._loadShadowTexture(config.strikerShadow);
             this._initializeHeatmapPixiObjects();
-            // --- END ADDED ---
+
+            // Seed initial values
+            this.averageBombDamageR = this.seedAverageBombDeltaR;
 
         } catch (error) {
             console.error("StrikeManager: Failed to load configuration:", error);
             this.configLoaded = false;
-            // Potentially re-throw or handle initialization failure
+            throw error;
         }
     }
 
-    isConfigLoaded() {
-        return this.configLoaded;
+    /**
+     * Called by Game when all managers are loaded and game state is initialized.
+     * This is the proper time to calculate dependent values that require
+     * access to other managers and game state.
+     */
+    onGameInitialized() {
+        if (!this.configLoaded) {
+            console.error("StrikeManager.onGameInitialized: Config not loaded. Cannot initialize dependent calculations.");
+            return;
+        }
+        this.updateDependentCalculations();
+    }
+
+    /**
+     * Checks if all dependencies are ready and updates dependent calculations.
+     * Called by Game when defence manager is loaded or when game state changes.
+     */
+    updateDependentCalculations() {
+        if (!this.configLoaded || !this.defenceManager || !this.defenceManager.isLoaded) {
+            console.warn("StrikeManager.updateDependentCalculations: Dependencies not ready. Skipping calculations.");
+            return;
+        }
+
+        // Calculate bomb strength if not already calculated
+        if (this.bombStrengthA === null) {
+            this.calculateBombStrength();
+        }
+
+        // Update bounty threshold if we have all required values
+        if (this.averageBombDamageR !== null && this.targetDamageUpdatePoints > 0) {
+            this._updateBountyThreshold();
+        }
     }
 
     // --- ADDED: Method to calculate bomb strength dynamically ---
@@ -1258,4 +1189,49 @@ export default class StrikeManager {
         }
     }
     // --- END NEW METHOD ---
+
+    resetForNewGame() {
+        // Clean up any active strikers
+        if (this.strikers && this.strikers.length > 0) {
+            this.strikers.forEach(striker => {
+                if (striker && typeof striker.destroy === 'function') {
+                    striker.destroy();
+                }
+            });
+        }
+
+        // Reset only runtime state
+        this.initRuntimeState();
+
+        // Re-seed averageBombDamageR from the initialized state
+        this.averageBombDamageR = this.seedAverageBombDeltaR;
+
+        // Update dependent calculations
+        this.updateDependentCalculations();
+    }
+
+    isConfigLoaded() {
+        return this.configLoaded;
+    }
+
+    // --- ADDED: Method to load shadow texture ---
+    async _loadShadowTexture(shadowConfig) {
+        if (!shadowConfig || !shadowConfig.texturePath) {
+            console.warn("StrikeManager: No shadow texture path provided in config.");
+            return;
+        }
+
+        try {
+            const texture = await PIXI.Assets.load(shadowConfig.texturePath);
+            this.strikerShadowData = {
+                texture: texture,
+                config: shadowConfig
+            };
+            //console.log("StrikeManager: Shadow texture loaded successfully.");
+        } catch (error) {
+            console.error("StrikeManager: Failed to load shadow texture:", error);
+            this.strikerShadowData = null;
+        }
+    }
+    // --- END ADDED ---
 } 

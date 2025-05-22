@@ -77,10 +77,30 @@ export default class DefenceManager extends EventTarget {
         this.game = game; // Store reference to the game instance
         this.enemyManager = game.enemyManager; // Convenience reference
         this.base = game.base; // Convenience reference
+
+        // Initialize both static and runtime state
+        this.initStaticState();
+        this.initRuntimeState();
+    }
+
+    /**
+     * Initializes static state variables that persist across game resets.
+     * These are loaded from config and don't change during gameplay.
+     */
+    initStaticState() {
+        // Core data structures for loaded definitions
         this.defenceDefinitions = {}; // To store loaded defence data by ID
-        this.activeDefences = []; // Array to hold active instances
         this.isLoaded = false;
         this.dataPath = './assets/defences.json'; // Assume default path or get from game config if needed
+    }
+
+    /**
+     * Initializes runtime state variables that reset with each game.
+     * These are the values that change during gameplay.
+     */
+    initRuntimeState() {
+        // Active gameplay state
+        this.activeDefences = []; // Array to hold active instances
     }
 
     async loadDefinitions(dataPath = this.dataPath) { // Renamed from load for clarity
@@ -689,4 +709,26 @@ export default class DefenceManager extends EventTarget {
         return totalR;
     }
     // --- END ADDED ---
+
+    /**
+     * Resets the DefenceManager for a new game.
+     * Cleans up any active defences and resets runtime state variables.
+     */
+    resetForNewGame() {
+        // Clean up any active defences
+        if (this.activeDefences && this.activeDefences.length > 0) {
+            this.activeDefences.forEach(defence => {
+                if (defence && typeof defence.destroyPixiObjects === 'function') {
+                    // Remove from stage if it has a container
+                    if (defence.pixiContainer && this.game?.groundLayer) {
+                        this.game.groundLayer.removeChild(defence.pixiContainer);
+                    }
+                    defence.destroyPixiObjects();
+                }
+            });
+        }
+
+        // Reset only runtime state
+        this.initRuntimeState();
+    }
 }
