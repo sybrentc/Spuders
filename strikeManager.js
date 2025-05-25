@@ -458,15 +458,16 @@ export default class StrikeManager {
     // --- ADDED: Method to calculate required damage rate dn ---
     /**
      * Calculates the required fractional damage rate (dn) for a given wave number.
-     * Uses Eq. 32: dn = ((f - 1) / T0) + (1 / Tn) * (1 - (f / gamma_n))
-     * where gamma_n = Tn+1 / Tn and T0 = L / s_min.
+     * Uses Eq. 30: dn = (1 / alpha) - w + (1 / Tn) * (1 - (f / gamma_n))
+     * where gamma_n = Tn+1 / Tn. Alpha (defender cost factor) and w (wear rate)
+     * are fetched from the game instance.
      * @param {number} waveNumber - The wave number (n) to calculate dn for.
      * @returns {number} The calculated dn, or 0 if calculation fails or dn < 0.
      * @private
      */
     _calculateDn(waveNumber) {
-        if (!this.game || !this.game.waveManager || !this.game.enemyManager) {
-            console.error("StrikeManager._calculateDn: Missing required game managers.");
+        if (!this.game || !this.game.waveManager || !this.game.enemyManager || typeof this.game.getAlpha !== 'function' || typeof this.game.getWearParameter !== 'function') {
+            console.error("StrikeManager._calculateDn: Missing required game managers, getAlpha, or getWearParameter methods.");
             return 0;
         }
 
@@ -477,9 +478,12 @@ export default class StrikeManager {
         const Tn = this.game.waveManager.getWaveDurationSeconds(waveNumber);
         const Tn_plus_1 = this.game.waveManager.getWaveDurationSeconds(waveNumber + 1);
 
+        const alpha = this.game.getAlpha();
+        const wearRateW = this.game.getWearParameter();
+
         // 2. Validate Parameters
-        if (f === undefined || f === null || f <= 1) {
-            console.error(`StrikeManager._calculateDn: Invalid difficulty increase factor (f=${f}). Must be > 1.`);
+        if (f === undefined || f === null || f <= 0) { // f must be > 0, typically > 1 for difficulty increase
+            console.error(`StrikeManager._calculateDn: Invalid difficulty increase factor (f=${f}). Must be > 0.`);
             return 0;
         }
         if (L === undefined || L === null || L <= 0) {
@@ -487,51 +491,65 @@ export default class StrikeManager {
             return 0;
         }
         if (s_min === undefined || s_min === null || s_min <= 0) {
-            console.error(`StrikeManager._calculateDn: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
-            return 0;
+            // This T0 calculation was not part of Eq. 30 directly, but Tn and gamma_n are.
+            // The T0 term was from Eq. 32. Removing T0 from direct calculation here.
+            // console.error(`StrikeManager._calculateDn: Invalid minimum enemy speed (s_min=${s_min}). Must be > 0.`);
+            // return 0;
         }
         if (Tn === undefined || Tn === null || Tn <= 1e-6) { // Use epsilon for duration check
             console.warn(`StrikeManager._calculateDn: Invalid duration Tn (${Tn}) for wave ${waveNumber}. Cannot calculate dn.`);
             return 0;
         }
-        if (Tn_plus_1 === undefined || Tn_plus_1 === null) {
-            console.warn(`StrikeManager._calculateDn: Duration Tn+1 not available for wave ${waveNumber}. Cannot calculate dn.`);
-            // Potentially use dn = (f-1)/T0 as fallback? Returning 0 for now.
+        if (Tn_plus_1 === undefined || Tn_plus_1 === null || Tn_plus_1 <= 1e-6) {
+            console.warn(`StrikeManager._calculateDn: Invalid duration Tn+1 (${Tn_plus_1}) for wave ${waveNumber}. Cannot calculate dn.`);
             return 0;
         }
-        // Check Tn+1 specifically for <= 0, as gamma calculation needs positive divisor
-        if (Tn_plus_1 <= 1e-6) {
-             console.warn(`StrikeManager._calculateDn: Invalid duration Tn+1 (${Tn_plus_1}) for wave ${waveNumber}. Cannot calculate dn.`);
-             return 0;
+        if (alpha === undefined || alpha === null || alpha <= 0) {
+            console.error(`StrikeManager._calculateDn (Eq.30): Invalid alpha (${alpha}). Must be > 0.`);
+            return 0;
         }
+        if (wearRateW === undefined || wearRateW === null || wearRateW < 0) {
+            console.warn(`StrikeManager._calculateDn (Eq.30): Invalid wearRateW (${wearRateW}). Assuming 0 or handling error.`);
+            return 0; // Or assign wearRateW = 0 if that's acceptable.
+        }
+
 
         // 3. Calculate Intermediate Values
-        const T0 = L / s_min;
-        if (T0 <= 0) {
-            console.error(`StrikeManager._calculateDn: Calculated T0 (${T0}) is not positive.`);
-            return 0;
-        }
+        // T0 is not directly in Eq. 30. The terms are 1/alpha, w, and the timing term.
+        // const T0 = L / s_min; // Not needed for Eq. 30 directly
+        // if (T0 <= 0) {
+        //     console.error(`StrikeManager._calculateDn: Calculated T0 (${T0}) is not positive.`);
+        //     return 0;
+        // }
 
         const gamma_n = Tn_plus_1 / Tn;
-        // Check gamma_n validity (redundant due to Tn/Tn+1 checks, but safe)
-        if (!isFinite(gamma_n) || gamma_n <= 0) {
-            console.error(`StrikeManager._calculateDn: Invalid gamma_n (${gamma_n}) calculated for wave ${waveNumber}.`);
+        if (!isFinite(gamma_n) || gamma_n <= 0) { // gamma_n must be positive
+            console.warn(`StrikeManager._calculateDn (Eq.30): Invalid gamma_n (${gamma_n}) calculated for wave ${waveNumber}.`);
             return 0;
         }
 
-        // 4. Calculate dn using Eq. 32
-        const term1 = (f - 1) / T0;
-        const term2_bracket = 1 - (f / gamma_n);
-        const term2 = (1 / Tn) * term2_bracket;
-        const dn = term1 + term2;
-
-        // Ensure dn is not negative
-        const final_dn = Math.max(0, dn);
+        // 4. Calculate dn using Eq. 30
+        const term_1_alpha = 1 / alpha;
+        // wearRateW is already fetched
         
-        // Optional log for debugging
-         //console.log(`_calculateDn(wave=${waveNumber}): f=${f.toFixed(2)}, T0=${T0.toFixed(2)}, Tn=${Tn.toFixed(2)}, Tn+1=${Tn_plus_1.toFixed(2)}, gamma_n=${gamma_n.toFixed(2)} => dn=${final_dn.toFixed(4)}`);
+        // Defensive check for division by zero if f = 0 and gamma_n = 0, though gamma_n check above helps.
+        // Also f should be > 0.
+        let timing_factor_content = 0;
+        if (gamma_n !== 0) { // Ensure gamma_n is not zero before division
+             timing_factor_content = 1 - (f / gamma_n);
+        } else {
+            // This case should be caught by gamma_n <= 0 check, but as an extra safeguard
+            console.warn(`StrikeManager._calculateDn (Eq.30): gamma_n is zero, avoiding division by zero in timing factor for wave ${waveNumber}.`);
+            // The behavior here depends on how you want to interpret this edge case.
+            // If gamma_n is 0, it implies Tn+1 is 0, which is problematic.
+            // Defaulting timing_factor_content to 0, which makes the timing factor 0.
+        }
 
-        return final_dn;
+        const term_timing_factor = (1 / Tn) * timing_factor_content;
+
+        const dn = term_1_alpha - wearRateW + term_timing_factor;
+
+        return dn;
     }
     // --- END ADDED ---
 
@@ -608,8 +626,8 @@ export default class StrikeManager {
         // Calculate K_current_wave
         if (this.totalBountyForCurrentWave_Bn > 0) {
             this.K_current_wave = (this.currentDn * this.projectedDurationCurrentWave_Tn) / this.totalBountyForCurrentWave_Bn;
-            if (!isFinite(this.K_current_wave) || this.K_current_wave < 0) {
-                 console.warn(`StrikeManager.startWave: Calculated K_current_wave is invalid (${this.K_current_wave}). Setting to null. Dn=${this.currentDn}, Tn=${this.projectedDurationCurrentWave_Tn}, Bn=${this.totalBountyForCurrentWave_Bn}`);
+            if (!isFinite(this.K_current_wave)) {
+                 console.warn(`StrikeManager.startWave: Calculated K_current_wave is not a finite number (${this.K_current_wave}). Setting to null. Dn=${this.currentDn}, Tn=${this.projectedDurationCurrentWave_Tn}, Bn=${this.totalBountyForCurrentWave_Bn}`);
                  this.K_current_wave = null;
             }
         } else {
@@ -647,7 +665,7 @@ export default class StrikeManager {
     getCumulativeTargetDamageR() {
         // The logic for calculating intra-wave deltaR based on time has been removed.
         // totalTargetDestructionR is now updated incrementally by recordBountyEarned and finalizeWaveDamage.
-        return Math.max(0, this.totalTargetDestructionR);
+        return this.totalTargetDestructionR;
     }
     // --- END MODIFIED ---
 
@@ -935,7 +953,7 @@ export default class StrikeManager {
      * @private
      */
     _updateTargetDestructionForBatch(bountyProcessedThisBatch) {
-        if (this.K_current_wave === null || this.K_current_wave <= 0 || this.Rn_at_last_bounty_checkpoint <= 0) {
+        if (this.K_current_wave === null) {
             // console.log("StrikeManager._updateTargetDestructionForBatch: Conditions not met for destruction calculation.", 
             //              { K: this.K_current_wave, R_checkpoint: this.Rn_at_last_bounty_checkpoint });
             return; // No destruction to apply if K is invalid or no earning rate to destroy

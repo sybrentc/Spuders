@@ -910,7 +910,6 @@ export default class Game {
         return this.pathCoverageLookup;
     }
 
-    // Helper method in Game class
     getWearParameter() {
         // Assuming wear is stored in levelData loaded during initialize/loadLevel
         return this.levelData?.wear ?? 0; // Default to 0 if not found

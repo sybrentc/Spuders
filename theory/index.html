@@ -197,13 +197,11 @@
 
 \[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
 
-<p>For small wave numbers, we assume a constant wave duration \(T_n = T_{n+1} = T_0\), as in the above derivation of \(\alpha_0\), Under this assumption, eqt. 30 indicates that \(d_n\) is a constant in this regime, which we will call \(d_0\). We are free to choose \(d_0\) as we see fit and use this to set the initial fractional damage rate to zero. This results in the simplified expressions</p>
+<p>We can see what \(d_n\) would look like if we select a value for \(\alpha\). For this particular scenario, let us select it such that the game starts out with no damage being dealt in the initial waves. For small wave numbers, we assume a constant wave duration \(T_n = T_{n+1} = T_0\), as in the above derivation of \(\alpha_0\), In this low-\(n\) regime, eqt. 30 indicates that \(d_n\) is a constant, which we are free to choose as we see fit. We use this freedom to set the initial fractional damage rate to zero, which produces the break-even constant \(\alpha_0\) for the low-\(n\) regime</p>
 
 \[ \alpha_0 = \frac{1}{\frac{f - 1}{T_0} + w}. \tag{31} \]
 
 \[ d_n = \frac{f - 1}{T_0} + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{32} \]
-
-<p>Substituting eqt. 31 into eqt. 28, setting non-depreciation conditions (\(w=d=0\)), and solving the resulting ODE with break-even conditions (\(T_n=T_{n+1}=T_0\)) yields the inter-wave equation \(R_{n+1}=fR_n\) used in the preceding section. This indicates theoretical consistency of generalised equation 28 within our overall framework.</p>
 
 <div class="plot-container">
   <div id="dnEvolutionPlot"></div>
@@ -219,7 +217,7 @@
 \end{cases} 
 \tag{33} \]
 
-<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition. Specifically, it is the dynamically calculated destruction rate which prevents the runaway win condition. It does this independently of the influence of wear, as can be seen by the independence of eqt. 32 on \(w.\) Moreover, wear alone is insufficient to prevent a runawawy win condition since, although it increases defender upkeep, the break-even difficulty factor \(\alpha_0\) is adjusted to account for this added expense through eqt. 31.</p>
+<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition. Specifically, it is the dynamically calculated destruction rate which prevents the runaway win condition. It does this independently of the influence of wear, as can be seen by the independence of eqt. 32 on \(w.\) Moreover, wear alone is insufficient to prevent a runawawy win condition in this example.</p>
 
 <div class="plot-container">
   <div id="depreciationComparisonPlot"></div>
@@ -305,15 +303,19 @@
 
 <p>The threshold bounty \(B^*\) is set algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
 
-<h2>Break-even in the presence of wear and destruction</h2>
+<h2>Break-even under discrete depreciation events</h2>
 
-<p>The depreciation theory above has been developed from a differential approach, which assumes wear and damage can be applied continuously. This is not the case in the game, where these effects are applied discretely, and we have derived expression in the above to enable us to deal discrete portions of depreciation. In this section, we revisit the break-even condition in the presence of discrete depreciation events.</p>
+<p>The depreciation theory above has been developed from a differential equation 28, which assumes that wear and damage are applied continuously. This has enabled the derivation of a continuum break-even value \(\alpha_0\) (eqt. 31) such that, under simulated application of a continuous depreciation, produces an asymptotic approach to exact knife-edge, break-even conditions as shown in Fig. 6.</p>
+    
+<p>To implement the depreciation theory in the game, however, we have needed to discretise the wear (eqt. 37) and damage (eqt. 42 and its subsequent paragraph). What remains to be done now is to reassess the break-even value \(\alpha\) in the presence of such discrete depreciation events.</p>
 
-<p>Depreciation forces a player to keep investing both to grow their defenses to meet the demands of oncoming waves, but also to counteract the continuous defender turnover due to wear and damage. If the player fails to keep up, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play, where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, means the player can only win with an optimally managed defense. Hence, a single step onto the losing side of break-even can be fatal. If the game is tuned such that a break-even condition exists in the presence of continuous depreciation, then the saving up of depreciation and application in one discrete event will put the player into a losing condition.</p>
+<p>To explain why this is so, we need to consider the effect of depreciation on the player's ability to maintain a break-even condition. Depreciation forces a player to keep investing both to grow their defenses to meet the demands of oncoming waves, but also to counteract the continuous defender turnover due to wear and damage. If the player for whatever reason fails to stay above break-even, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, is such that a player can survive only with an optimally managed defense. Hence, a single moment on the losing side of break-even can precipitate the above losing spiral resulting in defeat. If the game is tuned such that a break-even condition exists in the presence of continuous depreciation, then the saving up of depreciation and application in one discrete event will put the player into such a losing spiral.</p>
 
-<p> To address the above problem, we need to ensure that a player is able to recover from discrete depreciation events and/or to save up resources to face such knocks. To do this, we may determine a discrete break-even factor \(\alpha\), which is below the continuous break-even factor \(\alpha_0\) using a difficulty scalar \(a\leq1\)</p>
+<p>The break-even value \(\alpha_0\) thus needs to be rederived in the presence of discrete depreciation events, so that the player is never put below break-even. As before, the fundamental starting point remains the same: during wave \(n\) of duration \(T_0\), the player needs to earn \(\alpha_0(f-1)R_n\) worth of money. The bounty available in wave \(n\) is \(B_n\) at an average rate \(b_n=B_n/T_0\).</p>
+    
+<p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level.</p>
 
-\[ \alpha = a\alpha_0. \tag{49} \]
+\[ \alpha = a\alpha_0. \]
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
