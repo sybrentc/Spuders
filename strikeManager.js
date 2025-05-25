@@ -28,7 +28,6 @@ export default class StrikeManager {
         this.configLoaded = false;
         this.targetDamageUpdatePoints = null;
         this.minWearDecrementForPayload = 0;
-        this.strikeTriggerBufferScalar = 0;
         this.seedAverageBombDeltaR = 0;
         this.impactStdDevPixels = null;
         this.explosionAnimationConfig = null;
@@ -105,6 +104,119 @@ export default class StrikeManager {
         this.heatmapDrawingGraphic = new PIXI.Graphics();
         this.heatmapRenderTexture = null;
         this.heatmapSprite = null;
+        this._spareNormal = null; // Initialize for _generateNormalRandom
+        this.strikeCooldownActive = false; // Initialize cooldown flag
+    }
+
+    _getCurrentWaveAverageBountyRate() {
+        if (this.projectedDurationCurrentWave_Tn === 0) {
+            // Avoid division by zero if projected duration is not set or is zero.
+            // This might happen if the wave hasn't properly started or data is missing.
+            console.warn("StrikeManager._getCurrentWaveAverageBountyRate: projectedDurationCurrentWave_Tn is 0. Cannot calculate bounty rate.");
+            return 0; 
+        }
+        if (typeof this.totalBountyForCurrentWave_Bn !== 'number' || typeof this.projectedDurationCurrentWave_Tn !== 'number') {
+            console.warn("StrikeManager._getCurrentWaveAverageBountyRate: Missing or invalid bounty/duration data for current wave.");
+            return 0;
+        }
+        return this.totalBountyForCurrentWave_Bn / this.projectedDurationCurrentWave_Tn;
+    }
+
+    _cloneDefenderForSimulation(originalDefender) {
+        if (!originalDefender) {
+            console.warn("StrikeManager._cloneDefenderForSimulation: Missing original defender.");
+            return null;
+        }
+
+        // Create an object that inherits from originalDefender's prototype (e.g., DefenceEntity.prototype)
+        const clone = Object.create(Object.getPrototypeOf(originalDefender));
+
+        // Copy own enumerable properties from the originalDefender to the clone.
+        // This includes properties like id, x, y, hp, maxHp, wearEnabled, isDestroyed, gridCol, gridRow, definition, game, etc.
+        // Crucially, 'hp' and 'isDestroyed' will be copied as own properties onto the clone.
+        // When 'clone.hit()' is called, 'this' will refer to 'clone'.
+        // If 'hit' modifies 'this.hp', it will modify the 'hp' property on the 'clone' object itself,
+        // shadowing any 'hp' property that might exist on the prototype (which it shouldn't for instance state).
+        for (const prop in originalDefender) {
+            if (Object.prototype.hasOwnProperty.call(originalDefender, prop)) {
+                clone[prop] = originalDefender[prop];
+            }
+        }
+        
+        // Ensure 'hp' is definitely an own property on the clone, copied from the original.
+        // This is important so that modifications to clone.hp don't affect other instances or the prototype.
+        // The loop above should handle this, but an explicit assignment is safest for critical state.
+        clone.hp = originalDefender.hp;
+        clone.isDestroyed = originalDefender.isDestroyed; // Also ensure this is an own property
+
+        // The Striker needs:
+        // - clone.x, clone.y (copied)
+        // - clone.hp, clone.maxHp (hp is now an own property on clone, maxHp copied)
+        // - clone.isDestroyed (now an own property on clone)
+        // - clone.wearEnabled (copied)
+        // - clone.hit (inherited from prototype, 'this' will correctly be the clone)
+        return clone;
+    }
+
+    _generateNormalRandom(mean, stdDev) {
+        // Box-Muller transform
+        // this._spareNormal is a property that should be initialized in the constructor or relevant state
+        // For StrikeManager, since this is now a utility here, ensure `this._spareNormal` is handled.
+        // It's better to make _spareNormal a local static-like variable or handle it per call if this is purely a utility.
+        // Let's assume strikeManager might have `this._spareNormal` if it calls this multiple times in a sequence for one operation.
+        // For a single strike operation, it might be reset or managed locally within _calculateImpactCoordinates if only called once per strike.
+        // For now, let's assume `this._spareNormal` exists on StrikeManager instance and is managed appropriately.
+        if (this._spareNormal !== undefined && this._spareNormal !== null) { // Check for undefined as well as null
+            const result = mean + stdDev * this._spareNormal;
+            this._spareNormal = null;
+            return result;
+        }
+
+        let u1, u2;
+        do {
+            u1 = Math.random();
+        } while (u1 === 0); // Avoid Math.log(0)
+        u2 = Math.random();
+
+        const radius = Math.sqrt(-2.0 * Math.log(u1));
+        const angle = 2.0 * Math.PI * u2;
+
+        const standardNormal1 = radius * Math.cos(angle);
+        const standardNormal2 = radius * Math.sin(angle);
+
+        this._spareNormal = standardNormal2; // Store the spare for next call
+
+        return mean + stdDev * standardNormal1;
+    }
+
+    _calculateImpactCoordinates(targetCoords, bombPayload) {
+        if (!targetCoords) {
+            console.error("StrikeManager._calculateImpactCoordinates: targetCoords not available.");
+            return { x: 0, y: 0 };
+        }
+        if (!bombPayload || typeof bombPayload.impactStdDevPixels !== 'number') {
+            console.error("StrikeManager._calculateImpactCoordinates: bombPayload or impactStdDevPixels not available/valid.");
+            return { ...targetCoords }; // Return a copy
+        }
+
+        const stdDev = bombPayload.impactStdDevPixels;
+
+        if (stdDev <= 0) {
+            return { ...targetCoords }; // Return a copy if no randomness
+        }
+
+        const offsetX = this._generateNormalRandom(0, stdDev);
+        const offsetY = this._generateNormalRandom(0, stdDev);
+
+        // Ensure this._spareNormal is reset for the next independent calculation if _generateNormalRandom is used elsewhere.
+        // If _calculateImpactCoordinates is the sole user for a given strike, this is fine.
+        // Resetting it here to ensure independence if called multiple times for different purposes.
+        this._spareNormal = null; 
+
+        const impactX = targetCoords.x + offsetX;
+        const impactY = targetCoords.y + offsetY;
+
+        return { x: impactX, y: impactY };
     }
 
     async loadConfig(mapWidth, mapHeight, path = 'public/assets/strike.json') {
@@ -120,7 +232,6 @@ export default class StrikeManager {
             this.zBufferResolution = config.zBufferResolution;
             this.stampMapResolution = config.stampMapResolution;
             this.targetDamageUpdatePoints = config.targetDamageUpdatePoints;
-            this.strikeTriggerBufferScalar = config.strikeTriggerBufferScalar || 0;
             this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR || 0;
             this.impactStdDevPixels = config.impactStdDevPercentWidth * mapWidth;
             this.explosionAnimationConfig = config.explosionAnimation;
@@ -897,7 +1008,7 @@ export default class StrikeManager {
     }
     // --- END NEW METHOD ---
 
-    // --- ADDED: Test function to trigger a strike ---
+    // --- ADDED: Test function to trigger a strike --- MODIFIED FOR SIMULATION
     async strike() {
         if (!this.isConfigLoaded()) {
             console.error("StrikeManager.strike(): Cannot strike, config not loaded.");
@@ -908,18 +1019,89 @@ export default class StrikeManager {
             return;
         }
 
-        //console.log("StrikeManager.strike(): Attempting to find optimal target...");
-        this.calculateZBuffer(); // Calculate Z-Buffer before finding target
-        const targetCoords = this.findOptimalTarget();
+        // Check cooldown
+        if (this.strikeCooldownActive) {
+            // console.log("StrikeManager.strike(): Strike cooldown active. Aborting strike attempt.");
+            return;
+        }
 
-        if (targetCoords) {
-            //console.log(`StrikeManager.strike(): Optimal target found at (${targetCoords.x.toFixed(1)}, ${targetCoords.y.toFixed(1)}). Dispatching striker...`);
-            try {
-                // dispatchStriker is async and returns a promise that resolves with damageDealtR
-                const deltaR = await this.dispatchStriker(targetCoords); // Pass only targetCoords
-                //console.log(`StrikeManager.strike(): Strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
-                
-                // --- MODIFIED: Update average bomb damage trackers with new formula ---
+        // 1. Determine OPTIMAL target (same as before)
+        this.calculateZBuffer(); 
+        const optimalTargetCoords = this.findOptimalTarget();
+
+        if (!optimalTargetCoords) {
+            // console.log("StrikeManager.strike(): No optimal target found. Strike aborted.");
+            return;
+        }
+
+        // 2. Calculate DETERMINED impact coordinates (with randomness)
+        // This uses the bombPayload which contains impactStdDevPixels.
+        // The _generateNormalRandom helper also needs `this._spareNormal`, ensure it's initialized in StrikeManager constructor or state.
+        const determinedImpactCoords = this._calculateImpactCoordinates(optimalTargetCoords, this.bombPayload);
+        if (!determinedImpactCoords) { // Should not happen if optimalTargetCoords is valid
+            console.error("StrikeManager.strike(): Failed to determine impact coordinates. Strike aborted.");
+            return;
+        }
+        // console.log(`StrikeManager.strike(): Optimal target at (${optimalTargetCoords.x.toFixed(1)}, ${optimalTargetCoords.y.toFixed(1)}), Determined impact at (${determinedImpactCoords.x.toFixed(1)}, ${determinedImpactCoords.y.toFixed(1)})`);
+
+        // 3. Simulation Step
+        const currentTotalR = this.game.defenceManager.getCurrentTotalEarningRate();
+        const bn = this._getCurrentWaveAverageBountyRate();
+
+        const activeDefenders = this.game.defenceManager.getActiveDefences();
+        const clonedDefenders = activeDefenders.map(def => this._cloneDefenderForSimulation(def)).filter(clone => clone !== null);
+
+        if (clonedDefenders.length === 0 && activeDefenders.length > 0) {
+            console.warn("StrikeManager.strike(): All active defenders failed to clone for simulation. Aborting strike.");
+            // Potentially activate cooldown here too if this is a critical failure path
+            return;
+        } 
+        // If activeDefenders is 0, clonedDefenders will be 0. Strike simulation will result in 0 damage.
+        // This is fine, it means striking an empty field.
+
+        // Instantiate a Striker for simulation
+        // Pass `determinedImpactCoords` to the simulated striker.
+        const simulatedStriker = new Striker(
+            this.game,          // gameInstance (for Striker's internal needs, though less critical for sim)
+            null,               // strikerShadow (null for simulation)
+            this.bombPayload,   // bombPayload
+            determinedImpactCoords, // THE DETERMINED IMPACT COORDINATES
+            clonedDefenders     // context (array of cloned defenders)
+        );
+
+        if (!simulatedStriker.isInitializedSuccessfully()) {
+            console.error("StrikeManager.strike(): Failed to initialize simulated Striker. Aborting strike.");
+            return;
+        }
+
+        let simulatedTotalDeltaR = 0;
+        try {
+            simulatedTotalDeltaR = await simulatedStriker.completionPromise;
+        } catch (simError) {
+            console.error("StrikeManager.strike(): Error during strike simulation:", simError);
+            // Decide if we abort or proceed without safety check. Aborting is safer.
+            return; 
+        }
+        
+        // console.log(`StrikeManager.strike() SIMULATION: currentTotalR=${currentTotalR.toFixed(2)}, bn=${bn.toFixed(2)}, simulatedTotalDeltaR=${simulatedTotalDeltaR.toFixed(2)}`);
+
+        const simulatedPostStrikeR = currentTotalR - simulatedTotalDeltaR;
+
+        // 4. Safety Check
+        if (simulatedPostStrikeR < bn) {
+            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below current wave avg bounty rate (${bn.toFixed(2)}).`);
+            this.strikeCooldownActive = true;
+            // console.log("StrikeManager.strike(): Cooldown activated.");
+            return; 
+        }
+
+        // 5. Proceed with Real Strike (if safety check passes)
+        // console.log(`StrikeManager.strike(): Safety check passed. Proceeding with real strike at (${determinedImpactCoords.x.toFixed(1)}, ${determinedImpactCoords.y.toFixed(1)}).`);
+        try {
+            // Pass `determinedImpactCoords` to the real striker.
+            const deltaR = await this.dispatchStriker(determinedImpactCoords); 
+            // console.log(`StrikeManager.strike(): Real strike completed. Delta R from defenders: ${deltaR !== undefined && deltaR !== null ? deltaR.toFixed(4) : 'N/A'}`);
+            
                 if (typeof deltaR === 'number' && deltaR >= 0) { 
                     if (this.averageBombDamageR === null) {
                         this.averageBombDamageR = deltaR; // First strike sets the average if not seeded
@@ -939,76 +1121,9 @@ export default class StrikeManager {
 
             } catch (error) {
                 console.error("StrikeManager.strike(): Error during dispatchStriker or strike execution:", error);
-            }
-        } else {
-            console.log("StrikeManager.strike(): No optimal target found. Strike aborted.");
         }
     }
     // --- END ADDED ---
-
-    // --- NEW METHOD: _updateTargetDestructionForBatch (Plan II.5) ---
-    /**
-     * Calculates ΔR for a completed bounty batch (B*) and updates totalTargetDestructionR.
-     * @param {number} bountyProcessedThisBatch - The amount of bounty in this batch (typically B*).
-     * @private
-     */
-    _updateTargetDestructionForBatch(bountyProcessedThisBatch) {
-        if (this.K_current_wave === null) {
-            // console.log("StrikeManager._updateTargetDestructionForBatch: Conditions not met for destruction calculation.", 
-            //              { K: this.K_current_wave, R_checkpoint: this.Rn_at_last_bounty_checkpoint });
-            return; // No destruction to apply if K is invalid or no earning rate to destroy
-        }
-
-        const Rn_before_segment = this.Rn_at_last_bounty_checkpoint;
-        // K_current_wave already incorporates Bn in its denominator, so the exponent is -K_n * B_processed
-        const exp_decay_factor = Math.exp(-this.K_current_wave * bountyProcessedThisBatch);
-        const Rn_after_segment = Rn_before_segment * exp_decay_factor;
-        const deltaR_increment = Rn_before_segment - Rn_after_segment;
-
-        this.totalTargetDestructionR += deltaR_increment;
-        this.Rn_at_last_bounty_checkpoint = Rn_after_segment;
-
-        // console.log(`StrikeManager._updateTargetDestructionForBatch: Processed bounty ${bountyProcessedThisBatch}. ` +
-        //             `Rn_before: ${Rn_before_segment.toFixed(2)}, Rn_after: ${Rn_after_segment.toFixed(2)}, ` +
-        //             `deltaR: ${deltaR_increment.toFixed(2)}, totalTargetDestructionR: ${this.totalTargetDestructionR.toFixed(2)}`);
-    }
-
-    // --- NEW METHOD: recordBountyEarned (Plan II.4) ---
-    /**
-     * Called by game logic whenever bounty is awarded for an enemy kill.
-     * Accumulates bounty and triggers updates to target destruction when threshold B* is met.
-     * @param {number} bountyIncrement - The amount of bounty earned (ΔB).
-     */
-    recordBountyEarned(bountyIncrement) {
-        if (!this.configLoaded || this.K_current_wave === null || this.Rn_at_wave_start <= 0 || this.bountyUpdateThreshold_B_star === null || this.bountyUpdateThreshold_B_star <= 0) {
-            // console.log("StrikeManager.recordBountyEarned: Conditions not met for processing bounty.",
-            //              { configLoaded: this.configLoaded, K: this.K_current_wave, R_start: this.Rn_at_wave_start, B_star: this.bountyUpdateThreshold_B_star });
-            return; // Cannot process if not configured, K is invalid, no initial R, or B* is invalid
-        }
-
-        if (typeof bountyIncrement !== 'number' || bountyIncrement <= 0) {
-            // console.warn(`StrikeManager.recordBountyEarned: Invalid bountyIncrement (${bountyIncrement}). Ignoring.`);
-            return;
-        }
-
-        this.bountyCollectedSinceLastCheckpoint += bountyIncrement;
-        // console.log(`StrikeManager.recordBountyEarned: Bounty ${bountyIncrement.toFixed(2)} recorded. ` +
-        //             `Collected since last checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} / ${this.bountyUpdateThreshold_B_star.toFixed(2)}`);
-
-        // Process completed B* batches
-        while (this.bountyCollectedSinceLastCheckpoint >= this.bountyUpdateThreshold_B_star) {
-            // console.log(`StrikeManager.recordBountyEarned: Threshold B* met. Processing batch of ${this.bountyUpdateThreshold_B_star.toFixed(2)}.`);
-            this._updateTargetDestructionForBatch(this.bountyUpdateThreshold_B_star);
-            this.bountyCollectedSinceLastCheckpoint -= this.bountyUpdateThreshold_B_star;
-            // console.log(`StrikeManager.recordBountyEarned: Remaining collected bounty: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}`);
-        }
-    }
-
-    // --- MODIFIED: Getter for Average Bomb Damage ---
-    getAverageBombDamageR() {
-        return this.averageBombDamageR === null ? 0 : this.averageBombDamageR;
-    }
-    // --- END MODIFIED ---
 
     // --- ADDED: Heatmap Pixi Object Initialization ---
     _initializeHeatmapPixiObjects() {
@@ -1119,10 +1234,9 @@ export default class StrikeManager {
         // --- END ADDED ---
 
         // --- ADDED: Automated Strike Logic ---
-        if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0) {
+        if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0 && !this.strikeCooldownActive) {
             const outstandingDamage = this.getOutstandingTargetDamageR();
-            const averageDamage = this.getAverageBombDamageR();
-            if (averageDamage > 0 && outstandingDamage >= averageDamage * (1 + this.strikeTriggerBufferScalar)) {
+            if (outstandingDamage > 0) { // Only strike if there's actually outstanding damage
                 this.strike().catch(error => console.error("Automated strike failed:", error));
             }
         }
@@ -1226,6 +1340,17 @@ export default class StrikeManager {
 
         // Update dependent calculations
         this.updateDependentCalculations();
+    }
+
+    /**
+     * Resets the strike cooldown, allowing the StrikeManager to attempt strikes again.
+     * This should be called, for example, when the player places a new defender.
+     */
+    resetStrikeCooldown() {
+        if (this.strikeCooldownActive) {
+            // console.log("StrikeManager: Strike cooldown reset.");
+            this.strikeCooldownActive = false;
+        }
     }
 
     isConfigLoaded() {
