@@ -278,6 +278,12 @@ export default class DefenceManager extends EventTarget {
             }
         }
 
+        // --- ADDED: Reset strike cooldown after successful placement --- 
+        if (this.game && this.game.strikeManager && typeof this.game.strikeManager.resetStrikeCooldown === 'function') {
+            this.game.strikeManager.resetStrikeCooldown();
+        }
+        // --- END ADDED ---
+
         //console.log(`DefenceManager: Placed ${defenceId} at (${position.x}, ${position.y}). Total defences: ${this.activeDefences.length}`);
         return newDefence; // Return the created instance
     }

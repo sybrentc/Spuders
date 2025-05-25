@@ -104,10 +104,15 @@ export default class Striker {
 
         // --- Play explosion animation FIRST ---
         // Animation should use the final impactCoords
-        if (this.bombPayload && this.bombPayload.explosionAnimation) {
+        // MODIFIED: Only play for real strikes
+        if (this.isRealStrike && this.bombPayload && this.bombPayload.explosionAnimation) {
             this._playExplosionAnimation(impactCoords); 
+        } else if (!this.isRealStrike) {
+            // Optional: Log that simulation is skipping visuals
+            // console.log("Striker (Simulation): Skipping explosion animation and screen shake.");
         } else {
-            console.warn("Striker: Explosion animation skipped as payload or animation data missing (in _executeStrikeInternal).");
+            // This case means it's a real strike but payload/animation data is missing
+            console.warn("Striker (Real Strike): Explosion animation skipped as payload or animation data missing (in _executeStrikeInternal).");
         }
         // --- END Explosion Animation ---
 

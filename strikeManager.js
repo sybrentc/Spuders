@@ -592,6 +592,8 @@ export default class StrikeManager {
         const alpha = this.game.getAlpha();
         const wearRateW = this.game.getWearParameter();
 
+        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Inputs: f=${f}, L=${L}, s_min=${s_min}, Tn=${Tn}, Tn+1=${Tn_plus_1}, alpha=${alpha}, W=${wearRateW}`);
+
         // 2. Validate Parameters
         if (f === undefined || f === null || f <= 0) { // f must be > 0, typically > 1 for difficulty increase
             console.error(`StrikeManager._calculateDn: Invalid difficulty increase factor (f=${f}). Must be > 0.`);
@@ -624,7 +626,6 @@ export default class StrikeManager {
             return 0; // Or assign wearRateW = 0 if that's acceptable.
         }
 
-
         // 3. Calculate Intermediate Values
         // T0 is not directly in Eq. 30. The terms are 1/alpha, w, and the timing term.
         // const T0 = L / s_min; // Not needed for Eq. 30 directly
@@ -638,6 +639,7 @@ export default class StrikeManager {
             console.warn(`StrikeManager._calculateDn (Eq.30): Invalid gamma_n (${gamma_n}) calculated for wave ${waveNumber}.`);
             return 0;
         }
+        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Calculated gamma_n: ${gamma_n}`);
 
         // 4. Calculate dn using Eq. 30
         const term_1_alpha = 1 / alpha;
@@ -659,6 +661,7 @@ export default class StrikeManager {
         const term_timing_factor = (1 / Tn) * timing_factor_content;
 
         const dn = term_1_alpha - wearRateW + term_timing_factor;
+        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Terms: 1/alpha=${term_1_alpha}, wearRateW=${wearRateW}, timingFactorContent=${timing_factor_content}, termTimingFactor=${term_timing_factor}, Final dn=${dn}`);
 
         return dn;
     }
@@ -696,6 +699,16 @@ export default class StrikeManager {
 
         // Calculate and store dn for the new wave (existing logic)
         this.currentDn = this._calculateDn(this.currentWaveNumber);
+        // --- ADDED: Ensure currentDn is not negative for K_current_wave calculation ---
+        // If dn is theoretically negative, it means no additional damage is required from strikes
+        // for this wave to maintain balance, beyond existing wear and wave progression.
+        // Clamping to 0 prevents K_current_wave from becoming negative, which would lead to
+        // totalTargetDestructionR decreasing.
+        if (this.currentDn < 0) {
+            // console.warn(`StrikeManager.startWave: Calculated dn for wave ${this.currentWaveNumber} was negative (${this.currentDn.toFixed(4)}). Clamping to 0 for K_n calculation.`);
+            this.currentDn = 0;
+        }
+        // --- END ADDED ---
 
         // --- NEW LOGIC from plan2.md II.3 ---
         // Get total bounty for the current wave
@@ -1088,12 +1101,14 @@ export default class StrikeManager {
         const simulatedPostStrikeR = currentTotalR - simulatedTotalDeltaR;
 
         // 4. Safety Check
-        if (simulatedPostStrikeR < bn) {
+        // DEBUG: Temporarily commenting out safety check to force real strike
+        if (simulatedPostStrikeR < bn) { 
             console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below current wave avg bounty rate (${bn.toFixed(2)}).`);
             this.strikeCooldownActive = true;
             // console.log("StrikeManager.strike(): Cooldown activated.");
             return; 
         }
+        // END DEBUG
 
         // 5. Proceed with Real Strike (if safety check passes)
         // console.log(`StrikeManager.strike(): Safety check passed. Proceeding with real strike at (${determinedImpactCoords.x.toFixed(1)}, ${determinedImpactCoords.y.toFixed(1)}).`);
@@ -1236,7 +1251,9 @@ export default class StrikeManager {
         // --- ADDED: Automated Strike Logic ---
         if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0 && !this.strikeCooldownActive) {
             const outstandingDamage = this.getOutstandingTargetDamageR();
-            if (outstandingDamage > 0) { // Only strike if there's actually outstanding damage
+            // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
+            // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
+            if (outstandingDamage > (this.averageBombDamageR || 0)) { 
                 this.strike().catch(error => console.error("Automated strike failed:", error));
             }
         }
@@ -1377,4 +1394,84 @@ export default class StrikeManager {
         }
     }
     // --- END ADDED ---
+
+    // --- ADDED: Method to record bounty earned and trigger target destruction updates ---
+    /**
+     * Records bounty earned by the player and updates target destruction calculation
+     * if thresholds are met.
+     * This method should be called by the Game or BountyManager whenever bounty is awarded to the player.
+     * @param {number} bountyAmount - The amount of bounty earned from a single event (e.g., enemy kill).
+     */
+    recordBountyEarned(bountyAmount) {
+        if (typeof bountyAmount !== 'number' || bountyAmount <= 0) {
+            return;
+        }
+        // Ensure there's an active wave and K_current_wave is valid (e.g. total bounty for wave Bn > 0)
+        if (this.currentWaveNumber === 0 || this.K_current_wave === null || this.K_current_wave === undefined) {
+            // console.log("StrikeManager.recordBountyEarned: No active wave or K_current_wave is invalid, bounty not processed for target destruction.");
+            return;
+        }
+        // Ensure bountyUpdateThreshold_B_star is a positive finite number for chunking.
+        // If it's Infinity (e.g. averageBombDamageR is 0), all processing happens in finalizeWaveDamage.
+        const isValidBStar = typeof this.bountyUpdateThreshold_B_star === 'number' && isFinite(this.bountyUpdateThreshold_B_star) && this.bountyUpdateThreshold_B_star > 0;
+
+        this.bountyCollectedSinceLastCheckpoint += bountyAmount;
+        // console.log(`StrikeManager.recordBountyEarned: Bounty ${bountyAmount.toFixed(2)} recorded. Total since checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} / ${isValidBStar ? this.bountyUpdateThreshold_B_star.toFixed(2) : 'Infinity'}`);
+
+        // Process in B* chunks if B* is valid and positive
+        if (isValidBStar) {
+            while (this.bountyCollectedSinceLastCheckpoint >= this.bountyUpdateThreshold_B_star) {
+                // console.log(`StrikeManager.recordBountyEarned: Processing a B* chunk of ${this.bountyUpdateThreshold_B_star.toFixed(2)}.`);
+                this._updateTargetDestructionForBatch(this.bountyUpdateThreshold_B_star);
+                this.bountyCollectedSinceLastCheckpoint -= this.bountyUpdateThreshold_B_star;
+                // console.log(`StrikeManager.recordBountyEarned: Remaining bounty since checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)}.`);
+            }
+        }
+    }
+    // --- END ADDED ---
+
+    // --- NEW METHOD: _updateTargetDestructionForBatch (Implements logic from theory doc Eqs. 41,42 and subsequent paragraph) ---
+    /**
+     * Calculates and applies a batch of target destruction based on bounty earned.
+     * This method updates totalTargetDestructionR and Rn_at_last_bounty_checkpoint.
+     * @param {number} bountyAmountInBatch - The amount of bounty in this specific batch (e.g., B* or remaining bounty).
+     * @private
+     */
+    _updateTargetDestructionForBatch(bountyAmountInBatch) {
+        if (bountyAmountInBatch <= 0) {
+            return; // No bounty, no change.
+        }
+        // K_current_wave should be (dn * Tn) / Bn. If Bn is 0, K_current_wave might be null/Infinity.
+        if (this.K_current_wave === null || this.K_current_wave === undefined || !isFinite(this.K_current_wave)) {
+            // console.warn("StrikeManager._updateTargetDestructionForBatch: K_current_wave is not valid. Cannot update target destruction.", this.K_current_wave);
+            return;
+        }
+        if (this.Rn_at_last_bounty_checkpoint === null || this.Rn_at_last_bounty_checkpoint === undefined) {
+            // console.warn("StrikeManager._updateTargetDestructionForBatch: Rn_at_last_bounty_checkpoint is not set. Cannot update target destruction.");
+            return;
+        }
+
+        const R_chk = this.Rn_at_last_bounty_checkpoint;
+        const K_n = this.K_current_wave; // This is (dn * Tn) / Bn
+
+        // R'_chk = R_chk * e^(-K_n * bountyAmountInBatch)
+        const R_prime_chk = R_chk * Math.exp(-K_n * bountyAmountInBatch);
+
+        // deltaR for batch = R_chk - R'_chk
+        const deltaR_for_batch = R_chk - R_prime_chk;
+
+        if (typeof deltaR_for_batch === 'number' && isFinite(deltaR_for_batch)) {
+            this.totalTargetDestructionR += deltaR_for_batch;
+            // console.log(`StrikeManager: Batch bounty ${bountyAmountInBatch.toFixed(2)} processed. DeltaR: ${deltaR_for_batch.toFixed(4)}. New totalTargetDestructionR: ${this.totalTargetDestructionR.toFixed(4)}. K_n: ${K_n.toFixed(6)}, R_chk: ${R_chk.toFixed(4)}, R_prime_chk: ${R_prime_chk.toFixed(4)}`);
+        } else {
+            // console.warn(`StrikeManager._updateTargetDestructionForBatch: Invalid deltaR_for_batch calculated (${deltaR_for_batch}). K_n=${K_n}, R_chk=${R_chk}, bountyAmount=${bountyAmountInBatch}`);
+        }
+
+        // Update Rn_at_last_bounty_checkpoint for the next batch/calculation.
+        // Ensure it doesn't go negative due to potential floating point inaccuracies or extreme K_n values.
+        this.Rn_at_last_bounty_checkpoint = Math.max(0, R_prime_chk);
+
+        // console.log(`StrikeManager: Updated Rn_at_last_bounty_checkpoint to ${this.Rn_at_last_bounty_checkpoint.toFixed(4)}`);
+    }
+    // --- END NEW METHOD ---
 } 
