@@ -197,11 +197,15 @@
 
 \[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
 
-<p>We can see what \(d_n\) would look like if we select a value for \(\alpha\). For this particular scenario, let us select it such that the game starts out with no damage being dealt in the initial waves. For small wave numbers, we assume a constant wave duration \(T_n = T_{n+1} = T_0\), as in the above derivation of \(\alpha_0\), In this low-\(n\) regime, eqt. 30 indicates that \(d_n\) is a constant, which we are free to choose as we see fit. We use this freedom to set the initial fractional damage rate to zero, which produces the break-even constant \(\alpha_0\) for the low-\(n\) regime</p>
+<p>To obtain a break-even value for \(\alpha\) in the presence of depreciation, we acknowledge that over the course of wave \(n\) of duration \(T_n\) a player must pay both to increase their defenses to face the next wave as well as pay for upkeep of their defenses to compensate for the depreciation from wear and damages. The former cost is given by \(\alpha(f-1)R_n\) and the latter by \(\alpha T_n(wR_n + d_nR_n)\). This cost needs to be paid for from the total wave bounty \(B_n\). Equation these and recognising that at break-even \(R_nT_n = B_n\), we obtain</p>
 
-\[ \alpha_0 = \frac{1}{\frac{f - 1}{T_0} + w}. \tag{31} \]
+\[ \alpha_n = \frac{1}{\frac{f - 1}{T_n} + w + d_n}. \tag{31} \]
 
-\[ d_n = \frac{f - 1}{T_0} + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{32} \]
+<p>We can see what \(d_n\) would look like if we select a value for \(\alpha\) such that the game starts out with no damage being dealt in the initial waves, i.e., \(d_n=0\), which yields</p>
+
+\[ \alpha_0 = \frac{1}{\frac{f - 1}{T_0} + w}, \text{ and} \]
+
+\[ d_n = \frac{f - 1}{T_0} + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \]
 
 <div class="plot-container">
   <div id="dnEvolutionPlot"></div>

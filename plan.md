@@ -26,3 +26,62 @@ This scenario was addressed then by introducing difficulty levels to the game, w
 Now, airstrikes present the same scenario. Although this time the scenario is triggered not by a player taking their eyes off the ball for a moment, but by the strikemanager dealing damage in big lumps, rather than spread evenly over time.
 
 The discretization of damage through airstrikes presents a fundamental challenge to our break-even game balance theory. While our differential equation approach gives us dn as an instantaneous rate limit for damage that maintains break-even conditions, the practical implementation of discrete damage events (big bombs) creates a "sawtooth" pattern in the player's earning rate. When a bomb hits, the instantaneous drop in earning rate exceeds the rate limit dn, pushing the player below break-even conditions until they can recover. This creates periods of vulnerability that force reactive, sub-optimal play - exactly the scenario we encountered with wear. To address this while maintaining engaging gameplay with big, infrequent bombs, we need to calculate the theoretical economic buffer required for a given degree of damage discretization. This buffer would ensure the player always remains on the right side of break-even, even during recovery from discrete damage events. We can tune this buffer using the difficulty scalar a in equation 39 (α = aα₀), where a ≤ 1. By calculating the maximum instantaneous drop in earning rate from a discrete damage event, the recovery time needed, and the extra earning power required to maintain break-even during recovery, we can determine an appropriate value for a that provides this buffer. This would give us a theoretical basis for setting difficulty levels that account for the discretization of damage while maintaining engaging gameplay with big, infrequent bombs.
+
+**Plan for Implementing Airstrike Safety Check Using Existing Simulation Capability**
+
+**Goal:**
+Modify `strikeManager.js` to simulate an airstrike's effect on the player's total earning rate *before* committing to a real strike. The simulation will use the `Striker` class with a list of cloned defenders. If the simulated strike would drop the player's total earning rate below the current wave's average bounty rate (\(b_n = B_n/T_n\)), the real strike will be aborted for that frame.
+
+**Proposed Changes in `strikeManager.js`:**
+
+1.  **New Helper Method: `_cloneDefenderForSimulation(originalDefender)`**
+    *   **Purpose:** To create a standalone copy of a defender that can be used by the `Striker` class for damage simulation.
+    *   **Details:**
+        *   It will take an `originalDefender` object as input.
+        *   It will create a new object (the "clone") and copy essential properties like `x`, `y`, `hp` (current scaled health, typically 0-1), `id`, `type`, `isDestroyed`, and `wearEnabled`.
+        *   The clone will be augmented with necessary information from the `DefenceManager` for damage calculation, specifically:
+            *   `definition`: The defender's type definition (containing `stats.wearCapacity`, `stats.cost`, etc.).
+            *   `baseEarningRate`: The earning rate of this defender type at full health.
+        *   The clone will have its own `getEarningRate()` method. This method will calculate its current earning rate based on its current `hp`, its `definition.stats.wearCapacity`, and its `baseEarningRate`. (e.g., `(this.hp / this.definition.stats.wearCapacity) * this.baseEarningRate`).
+        *   Most importantly, the clone will have a `hit(damageAmount)` method. This method must replicate the financial impact of damage:
+            1.  It will note the clone's earning rate *before* applying damage (using its `getEarningRate()` method).
+            2.  It will reduce the clone's `hp` by `damageAmount` (the normalized damage value passed by the `Striker`), clamping `hp` at 0. If `hp` becomes 0, `isDestroyed` will be set to `true`.
+            3.  It will calculate the clone's earning rate *after* applying damage.
+            4.  It will return the positive difference between the earning rate before and after (this is \(\Delta R\), the reduction in earning rate for this specific defender). If there's no positive reduction, it returns 0.
+    *   **Note:** The `damageAmount` parameter in `hit(damageAmount)` is the value calculated by `Striker` (i.e., `bombPayload.strengthA / (effectiveDistance * effectiveDistance)`), which represents the normalized "wear" applied to the defender's scaled health.
+
+2.  **New Helper Method: `_getCurrentWaveAverageBountyRate()`**
+    *   **Purpose:** To calculate the average bounty rate for the current wave.
+    *   **Details:**
+        *   It will retrieve `this.totalBountyForCurrentWave_Bn` (total bounty for the wave) and `this.projectedDurationCurrentWave_Tn` (projected duration).
+        *   It will calculate \(b_n = \text{totalBountyForCurrentWave_Bn} / \text{projectedDurationCurrentWave_Tn}\).
+        *   **Edge Case Handling:** If `projectedDurationCurrentWave_Tn` is zero or negative (which shouldn't typically happen but is good to guard against), this method should return a value that makes sense for the safety check. Returning `0` could be an option. If \(b_n = 0\), the condition `simulatedPostStrikeR < bn` would mean the strike is aborted if the earning rate becomes negative. This seems like a reasonable default.
+
+3.  **Modify the `strike()` method:**
+    *   The existing logic for finding `targetCoords` will remain.
+    *   **New Simulation Step (before `dispatchStriker`):**
+        1.  Get the player's current total earning rate: `currentTotalR = this.game.defenceManager.getCurrentTotalEarningRate()`.
+        2.  Get the current wave's average bounty rate: `bn = this._getCurrentWaveAverageBountyRate()`.
+        3.  Create an array of `clonedDefenders`. This will be done by iterating through all active defenders (obtained from `this.game.defenceManager.getActiveDefences()`) and calling `_cloneDefenderForSimulation()` for each one.
+        4.  Instantiate a `Striker` specifically for this simulation:
+            ```javascript
+            const simulatedStriker = new Striker(
+                this.game,                  // gameInstance (for Striker's internal needs)
+                null,                       // strikerShadow (null for simulation, no visual shadow)
+                this.bombPayload,           // bombPayload (strength, explosion, etc.)
+                targetCoords,               // The determined target coordinates
+                clonedDefenders             // context (the array of cloned defenders)
+            );
+            ```
+        5.  Await the simulation's outcome: `const simulatedTotalDeltaR = await simulatedStriker.completionPromise;`. The `Striker`'s `completionPromise` will resolve with the total \(\Delta R\) calculated by summing the \(\Delta R\) values returned from each cloned defender's `hit()` method.
+        6.  Calculate the player's total earning rate as if the strike occurred: `simulatedPostStrikeR = currentTotalR - simulatedTotalDeltaR;`
+        7.  **Safety Check:**
+            *   If `simulatedPostStrikeR < bn`:
+                *   Log a message indicating the strike was aborted due to the safety check (e.g., "Strike aborted: simulated post-strike earning rate would be below current wave's average bounty rate.").
+                *   `return;` (i.e., do not proceed to `dispatchStriker`).
+        8.  **Proceed with Real Strike:** If the safety check passes, the method will continue with the existing logic: `await this.dispatchStriker(targetCoords);` and handle the results as it currently does.
+
+**Impact on `striker.js`:**
+*   **No changes required.** The `Striker` class is already designed to accept an array of defender-like objects in its `context` parameter and will call their `hit()` methods. As long as the cloned defenders provided by `strikeManager.js` have the required properties and a `hit()` method that returns \(\Delta R\), `Striker` will function correctly in simulation mode.
+
+This plan aims to integrate the safety check cleanly by reusing the `Striker`'s existing capabilities and encapsulating the new simulation-specific logic within `strikeManager.js`. The most critical part will be the implementation of `_cloneDefenderForSimulation` to ensure the clones accurately reflect the financial impact of damage.
