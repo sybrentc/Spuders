@@ -1,114 +1,28 @@
-# Game Initialise/Reset Refactor
+Some things I noticed during play testing:
 
-**Phase 1: Implement `resetForNewGame()` in `strikeManager.js`**
-0. Move all initialisation logic into an initState() function
-        *   check the following parameters are present inter alia `this.totalTargetDestructionR;`
-        *    `this.cumulativeBombDamageDealtByStrikesR;`
-        *    `this.averageBombDamageR`
-        *   all wave-specific properties (`currentWaveNumber`, `currentWaveStartTime`, `currentWaveStartTotalR`, `currentDn`, `K_current_wave`, `Rn_at_wave_start`, `Rn_at_last_bounty_checkpoint`, `bountyCollectedSinceLastCheckpoint`, `totalBountyForCurrentWave_Bn`, `projectedDurationCurrentWave_Tn`) 
-        *   Call to `this.initializeBountyThreshold();` to recalculate `bountyUpdateThreshold_B_star` with the seeded `averageBombDamageR`?
-        * bounty threshold, etc.?
-1.  Create a `resetForNewGame()` method in `strikeManager.js`.
-    *   This method will:
-        *   Iterate through `this.strikers`, call `destroy()` on each active striker, and then clear the array: `this.strikers = [];`.
-        * call the initState() function
+Some ice puddles remain on the ground and do not disappear. Perhaps this is when a subzero is destroyed by airstrike and its puddles are now orphans?
 
-**Phase 2: Implement `resetForNewGame()` in `enemyManager.js`**
-0. Move all initialisation logic into an initState() function
-    * cover inter alia   `this.currentWaveDeathDistances`
-            *   `this.lastDeathInfo`
-1.  Create a `resetForNewGame()` method in `enemyManager.js`.
-    *   This method will:
-        *   Iterate through all enemies in `this.activeEnemies`. For each `enemy`:
-            *   If `enemy.pixiContainer` exists and `enemy.pixiContainer.parent` is not null (i.e., it's on the stage/a layer), remove it: `enemy.pixiContainer.parent.removeChild(enemy.pixiContainer);`. (It's added to `this.game.groundLayer` in `createEnemy`).
-            *   Call `enemy.destroyPixiObjects();` to clean up its sprites and health bar.
-        *   After iterating and cleaning up, clear the main array: `this.activeEnemies = [];`. But perhaps this is best integrated into initState()
-        *   call initState()
-            
+The red tank spiders do not neatly y-sort behind my magic tower defender. Perhaps we need to check the anchor points of all enemies and defenders?
 
-**Phase 3: Implement `resetForNewGame()` in `defenceManager.js`**
-0. move initialisation logic to initState()
-1.  Create a `resetForNewGame()` method in `defenceManager.js`.
-    *   This method will:
-        *   Iterate through all defences in `this.activeDefences`. For each `defence`:
-            *   If `defence.pixiContainer` exists and `defence.pixiContainer.parent` is not null, remove it: `defence.pixiContainer.parent.removeChild(defence.pixiContainer);`. (It's added to `this.game.groundLayer` in `placeDefence`).
-            *   Call `defence.destroyPixiObjects();` to clean up its sprites, health bar, and clear its internal puddle references.
-        *   After iterating and cleaning up, clear the main array: `this.activeDefences = [];`. But perhaps this is best integrated into initState()
-        *   **Explicit Puddle Layer Cleanup:** To ensure all visual puddle effects are gone (as `DefenceEntity.destroyPixiObjects()` only clears its *references* and individual puddles expire over time), this method should also clear the `game.puddleLayer`:
-            *   Check if `this.game && this.game.puddleLayer` exists.
-            *   If so, iterate `this.game.puddleLayer.children`, call `destroy()` on each child graphic.
-            *   Then call `this.game.puddleLayer.removeChildren();`.
-        * call initState()
+Airstrikes were set to an average damage per bomb of 18, derived from earlier test playing. However, today the first bomb did less damage than that so we had many airstrikes in short succession, while the game established a current average (which was initially below the seed value). This is fine, I am tracking the bomb stats using the console during gameplay. I seem to be surviving with just enough firepower to keep playing, so that's great. No changes needed here, I think. Although, we might introduce a delay so that not more than 3 strikes are carried out in rapid succession, with a cooldown after that. We could add the cool-down period to strike.json and set it at 30 seconds? This would ensure that in the scenario where the average bomb damage is temporarily below the seed value, we do not suddenly have one big reckoning where the entire bucket of accumulated damage is poured out onto the player in one go.
 
-**Phase 4: Modify `Game.reset()` in `game.js`**
-*(Integrate the new manager-specific reset methods and ensure PIXI layers are fully cleared)*
-1.  Locate the `reset()` method in `game.js` (around line 938).
-2.  **Modify Enemy Manager Reset:**
-    *   Replace the lines:
-        ```javascript
-        // if (this.enemyManager) {
-        //     this.enemyManager.activeEnemies = [];
-        //     this.enemyManager.currentWaveDeathDistances = [];
-        //     this.enemyManager.lastDeathInfo = { distance: null, originalX: null, originalY: null };
-        // }
-        ```
-    *   With a call to the new method:
-        ```javascript
-        if (this.enemyManager && typeof this.enemyManager.resetForNewGame === 'function') {
-            this.enemyManager.resetForNewGame();
-        }
-        ```
-3.  **Modify Defence Manager Reset:**
-    *   Replace the lines:
-        ```javascript
-        // if (this.defenceManager) {
-        //     this.defenceManager.activeDefences = [];
-        //     // TODO: Reset any other state within DefenceManager if needed
-        // }
-        ```
-    *   With a call to the new method:
-        ```javascript
-        if (this.defenceManager && typeof this.defenceManager.resetForNewGame === 'function') {
-            this.defenceManager.resetForNewGame();
-        }
-        ```
-4.  **Add Strike Manager Reset:**
-    *   Add a new block to call the `strikeManager`'s reset method:
-        ```javascript
-        if (this.strikeManager && typeof this.strikeManager.resetForNewGame === 'function') {
-            this.strikeManager.resetForNewGame();
-        }
-        ```
-5.  **Ensure PIXI Layer Cleanup (Safeguard):**
-    *   While the manager `resetForNewGame` methods should handle removing their specific entities from layers like `groundLayer` and `puddleLayer`, it's a good safeguard to explicitly clear these layers in `Game.reset()` *after* the manager resets have run. This ensures no stray PIXI objects remain.
-    *   Add the following towards the end of `Game.reset()` (before any re-initialization logic if present, but after manager resets):
-        ```javascript
-        if (this.groundLayer) {
-            // Children should have been destroyed by manager resets,
-            // so just removing them should be sufficient.
-            this.groundLayer.removeChildren();
-        }
-        if (this.effectsLayer) {
-            // Destroy children explicitly if they are not managed elsewhere
-            // and then remove them.
-            this.effectsLayer.children.forEach(child => {
-                if (typeof child.destroy === 'function') {
-                    child.destroy({ children: true, texture: true, baseTexture: true }); // Thorough cleanup
-                }
-            });
-            this.effectsLayer.removeChildren();
-        }
-        // The puddleLayer cleanup is now primarily handled by defenceManager.resetForNewGame().
-        // If an additional safeguard is desired here:
-        // if (this.puddleLayer) {
-        //     this.puddleLayer.children.forEach(child => child.destroy()); // Assuming children are PIXI.Graphics
-        //     this.puddleLayer.removeChildren();
-        // }
-        ```
-    *   The `placementPreviewGraphic` should also be cleared/hidden if it's not already handled:
-        ```javascript
-        if (this.placementPreviewGraphic) {
-            this.placementPreviewGraphic.clear();
-            this.placementPreviewGraphic.visible = false;
-        }
-        ```
+Something strange happened, where after a bit of playing it seemed that the subzero ice puddles were no longer effective at slowing enemies. Can you see anything in the code which might explain this. After I went game over and reloaded the game, the puddles remained, which also indicates something strange, since the effects layer should be cleaned up during reset, right?
+
+Another strange thing happened where when I tabbed away to make some notes and then came back to the game I was now under attack by a blue tank spider which was being shot at by my defenders by its health did not seem to deplete. Was this perhaps a case of multiple tank spiders on top of each other? Or some glitch? This would need tracing in the code to see if anything comes up, I think.
+
+I noticed that when firing on an enemy, they seem to stay in a single frame of their animation as they are cycling between their hit/non-hit spirtes. This is not correct, as the enemy animation frame should keep progressing while they cycle between hit/non-hit sprites. It currently looks as if the animation cycle is being frozen on each swap of hit/non-hit sprite.
+
+The little fast spiders seem unaffected by the ice puddles. Perhaps since we are scaling the hidisk by the sprite size, their hitdisk is too small? But we want it to be scaled by sprite size so that the slow-down effect makes physical sense. But perhaps they are too fast, so that the slow down a little when on the puddle but move quickly off the puddle anyway, even at their reduced speed? Is the slow-down effect a percentage effect? Should we perhaps make it an absolute speed effect so that all enemies are slow equally when touching an ice puddle? I suppose that would make physical sense as well. Since, speed on dry land comes from pushing against the ground by friction, but if you come to a sheet of ice, you cannot keep running or you'll slip and fall, so you'd slow way down and move slow enough that you maintain your grip? Or would the enemies just see the puddle and do a little ice skate across? But then they would not be slowed down by the puddles, which is the whole point.
+
+Another thing with the subzero is that it shoots the ice puddles at the exact location an enemy is at, rather than somewhat in front of the enemy, i.e., where the enemy is going. It would be cool if the subzero can somehow shoot not at the exact enemy location but a little ahead of it. The subzero can use the fact that enemies always follow the path, so the subzero can query the path length traversed by the enemy it is targeting (each enemy has its associated path distance travelled to track average death point, perhaps held by the enemymanager), and then use the path lookup table to get coords which are some distance ahead of that path length?
+
+Regarding strikes coming thick and fast once the threshold is reached. Another idea, apart from the cool-down period, could be to use 'test bombings' where the strikemanager does a simulation run to test the impact of a strike before release. This is more advanced than a simple cool-down period. The strike manager could take a cloned version of the defenders right now, then carry out a virtual strike on them and get the damage dealt. It can repeat this experiement a few times to get an average bomb damage if a single real striker were to be dispatched right now. This is a way to get an accurate idea of the average bomb damage. This would in fact be the best way to do it, since with virtual strikes on cloned defenders, you can do multiple runs at set intervals during the game, which means you actually no longer need to seed the average bomb damage and you no longer need to have a rolling average that fluctuates due to impact coord uncertainty. It is then merely a matter of computational overhead. i.e., doing a simulation run does cost a few distance calculations etc. The average bomb calculation could be done in full at wave end, when the player would not notice any possible lag, or if there is lag, it would not be immediately game critical, since no active enemies are in play at such time.
+
+The small fast spiders seem unaffected by the ice puddles, but the tank fast spiders also seem unaffected. Perhaps this is due to the subzero targeting the current coords of the enemy, such that fast enemies will be moving so fast that they would have travelled far enough in the next update cycle that the puddle has no effect on them anymore, as they are by then already out of its effective reach.
+
+I've now played the game twice on hard mode with airstrikes. According to the theory, this should have kept the game at knife's edge in terms of my fire power being matched exactly against the enemies oncoming attack strength. However, I have in both cases not managed to get past wave 15, I believe. This used to be the point where we would enter runaway win conditions, i.e., around wave 15. I suppose the airstrikes may be doing too much damage. However, we are keeping track of damage dealt and target damage, and at the time of me being game over, the two are in balance. Potentially then, the problem is not the total damage dealt via airstrikes, but that it sometimes gets dealt in huge clumps at a time. You can imagine that if you are playing and no airstrikes happen, that you can be strategic about defender placement. If, however, there is a huge cluster of airstrikes for the game to catch up on its outstanding target damage, then it may wipe out much or all of your defensive capabilities mid-wave. This then forces you to build defenses under duress in sub-optimal locations and thereby you are not able to maximise the strategic placement of defenders. The latter aspect however is critical for being able to remain in play at the knife's edge difficulty level. This scenario is discussed in the theory document regarding wear:
+"The addition of wear forces a player to keep investing both to grow their defenses but also to counteract the continuous defender turnover due to wear. If the player fails to keep up, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play, where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, means the player can only win with an optimally managed defense. Hence, a single slip can be fatal."
+This scenario was addressed then by introducing difficulty levels to the game, where a player could choose to play at knife's edge (with no room for mistakes), or could choose to give themselves some leeway to be able to withstand the occasional slip up.
+Now, airstrikes present the same scenario. Although this time the scenario is triggered not by a player taking their eyes off the ball for a moment, but by the strikemanager dealing damage in big lumps, rather than spread evenly over time.
+
+The discretization of damage through airstrikes presents a fundamental challenge to our break-even game balance theory. While our differential equation approach gives us dn as an instantaneous rate limit for damage that maintains break-even conditions, the practical implementation of discrete damage events (big bombs) creates a "sawtooth" pattern in the player's earning rate. When a bomb hits, the instantaneous drop in earning rate exceeds the rate limit dn, pushing the player below break-even conditions until they can recover. This creates periods of vulnerability that force reactive, sub-optimal play - exactly the scenario we encountered with wear. To address this while maintaining engaging gameplay with big, infrequent bombs, we need to calculate the theoretical economic buffer required for a given degree of damage discretization. This buffer would ensure the player always remains on the right side of break-even, even during recovery from discrete damage events. We can tune this buffer using the difficulty scalar a in equation 39 (α = aα₀), where a ≤ 1. By calculating the maximum instantaneous drop in earning rate from a discrete damage event, the recovery time needed, and the extra earning power required to maintain break-even during recovery, we can determine an appropriate value for a that provides this buffer. This would give us a theoretical basis for setting difficulty levels that account for the discretization of damage while maintaining engaging gameplay with big, infrequent bombs.

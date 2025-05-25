@@ -247,12 +247,6 @@
 
 \[ \bar{f} = P(\text{in range}) \frac{1}{N} \sum_{j=1}^{N} \min(1, \frac{T_{k,j}}{T_{r,j}}). \tag{38} \]
 
-<p>The addition of wear forces a player to keep investing both to grow their defenses but also to counteract the continuous defender turnover due to wear. If the player fails to keep up, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play, where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, means the player can only win with an optimally managed defense. Hence, a single slip can be fatal.</p>
-
-<p>To weaken the impact of the above problem, we may either reduce the rate of wear \(w\) and/or we may set the game difficulty slightly below break-even using a difficulty scalar \(a\leq1\)to give the player a choice of game difficulty, with \(a=1\) being the most difficult. This yields</p>
-
-\[ \alpha = a\alpha_0. \tag{39} \]
-
 <h2>Defender destruction</h2>
 
 <p>To find a mechanism for implementing the active destruction of defenders by enemy forces, we isolate the differential contribution due to destruction from eqt. 28 as follows</p>
@@ -307,9 +301,19 @@
 
 <p>We work on the basis that it is the best interests of the enemy to remove as much earning rate from the pool per explosion as possible, since that translates into the greatest instantaneous boost to their chances of success. To pick the optimal location for the epicentre of the explosion therefore, we add all defender wipe-out circles to a z-buffer, each weighted by its associated defender earning rate, and randomly select a pixel of maximum z-value to be the target location.</p>
 
-<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value. Specifically, this threshold is the cost of a single bomb times the number of bombs in the upcoming airstrike. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R\) cost we are after. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with a value determined empirically through playtesting. The number of bombs for the next airstrike can be selected according to a Poisson distribution.</p>
+<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value, i.e. the cost of a single bomb. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R\) cost we are after. We can also simulate an airstrike multiple times on a given defender population to obtain the damage per bomb. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with an empirical value.</p>
 
 <p>The threshold bounty \(B^*\) is set algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
+
+<h2>Break-even in the presence of wear and destruction</h2>
+
+<p>The depreciation theory above has been developed from a differential approach, which assumes wear and damage can be applied continuously. This is not the case in the game, where these effects are applied discretely, and we have derived expression in the above to enable us to deal discrete portions of depreciation. In this section, we revisit the break-even condition in the presence of discrete depreciation events.</p>
+
+<p>Depreciation forces a player to keep investing both to grow their defenses to meet the demands of oncoming waves, but also to counteract the continuous defender turnover due to wear and damage. If the player fails to keep up, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play, where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, means the player can only win with an optimally managed defense. Hence, a single step onto the losing side of break-even can be fatal. If the game is tuned such that a break-even condition exists in the presence of continuous depreciation, then the saving up of depreciation and application in one discrete event will put the player into a losing condition.</p>
+
+<p> To address the above problem, we need to ensure that a player is able to recover from discrete depreciation events and/or to save up resources to face such knocks. To do this, we may determine a discrete break-even factor \(\alpha\), which is below the continuous break-even factor \(\alpha_0\) using a difficulty scalar \(a\leq1\)</p>
+
+\[ \alpha = a\alpha_0. \tag{49} \]
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>
