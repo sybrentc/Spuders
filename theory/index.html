@@ -303,19 +303,28 @@
 
 <p>We work on the basis that it is the best interests of the enemy to remove as much earning rate from the pool per explosion as possible, since that translates into the greatest instantaneous boost to their chances of success. To pick the optimal location for the epicentre of the explosion therefore, we add all defender wipe-out circles to a z-buffer, each weighted by its associated defender earning rate, and randomly select a pixel of maximum z-value to be the target location.</p>
 
-<p>An airstrike can be triggered if the target cumulative damage exceeds the cumulative damage inflicted so far by a threshold value, i.e. the cost of a single bomb. We can obtain the cost of a single bomb empirically by maintaining a rolling average of the total health reduction per bomb, which according to eqt. 46 equals the \(\Delta R\) cost we are after. We can also simulate an airstrike multiple times on a given defender population to obtain the damage per bomb. This adaptively scales the threshold to maintain break-even conditions. We can seed the average with an empirical value.</p>
+<p>Airstrikes can be funded when the target cumulative damage exceeds the cumulative damage inflicted so far by the average damage of a single bomb. This can be thought of as having accumulated enough funds to purchase a single bomb, according to the fundamental economic relationship between currency and earning rate, combined with the direct relation between earning rate and damage (cf. the scaled-health section above). We seed this average bomb damage value with an empirical value determined through playtesting and maintain a rolling average in game for the average bomb damage value to update based on recent airstrikes. We set the threshold bounty \(B^*\) (cf. section on defender destruction above) algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
 
-<p>The threshold bounty \(B^*\) is set algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
-
-<h2>Break-even under discrete depreciation events</h2>
-
-<p>The depreciation theory above has been developed from a differential equation 28, which assumes that wear and damage are applied continuously. This has enabled the derivation of a continuum break-even value \(\alpha_0\) (eqt. 31) such that, under simulated application of a continuous depreciation, produces an asymptotic approach to exact knife-edge, break-even conditions as shown in Fig. 6.</p>
+<p>Even though an airstrike can be funded, as could therefore be said to be 'due', the timing of triggering an airstrike requires some care. We know from simulation shown in Fig. 6 that applying the damage rate \(d_n\) continuously can be absorbed by a player without entering a losing spiral, and in fact produces an asymptotic approach to exact knife-edge, break-even conditions. In game however, airstrikes are dealing this damage in discrete units and this presents an unfair impact on the player if not handled carefully.</p>
     
-<p>To implement the depreciation theory in the game, however, we have needed to discretise the wear (eqt. 37) and damage (eqt. 42 and its subsequent paragraph). What remains to be done now is to reassess the break-even value \(\alpha\) in the presence of such discrete depreciation events.</p>
-
 <p>To explain why this is so, we need to consider the effect of depreciation on the player's ability to maintain a break-even condition. Depreciation forces a player to keep investing both to grow their defenses to meet the demands of oncoming waves, but also to counteract the continuous defender turnover due to wear and damage. If the player for whatever reason fails to stay above break-even, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, is such that a player can survive only with an optimally managed defense. Hence, a single moment on the losing side of break-even can precipitate the above losing spiral resulting in defeat. If the game is tuned such that a break-even condition exists in the presence of continuous depreciation, then the saving up of depreciation and application in one discrete event will put the player into such a losing spiral.</p>
 
-<p>The break-even value \(\alpha_0\) thus needs to be rederived in the presence of discrete depreciation events, so that the player is never put below break-even. As before, the fundamental starting point remains the same: during wave \(n\) of duration \(T_0\), the player needs to earn \(\alpha_0(f-1)R_n\) worth of money. The bounty available in wave \(n\) is \(B_n\) at an average rate \(b_n=B_n/T_0\).</p>
+<p>This problem can be addressed by ensuring that an airstrike does not put a player below break-even. To this end, we take the fundmental balance equation 28, which is time-dependent, and produce a bounty-dependent version using \(dt=dB/b_n\). This yields</p>
+
+\[ \frac{dR_n}{dB} = \frac{1}{\alpha} - \frac{w+d_n}{b_n}R_n \tag{49} \]
+
+<p>The solution to this differential equation, giving the target earning rate \(R_n(B)\) as a function of bounty \(B\) collected in wave \(n\), is</p>
+
+\[ R_n(B) =
+\begin{cases}
+  \frac{b_n}{\alpha(w+d_n)} + \left( R_n(0) - \frac{b_n}{\alpha(w+d_n)} \right) e^{-\frac{w+d_n}{b_n}B} & \text{if } w+d_n \neq 0 \\
+  R_n(0) + \frac{1}{\alpha}B & \text{if } w+d_n = 0
+\end{cases}
+\tag{50} \]
+
+<p>where \(R_n(0)\) is the player's earning rate at the beginning of wave \(n\). This equation provides the evolving target floor for the player's earning power as they progress through the wave by collecting bounty. We can then run a simulated airstrike, obtain the resulting damage dealt, check whether the airstrike would result in a post-damage earning rate which is at or above the target floor and, only if that criterion is satisfied, trigger the real airstrike.</p>
+
+<h2>Game difficulty scalar</h2>
     
 <p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level.</p>
 

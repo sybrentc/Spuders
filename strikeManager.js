@@ -87,6 +87,7 @@ export default class StrikeManager {
         this.Rn_at_wave_start = 0;
         this.Rn_at_last_bounty_checkpoint = 0;
         this.bountyCollectedSinceLastCheckpoint = 0;
+        this.cumulativeBountyThisWave = 0;
         this.bountyUpdateThreshold_B_star = Infinity;
         this.totalBountyForCurrentWave_Bn = 0;
         this.projectedDurationCurrentWave_Tn = 0;
@@ -105,7 +106,15 @@ export default class StrikeManager {
         this.heatmapRenderTexture = null;
         this.heatmapSprite = null;
         this._spareNormal = null; // Initialize for _generateNormalRandom
-        this.strikeCooldownActive = false; // Initialize cooldown flag
+
+        // ADDED: Cache for Rn(B) calculation (Eq. 50)
+        this._cachedRnB_C1 = null;
+        this._cachedRnB_P = null;
+        this._cachedRnB_C2 = null;
+        this._cachedRnB_R_start_n = null;
+        this._cachedRnB_alpha_inv = null;
+        this._cachedRnB_useLinear = false;
+        this._cachedRnB_waveNumber = -1; // Tracks if cache is valid for current wave
     }
 
     _getCurrentWaveAverageBountyRate() {
@@ -764,6 +773,7 @@ export default class StrikeManager {
 
         // Reset bountyCollectedSinceLastCheckpoint
         this.bountyCollectedSinceLastCheckpoint = 0;
+        this.cumulativeBountyThisWave = 0; // ADDED: Reset for the new wave
         // --- END NEW LOGIC ---
 
         //console.log(`  -> Stored R_n(0)=${this.currentWaveStartTotalR.toFixed(4)}, dn=${this.currentDn.toFixed(4)}`); // Old log
@@ -1004,7 +1014,8 @@ export default class StrikeManager {
                 strengthA: this.bombStrengthA,
                 impactStdDevPixels: this.impactStdDevPixels,
                 explosionAnimation: this.pixiExplosionAnimationData,
-                shadow: this.strikerShadowData,
+                // MODIFICATION: Pass the whole shadowData object which includes texture and config
+                shadow: this.strikerShadowData, 
                 minDamageThreshold: this.minWearDecrementForPayload
             };
             // console.log("StrikeManager: bombPayload successfully assembled.", this.bombPayload);
@@ -1059,7 +1070,7 @@ export default class StrikeManager {
 
         // 3. Simulation Step
         const currentTotalR = this.game.defenceManager.getCurrentTotalEarningRate();
-        const bn = this._getCurrentWaveAverageBountyRate();
+        // REMOVED: const bn = this._getCurrentWaveAverageBountyRate();
 
         const activeDefenders = this.game.defenceManager.getActiveDefences();
         const clonedDefenders = activeDefenders.map(def => this._cloneDefenderForSimulation(def)).filter(clone => clone !== null);
@@ -1101,11 +1112,9 @@ export default class StrikeManager {
         const simulatedPostStrikeR = currentTotalR - simulatedTotalDeltaR;
 
         // 4. Safety Check
-        // DEBUG: Temporarily commenting out safety check to force real strike
-        if (simulatedPostStrikeR < bn) { 
-            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below current wave avg bounty rate (${bn.toFixed(2)}).`);
-            this.strikeCooldownActive = true;
-            // console.log("StrikeManager.strike(): Cooldown activated.");
+        const targetFloorR = this._calculateTargetEarningRateFloor();
+        if (simulatedPostStrikeR < targetFloorR) { 
+            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below target floor R (${targetFloorR.toFixed(2)}).`);
             return; 
         }
         // END DEBUG
@@ -1249,7 +1258,7 @@ export default class StrikeManager {
         // --- END ADDED ---
 
         // --- ADDED: Automated Strike Logic ---
-        if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0 && !this.strikeCooldownActive) {
+        if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0) {
             const outstandingDamage = this.getOutstandingTargetDamageR();
             // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
             // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
@@ -1359,17 +1368,6 @@ export default class StrikeManager {
         this.updateDependentCalculations();
     }
 
-    /**
-     * Resets the strike cooldown, allowing the StrikeManager to attempt strikes again.
-     * This should be called, for example, when the player places a new defender.
-     */
-    resetStrikeCooldown() {
-        if (this.strikeCooldownActive) {
-            // console.log("StrikeManager: Strike cooldown reset.");
-            this.strikeCooldownActive = false;
-        }
-    }
-
     isConfigLoaded() {
         return this.configLoaded;
     }
@@ -1411,12 +1409,16 @@ export default class StrikeManager {
             // console.log("StrikeManager.recordBountyEarned: No active wave or K_current_wave is invalid, bounty not processed for target destruction.");
             return;
         }
+
+        // ADDED: Accumulate total bounty for the current wave
+        this.cumulativeBountyThisWave += bountyAmount;
+
         // Ensure bountyUpdateThreshold_B_star is a positive finite number for chunking.
         // If it's Infinity (e.g. averageBombDamageR is 0), all processing happens in finalizeWaveDamage.
         const isValidBStar = typeof this.bountyUpdateThreshold_B_star === 'number' && isFinite(this.bountyUpdateThreshold_B_star) && this.bountyUpdateThreshold_B_star > 0;
 
         this.bountyCollectedSinceLastCheckpoint += bountyAmount;
-        // console.log(`StrikeManager.recordBountyEarned: Bounty ${bountyAmount.toFixed(2)} recorded. Total since checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} / ${isValidBStar ? this.bountyUpdateThreshold_B_star.toFixed(2) : 'Infinity'}`);
+        // console.log(`StrikeManager.recordBountyEarned: Bounty ${bountyAmount.toFixed(2)} recorded. Total for wave: ${this.cumulativeBountyThisWave.toFixed(2)}. Total since checkpoint: ${this.bountyCollectedSinceLastCheckpoint.toFixed(2)} / ${isValidBStar ? this.bountyUpdateThreshold_B_star.toFixed(2) : 'Infinity'}`);
 
         // Process in B* chunks if B* is valid and positive
         if (isValidBStar) {
@@ -1474,4 +1476,102 @@ export default class StrikeManager {
         // console.log(`StrikeManager: Updated Rn_at_last_bounty_checkpoint to ${this.Rn_at_last_bounty_checkpoint.toFixed(4)}`);
     }
     // --- END NEW METHOD ---
+
+    // --- ADDED: Method to calculate target earning rate floor based on Eq. 50 ---
+    _calculateTargetEarningRateFloor() {
+        if (this.currentWaveNumber === 0) { // Should not happen if logic is correct, but safeguard
+            return 0; // Or a very high value to prevent strikes if game not started
+        }
+
+        // Check if cache is valid for the current wave
+        if (this.currentWaveNumber !== this._cachedRnB_waveNumber || this._cachedRnB_waveNumber === -1) {
+            // Cache is stale or not initialized, recalculate constants
+            const R_start_n = this.Rn_at_wave_start;
+            const alpha = this.game.getAlpha();
+            const wear_w = this.game.getWearParameter();
+            const dn = this.currentDn;
+            const Bn = this.totalBountyForCurrentWave_Bn;
+            const Tn = this.projectedDurationCurrentWave_Tn;
+
+            // Ensure alpha is positive
+            if (alpha <= 1e-9) {
+                console.error("StrikeManager._calculateTargetEarningRateFloor: Alpha is zero or negative. Cannot calculate floor.");
+                // Cache values that would make the floor very high or prevent strikes
+                this._cachedRnB_useLinear = true;
+                this._cachedRnB_R_start_n = R_start_n; // Doesn't really matter
+                this._cachedRnB_alpha_inv = Infinity; // This will make R(B) huge
+                this._cachedRnB_waveNumber = this.currentWaveNumber;
+                // No need to calculate C1, P, C2
+            } else {
+                const b_n = (Tn > 1e-6) ? Bn / Tn : 0; // Average bounty rate for wave n
+                const sum_w_dn = wear_w + dn;
+
+                if (Math.abs(sum_w_dn) < 1e-9) { // Case: w + dn approx 0
+                    this._cachedRnB_useLinear = true;
+                    this._cachedRnB_R_start_n = R_start_n;
+                    this._cachedRnB_alpha_inv = 1 / alpha;
+                    this._cachedRnB_C1 = null; // Not used
+                    this._cachedRnB_P = null;  // Not used
+                    this._cachedRnB_C2 = null;  // Not used
+                } else { // Case: w + dn != 0
+                    this._cachedRnB_useLinear = false;
+                    const alpha_sum_w_dn = alpha * sum_w_dn;
+
+                    if (Math.abs(alpha_sum_w_dn) < 1e-9) { // Denominator for C1 is zero
+                        // This implies alpha is ~0 (handled above) or sum_w_dn is ~0 (linear case, handled above)
+                        // However, if b_n is also 0, C1 could be NaN. If b_n!=0, C1 is Inf.
+                        // Fallback: if somehow this condition is met and not caught by linear, treat as high floor.
+                        // This state should ideally not be reached if alpha > 0 and sum_w_dn != 0.
+                         this._cachedRnB_C1 = (b_n === 0) ? 0 : (b_n > 0 ? Infinity : -Infinity); // Avoid NaN
+                    } else {
+                         this._cachedRnB_C1 = b_n / alpha_sum_w_dn;
+                    }
+                    
+                    this._cachedRnB_P = R_start_n - this._cachedRnB_C1;
+
+                    if (Math.abs(b_n) < 1e-6) { // Denominator for C2 is zero
+                        // If sum_w_dn > 0, e^(-Inf*B) -> 0 for B>0. R(B) -> C1.
+                        // If sum_w_dn < 0, e^(+Inf*B) -> Inf for B>0. R(B) -> Inf.
+                        this._cachedRnB_C2 = (sum_w_dn > 0) ? Infinity : (sum_w_dn < 0 ? -Infinity : 0);
+                    } else {
+                        this._cachedRnB_C2 = sum_w_dn / b_n;
+                    }
+                    this._cachedRnB_R_start_n = null; // Not used directly
+                    this._cachedRnB_alpha_inv = null; // Not used directly
+                }
+                this._cachedRnB_waveNumber = this.currentWaveNumber;
+            }
+        }
+
+        // Calculate R_n(B) using cached constants and current bounty B
+        const currentB = this.cumulativeBountyThisWave;
+
+        if (this._cachedRnB_useLinear) {
+            if (this._cachedRnB_alpha_inv === Infinity) return Infinity; // Effectively alpha=0 case from cache
+            return this._cachedRnB_R_start_n + this._cachedRnB_alpha_inv * currentB;
+        } else {
+            // Handle cases where C2 might lead to Math.exp exploding or becoming 0
+            const exponentVal = -this._cachedRnB_C2 * currentB;
+            let expTerm;
+            if (exponentVal > 700) { // Prevent Math.exp overflow (approx e^709 is max double)
+                expTerm = Infinity;
+            } else if (exponentVal < -700) { // Prevent underflow to 0 if P is negative
+                expTerm = 0;
+            } else {
+                expTerm = Math.exp(exponentVal);
+            }
+            
+            // If C1 is Inf, P is -Inf (or Inf if R_start_n is also Inf). Result can be NaN.
+            // If C1 is Inf, result should be Inf (assuming P*exp is not -Inf of same magnitude)
+            if (this._cachedRnB_C1 === Infinity && this._cachedRnB_P * expTerm !== -Infinity) return Infinity;
+            if (this._cachedRnB_C1 === -Infinity && this._cachedRnB_P * expTerm !== Infinity) return -Infinity;
+
+
+            const result = this._cachedRnB_C1 + this._cachedRnB_P * expTerm;
+            // If R_start_n was 0, C1 might be 0 (if b_n=0), P=0. Result 0.
+            // If b_n=0, C1=0. C2=Inf. expTerm=0 (for B>0). Result=0. This matches R_n(B) decaying to 0.
+            return result;
+        }
+    }
+    // --- END ADDED ---
 } 
