@@ -31,6 +31,8 @@ export default class StrikeManager {
         this.seedAverageBombDeltaR = 0;
         this.impactStdDevPixels = null;
         this.explosionAnimationConfig = null;
+        this.strikeFloorSafetyMarginPercent = 0.0; // ADDED: Safety margin for strike floor
+        this.strikeCooldownDurationSeconds = 10.0; // ADDED: Cooldown duration
     }
 
     /**
@@ -68,6 +70,10 @@ export default class StrikeManager {
         this.bombStrengthA = null;
         this.bombPayload = null;
         this.averageBombDamageR = null;
+
+        // ADDED: Cooldown state
+        this.strikeCooldownActive = false;
+        this.strikeCooldownEndTime = 0;
     }
 
     /**
@@ -115,6 +121,10 @@ export default class StrikeManager {
         this._cachedRnB_alpha_inv = null;
         this._cachedRnB_useLinear = false;
         this._cachedRnB_waveNumber = -1; // Tracks if cache is valid for current wave
+
+        // ADDED: Cooldown state
+        this.strikeCooldownActive = false;
+        this.strikeCooldownEndTime = 0;
     }
 
     _getCurrentWaveAverageBountyRate() {
@@ -244,6 +254,9 @@ export default class StrikeManager {
             this.seedAverageBombDeltaR = config.empiricalAverageBombDeltaR || 0;
             this.impactStdDevPixels = config.impactStdDevPercentWidth * mapWidth;
             this.explosionAnimationConfig = config.explosionAnimation;
+            this.strikeFloorSafetyMarginPercent = config.strikeFloorSafetyMarginPercent || 0.0; // ADDED: Load safety margin
+            this.strikeCooldownDurationSeconds = config.strikeCooldownDurationSeconds !== undefined ? config.strikeCooldownDurationSeconds : 10.0; // ADDED: Load cooldown
+            this.strikeCooldownDurationMs = this.strikeCooldownDurationSeconds * 1000; // ADDED: Convert to MS
 
             // Set map dimensions
             this.mapWidth = mapWidth;
@@ -1033,7 +1046,7 @@ export default class StrikeManager {
     // --- END NEW METHOD ---
 
     // --- ADDED: Test function to trigger a strike --- MODIFIED FOR SIMULATION
-    async strike() {
+    async strike(timestamp) { // ADDED timestamp parameter
         if (!this.isConfigLoaded()) {
             console.error("StrikeManager.strike(): Cannot strike, config not loaded.");
             return;
@@ -1043,9 +1056,10 @@ export default class StrikeManager {
             return;
         }
 
-        // Check cooldown
-        if (this.strikeCooldownActive) {
-            // console.log("StrikeManager.strike(): Strike cooldown active. Aborting strike attempt.");
+        // Cooldown is now primarily checked in update() before calling automated strike.
+        // This remains a safeguard if strike() is called from elsewhere or for non-automated strikes.
+        if (this.strikeCooldownActive && timestamp < this.strikeCooldownEndTime) {
+            // console.log(`StrikeManager.strike(): Strike cooldown active. Ends at ${this.strikeCooldownEndTime.toFixed(0)}, current: ${timestamp.toFixed(0)}`);
             return;
         }
 
@@ -1113,8 +1127,11 @@ export default class StrikeManager {
 
         // 4. Safety Check
         const targetFloorR = this._calculateTargetEarningRateFloor();
-        if (simulatedPostStrikeR < targetFloorR) { 
-            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below target floor R (${targetFloorR.toFixed(2)}).`);
+        const safetyFactor = 1.0 + this.strikeFloorSafetyMarginPercent;
+        const adjustedTargetFloorR = targetFloorR * safetyFactor;
+
+        if (simulatedPostStrikeR < adjustedTargetFloorR) { 
+            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below adjusted target floor R (${adjustedTargetFloorR.toFixed(2)}; base: ${targetFloorR.toFixed(2)}, margin: ${this.strikeFloorSafetyMarginPercent*100}%).`);
             return; 
         }
         // END DEBUG
@@ -1140,6 +1157,11 @@ export default class StrikeManager {
 
                     // After updating average, update the bounty threshold (this is for ongoing updates)
                     this._updateBountyThreshold();
+
+                    // Activate cooldown
+                    this.strikeCooldownActive = true;
+                    this.strikeCooldownEndTime = timestamp + this.strikeCooldownDurationMs;
+                    // console.log(`StrikeManager: Strike cooldown activated for ${this.strikeCooldownDurationMs / 1000}s. Ends at ${this.strikeCooldownEndTime.toFixed(0)} (current: ${timestamp.toFixed(0)})`);
                 }
                 // --- END MODIFIED ---
 
@@ -1233,6 +1255,13 @@ export default class StrikeManager {
             }
         }
 
+        // --- ADDED: Cooldown Update Logic ---
+        if (this.strikeCooldownActive && timestamp >= this.strikeCooldownEndTime) {
+            this.strikeCooldownActive = false;
+            // console.log(`StrikeManager.update: Strike cooldown ended at ${timestamp.toFixed(0)}.`);
+        }
+        // --- END ADDED ---
+
         // --- ADDED: Heatmap Update Logic ---
         if (this.heatmapSprite && this.game.app?.renderer) { // Ensure Pixi objects are ready
             if (this.renderHeatmapDebug) {
@@ -1262,8 +1291,9 @@ export default class StrikeManager {
             const outstandingDamage = this.getOutstandingTargetDamageR();
             // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
             // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
-            if (outstandingDamage > (this.averageBombDamageR || 0)) { 
-                this.strike().catch(error => console.error("Automated strike failed:", error));
+            // AND check if cooldown is not active
+            if (outstandingDamage > (this.averageBombDamageR || 0) && !this.strikeCooldownActive) { 
+                this.strike(timestamp).catch(error => console.error("Automated strike failed:", error)); // PASS timestamp
             }
         }
         // --- END ADDED ---

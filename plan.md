@@ -28,3 +28,97 @@ Now, airstrikes present the same scenario. Although this time the scenario is tr
 The discretization of damage through airstrikes presents a fundamental challenge to our break-even game balance theory. While our differential equation approach gives us dn as an instantaneous rate limit for damage that maintains break-even conditions, the practical implementation of discrete damage events (big bombs) creates a "sawtooth" pattern in the player's earning rate. When a bomb hits, the instantaneous drop in earning rate exceeds the rate limit dn, pushing the player below break-even conditions until they can recover. This creates periods of vulnerability that force reactive, sub-optimal play - exactly the scenario we encountered with wear. To address this while maintaining engaging gameplay with big, infrequent bombs, we need to calculate the theoretical economic buffer required for a given degree of damage discretization. This buffer would ensure the player always remains on the right side of break-even, even during recovery from discrete damage events. We can tune this buffer using the difficulty scalar a in equation 39 (α = aα₀), where a ≤ 1. By calculating the maximum instantaneous drop in earning rate from a discrete damage event, the recovery time needed, and the extra earning power required to maintain break-even during recovery, we can determine an appropriate value for a that provides this buffer. This would give us a theoretical basis for setting difficulty levels that account for the discretization of damage while maintaining engaging gameplay with big, infrequent bombs.
 
 A problem now that we're using the general eqt. 30 for dn calculation is that it depends explicitly on alpha, and we are now also using alpha=a*alpha0 with a the level difficulty scaling factor. So, how does that work on 'normal' and'easy' modes?
+
+---
+## Plan: Tactical Strike Suppression via Critical Zone Check (New Addition)
+
+**I. Rationale & Goal:**
+
+*   **Problem:** Even if economically justified and respecting cooldowns, an airstrike can be devastating if the player is already struggling to prevent enemies from reaching their base (i.e., enemies are in the "critical zone" near the end of the path).
+*   **Goal:** Add a final tactical check to suppress airstrikes if any active enemies have breached a configurable "critical zone" threshold along the path. This acts as a safeguard to prevent strikes when the player is on the immediate back foot spatially.
+*   **Integration:** This check will be *in addition* to existing strike conditions (economic need, macro-economic floor check, fixed cooldown).
+
+**II. Configuration (`public/assets/strike.json`):**
+
+1.  Add a new property to define the start of the critical zone (as a normalized path distance, e.g., 0.0 to 1.0).
+    *   Property name: `criticalZoneStartForStrikeSuppression`
+    *   Example value: `0.7` (meaning the last 30% of the path is the critical zone).
+    *   Default value (if not in JSON): `0.7`.
+
+**III. `StrikeManager.js` Modifications:**
+
+1.  **State Initialization (`initStaticState`):**
+    *   Add `this.criticalZoneStartForStrikeSuppression = 0.7;` (or another suitable default).
+
+2.  **Configuration Loading (`loadConfig`):**
+    *   Load `criticalZoneStartForStrikeSuppression` from the `config` object.
+        ```javascript
+        this.criticalZoneStartForStrikeSuppression = config.criticalZoneStartForStrikeSuppression !== undefined ? config.criticalZoneStartForStrikeSuppression : 0.7;
+        ```
+
+3.  **Game Update Logic (`update` method):**
+    *   Before the existing automated strike logic, query the `EnemyManager` to check for enemies in the critical zone:
+        ```javascript
+        let enemiesInCriticalZone = false;
+        if (this.game.enemyManager && typeof this.game.enemyManager.areEnemiesBeyondNormalizedDistance === 'function') {
+            enemiesInCriticalZone = this.game.enemyManager.areEnemiesBeyondNormalizedDistance(this.criticalZoneStartForStrikeSuppression);
+        } else {
+            // console.warn("StrikeManager: EnemyManager or areEnemiesBeyondNormalizedDistance method not available. Cannot check critical zone.");
+            // Decide default behavior: either assume no breach, or log error and potentially disable this check.
+            // For safety, let's assume no breach if the method isn't there, but this dependency should be fulfilled.
+        }
+        ```
+    *   Modify the `if` condition for dispatching an automated strike to include this new check:
+        ```javascript
+        // Existing automated strike logic in update()
+        if (this.isConfigLoaded() && 
+            this.bombPayload && 
+            this.strikers.length === 0 && 
+            !this.strikeCooldownActive &&       // Fixed timer cooldown
+            !enemiesInCriticalZone) {           // NEW: Tactical check
+            
+            const outstandingDamage = this.getOutstandingTargetDamageR();
+            // ... rest of the economic check and strike dispatch ...
+            if (outstandingDamage > (this.averageBombDamageR || 0)) { // Ensure this check is still present
+                 this.strike(timestamp).catch(error => console.error("Automated strike failed:", error));
+            }
+        }
+        ```
+
+**IV. `EnemyManager.js` Modifications (New Method Required):**
+
+1.  Implement a new public method: `areEnemiesBeyondNormalizedDistance(normalizedDistanceThreshold)`
+    *   **Purpose:** Checks if any active (alive, non-dying) enemies have progressed along the path equal to or beyond the given normalized distance.
+    *   **Logic (Conceptual):**
+        ```javascript
+        // Inside EnemyManager class
+        areEnemiesBeyondNormalizedDistance(normalizedDistanceThreshold) {
+            if (normalizedDistanceThreshold < 0 || normalizedDistanceThreshold > 1) {
+                // console.warn(`EnemyManager: Invalid normalizedDistanceThreshold (${normalizedDistanceThreshold}) provided.`);
+                return false; // Or throw error
+            }
+            for (const enemy of this.activeEnemies) { // Assuming 'activeEnemies' holds all current, non-dying enemies
+                if (enemy && !enemy.isDestroyed && typeof enemy.getNormalizedPathProgress === 'function') {
+                    if (enemy.getNormalizedPathProgress() >= normalizedDistanceThreshold) {
+                        return true; // Found an enemy in the critical zone
+                    }
+                } else if (enemy && !enemy.isDestroyed && enemy.normalizedPathProgress !== undefined) {
+                    // Fallback if getNormalizedPathProgress is a direct property
+                     if (enemy.normalizedPathProgress >= normalizedDistanceThreshold) {
+                        return true;
+                    }
+                }
+            }
+            return false; // No enemies found in the critical zone
+        }
+        ```
+    *   **Dependencies:** This assumes each `enemy` object either has a method `getNormalizedPathProgress()` or a direct property `normalizedPathProgress` that returns its current position along the path as a value between 0.0 (start) and 1.0 (end). This value needs to be accurately updated as enemies move.
+
+**V. Testing & Tuning:**
+
+1.  Verify that the `criticalZoneStartForStrikeSuppression` value from `strike.json` is correctly loaded and used.
+2.  Test scenarios where enemies enter the critical zone:
+    *   Confirm that automated strikes are suppressed.
+    *   Confirm that strikes can resume if the critical zone becomes clear (and other conditions are met).
+3.  Playtest to tune the `criticalZoneStartForStrikeSuppression` threshold. Is 70% too sensitive? Not sensitive enough?
+4.  Consider adding a small hysteresis or a "clearance timer" if strikes toggle too rapidly when enemies are teetering on the edge of the critical zone. For now, the direct check is the first step.
