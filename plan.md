@@ -30,95 +30,104 @@ The discretization of damage through airstrikes presents a fundamental challenge
 A problem now that we're using the general eqt. 30 for dn calculation is that it depends explicitly on alpha, and we are now also using alpha=a*alpha0 with a the level difficulty scaling factor. So, how does that work on 'normal' and'easy' modes?
 
 ---
-## Plan: Tactical Strike Suppression via Critical Zone Check (New Addition)
+## Plan: Threat Heatmap Visualization for StrikeManager
 
 **I. Rationale & Goal:**
 
-*   **Problem:** Even if economically justified and respecting cooldowns, an airstrike can be devastating if the player is already struggling to prevent enemies from reaching their base (i.e., enemies are in the "critical zone" near the end of the path).
-*   **Goal:** Add a final tactical check to suppress airstrikes if any active enemies have breached a configurable "critical zone" threshold along the path. This acts as a safeguard to prevent strikes when the player is on the immediate back foot spatially.
-*   **Integration:** This check will be *in addition* to existing strike conditions (economic need, macro-economic floor check, fixed cooldown).
+*   **Problem:** The `StrikeManager` needs a nuanced understanding of current enemy threat distribution to make informed decisions (e.g., about airstrike timing, though airstrikes are currently aimed at player defenses by the enemy). A simple binary check (like enemies in a critical zone) may not capture the full picture.
+*   **Goal:**
+    1.  Develop a "Threat Heatmap" that visually represents the average bounty density along each segment of the enemy path.
+    2.  Implement this as a debug overlay, similar to the existing z-buffer heatmap, to allow for observation and tuning.
+    3.  This heatmap will provide a granular, dynamic view of threat concentration, which can later be used to inform strike logic or other game mechanics.
+*   **Method:** Calculate a rolling average of total enemy bounty present on each path segment, normalized by the segment's length, over a configurable time window.
 
-**II. Configuration (`public/assets/strike.json`):**
+**II. Configuration & Control:**
 
-1.  Add a new property to define the start of the critical zone (as a normalized path distance, e.g., 0.0 to 1.0).
-    *   Property name: `criticalZoneStartForStrikeSuppression`
-    *   Example value: `0.7` (meaning the last 30% of the path is the critical zone).
-    *   Default value (if not in JSON): `0.7`.
+1.  **New Flag in `Game.js`:**
+    *   Add a new boolean property to `Game.js` to control the visibility of the threat heatmap.
+    *   Property name: `showThreatHeatmap` (distinct from `showStrikeManagerHeatmap` which is for the z-buffer).
+    *   Default value: `false`.
+    *   This flag will be toggled by the player/developer via debug controls (e.g., a key press handled by `Controller.js` which then calls a method in `Game.js` or directly sets this flag if exposed).
 
 **III. `StrikeManager.js` Modifications:**
 
-1.  **State Initialization (`initStaticState`):**
-    *   Add `this.criticalZoneStartForStrikeSuppression = 0.7;` (or another suitable default).
+1.  **State Initialization (`initStaticState` or constructor):**
+    *   `this.threatHeatmapGraphics = null;` (will hold the `PIXI.Graphics` object for drawing).
+    *   `this.pathSegmentsData = [];` (will store `{ segmentIndex, startWaypoint, endWaypoint, length, bountyHistory: [], currentAverageBountyDensity: 0 }` for each segment).
+    *   `this.heatmapRollingWindowFrames = 120;` (e.g., for a 2-second average at 60 FPS, configurable).
 
-2.  **Configuration Loading (`loadConfig`):**
-    *   Load `criticalZoneStartForStrikeSuppression` from the `config` object.
-        ```javascript
-        this.criticalZoneStartForStrikeSuppression = config.criticalZoneStartForStrikeSuppression !== undefined ? config.criticalZoneStartForStrikeSuppression : 0.7;
-        ```
+2.  **Initialization/Setup (e.g., in `onGameInitialized` or a new setup method called after game components are ready):**
+    *   Get path data from `this.game.getExtendedPathData()`.
+    *   Get segment lengths from `this.game.getSegmentLengths()`.
+    *   Populate `this.pathSegmentsData`:
+        *   Iterate from `i = 0` to `pathData.length - 2`.
+        *   Segment `i` connects `pathData[i]` and `pathData[i+1]`.
+        *   Store `segmentIndex: i`, `startWaypoint: pathData[i]`, `endWaypoint: pathData[i+1]`, `length: segmentLengths[i]`.
+        *   Initialize `bountyHistory` as an empty array for each segment.
+    *   Create `this.threatHeatmapGraphics = new PIXI.Graphics();`
+    *   Add it to the game stage: `this.game.app.stage.addChild(this.threatHeatmapGraphics);`
+    *   Set initial visibility based on `this.game.showThreatHeatmap`.
 
 3.  **Game Update Logic (`update` method):**
-    *   Before the existing automated strike logic, query the `EnemyManager` to check for enemies in the critical zone:
-        ```javascript
-        let enemiesInCriticalZone = false;
-        if (this.game.enemyManager && typeof this.game.enemyManager.areEnemiesBeyondNormalizedDistance === 'function') {
-            enemiesInCriticalZone = this.game.enemyManager.areEnemiesBeyondNormalizedDistance(this.criticalZoneStartForStrikeSuppression);
-        } else {
-            // console.warn("StrikeManager: EnemyManager or areEnemiesBeyondNormalizedDistance method not available. Cannot check critical zone.");
-            // Decide default behavior: either assume no breach, or log error and potentially disable this check.
-            // For safety, let's assume no breach if the method isn't there, but this dependency should be fulfilled.
-        }
-        ```
-    *   Modify the `if` condition for dispatching an automated strike to include this new check:
-        ```javascript
-        // Existing automated strike logic in update()
-        if (this.isConfigLoaded() && 
-            this.bombPayload && 
-            this.strikers.length === 0 && 
-            !this.strikeCooldownActive &&       // Fixed timer cooldown
-            !enemiesInCriticalZone) {           // NEW: Tactical check
-            
-            const outstandingDamage = this.getOutstandingTargetDamageR();
-            // ... rest of the economic check and strike dispatch ...
-            if (outstandingDamage > (this.averageBombDamageR || 0)) { // Ensure this check is still present
-                 this.strike(timestamp).catch(error => console.error("Automated strike failed:", error));
-            }
-        }
-        ```
+    *   **Toggle Visibility:**
+        *   `this.threatHeatmapGraphics.visible = this.game.showThreatHeatmap;`
+        *   If not visible, skip calculations and drawing for performance.
 
-**IV. `EnemyManager.js` Modifications (New Method Required):**
+    *   **Calculate Current Bounty per Segment:**
+        *   Create a temporary array `currentFrameBountyPerSegment` initialized to zeros, with size equal to the number of segments.
+        *   Iterate through `activeEnemies = this.game.enemyManager.getActiveEnemies();`.
+        *   For each `enemy`:
+            *   Determine its current segment index: `segmentIndex = enemy.targetWaypointIndex - 1`.
+            *   Validate `segmentIndex` (must be `>= 0` and `< numberOfSegments`).
+            *   If valid, add `enemy.bounty` to `currentFrameBountyPerSegment[segmentIndex]`.
 
-1.  Implement a new public method: `areEnemiesBeyondNormalizedDistance(normalizedDistanceThreshold)`
-    *   **Purpose:** Checks if any active (alive, non-dying) enemies have progressed along the path equal to or beyond the given normalized distance.
-    *   **Logic (Conceptual):**
-        ```javascript
-        // Inside EnemyManager class
-        areEnemiesBeyondNormalizedDistance(normalizedDistanceThreshold) {
-            if (normalizedDistanceThreshold < 0 || normalizedDistanceThreshold > 1) {
-                // console.warn(`EnemyManager: Invalid normalizedDistanceThreshold (${normalizedDistanceThreshold}) provided.`);
-                return false; // Or throw error
-            }
-            for (const enemy of this.activeEnemies) { // Assuming 'activeEnemies' holds all current, non-dying enemies
-                if (enemy && !enemy.isDestroyed && typeof enemy.getNormalizedPathProgress === 'function') {
-                    if (enemy.getNormalizedPathProgress() >= normalizedDistanceThreshold) {
-                        return true; // Found an enemy in the critical zone
-                    }
-                } else if (enemy && !enemy.isDestroyed && enemy.normalizedPathProgress !== undefined) {
-                    // Fallback if getNormalizedPathProgress is a direct property
-                     if (enemy.normalizedPathProgress >= normalizedDistanceThreshold) {
-                        return true;
-                    }
-                }
-            }
-            return false; // No enemies found in the critical zone
-        }
-        ```
-    *   **Dependencies:** This assumes each `enemy` object either has a method `getNormalizedPathProgress()` or a direct property `normalizedPathProgress` that returns its current position along the path as a value between 0.0 (start) and 1.0 (end). This value needs to be accurately updated as enemies move.
+    *   **Update Rolling Average & Density for Each Segment:**
+        *   Iterate through `this.pathSegmentsData`. For each `segmentEntry`:
+            *   Access its `bountyHistory`.
+            *   Add `currentFrameBountyPerSegment[segmentEntry.segmentIndex]` to the end of `bountyHistory`.
+            *   If `bountyHistory.length > this.heatmapRollingWindowFrames`, remove the oldest element (from the start of the array).
+            *   Calculate `sumOfBountyInWindow = bountyHistory.reduce((acc, val) => acc + val, 0);`.
+            *   Calculate `averageBountyInWindow = sumOfBountyInWindow / bountyHistory.length;` (or 0 if length is 0).
+            *   Normalize by segment length:
+                *   `segmentEntry.currentAverageBountyDensity = (segmentEntry.length > 0) ? averageBountyInWindow / segmentEntry.length : 0;`
 
-**V. Testing & Tuning:**
+    *   **Visualize Heatmap (if `this.game.showThreatHeatmap` is true):**
+        *   `this.threatHeatmapGraphics.clear();`
+        *   Determine a maximum expected bounty density for color normalization (this might need tuning or dynamic calculation, e.g., `maxDensityObserved`). For now, use a placeholder `maxExpectedDensity = 5;` (bounty units per pixel).
+        *   Iterate through `this.pathSegmentsData`. For each `segmentEntry`:
+            *   Let `density = segmentEntry.currentAverageBountyDensity;`
+            *   Normalize `densityRatio = Math.min(density / maxExpectedDensity, 1.0);`
+            *   Determine color:
+                *   If `densityRatio < 0.01`, skip drawing or use a very faint color.
+                *   Interpolate color from green (low threat) to yellow (medium) to red (high) based on `densityRatio`.
+                    *   E.g., `R = 255 * densityRatio; G = 255 * (1 - densityRatio); B = 0;` (simple example, can be refined).
+                    *   Convert RGB to a hex color for Pixi.
+            *   Set line style for `this.threatHeatmapGraphics`: `this.threatHeatmapGraphics.lineStyle(5, colorHex, 1);` (thickness 5, chosen color, alpha 1).
+            *   Draw the segment:
+                *   `this.threatHeatmapGraphics.moveTo(segmentEntry.startWaypoint.x, segmentEntry.startWaypoint.y);`
+                *   `this.threatHeatmapGraphics.lineTo(segmentEntry.endWaypoint.x, segmentEntry.endWaypoint.y);`
 
-1.  Verify that the `criticalZoneStartForStrikeSuppression` value from `strike.json` is correctly loaded and used.
-2.  Test scenarios where enemies enter the critical zone:
-    *   Confirm that automated strikes are suppressed.
-    *   Confirm that strikes can resume if the critical zone becomes clear (and other conditions are met).
-3.  Playtest to tune the `criticalZoneStartForStrikeSuppression` threshold. Is 70% too sensitive? Not sensitive enough?
-4.  Consider adding a small hysteresis or a "clearance timer" if strikes toggle too rapidly when enemies are teetering on the edge of the critical zone. For now, the direct check is the first step.
+**IV. `Game.js` Modifications:**
+
+1.  Add the new flag: `this.showThreatHeatmap = false;` in the constructor.
+2.  (Optional but recommended) Add a method like `toggleThreatHeatmap()` that the `Controller.js` can call to flip this flag.
+
+**V. `Enemy.js` Data Access:**
+
+*   Ensure `enemy.targetWaypointIndex` is reliable for determining the current segment.
+*   Ensure `enemy.bounty` contains the correct, pre-calculated bounty value.
+
+**VI. `EnemyManager.js` Data Access:**
+
+*   `getActiveEnemies()` will provide the list of enemies to process.
+
+**VII. Testing & Tuning:**
+
+1.  Verify the `showThreatHeatmap` flag correctly toggles the heatmap's visibility.
+2.  Observe the heatmap colors and responsiveness during gameplay with various enemy waves.
+3.  Tune `heatmapRollingWindowFrames`:
+    *   Too short: heatmap might be too jittery.
+    *   Too long: heatmap might not be responsive enough to rapid changes.
+4.  Tune `maxExpectedDensity` and the color interpolation logic to ensure the heatmap provides clear visual differentiation of threat levels.
+5.  Confirm that normalization by segment length correctly reflects threat *density* (i.e., a short segment with many enemies should appear "hotter" than a long segment with the same number of enemies spread out).
+6.  Check for performance impact, especially with many enemies and segments.
