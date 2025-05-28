@@ -65,6 +65,8 @@ export default class Game {
         this.pathStats = {}; // Holds path stats like total length
         this.levelConfig = {}; // Holds level-specific config like paths, factors
         this.isGameActive = false; // Added: Flag to control game loop activity
+        this.isWearEnabled = true; // ADDED: Flag for enabling/disabling wear
+        this.areAirstrikesEnabled = true; // ADDED: Flag for enabling/disabling airstrikes
         // --- Game Over / Slow-Mo State --- 
         this.isGameOver = false;
         this.timeScale = 1.0;       // Current time scale (1.0 = normal, <1.0 = slow)
@@ -1074,11 +1076,43 @@ export default class Game {
         }
     }
 
+    setWearEnabled(isEnabled) {
+        this.isWearEnabled = !!isEnabled;
+        // console.log(`Game: Wear ${this.isWearEnabled ? 'enabled' : 'disabled'}`);
+        if (this.defenceManager && typeof this.defenceManager.updateGlobalWearStatus === 'function') {
+            this.defenceManager.updateGlobalWearStatus(this.isWearEnabled);
+        } else if (this.defenceManager) {
+            // Fallback if new method not there, directly call calculate (less ideal)
+            this.defenceManager.calculateWearParameters();
+        }
+    }
+
+    setAirstrikesEnabled(isEnabled) {
+        this.areAirstrikesEnabled = !!isEnabled;
+        // console.log(`Game: Airstrikes ${this.areAirstrikesEnabled ? 'enabled' : 'disabled'}`);
+        if (this.strikeManager && typeof this.strikeManager.updateGlobalAirstrikeStatus === 'function') {
+            this.strikeManager.updateGlobalAirstrikeStatus(this.areAirstrikesEnabled);
+        }
+    }
+
+    getWearEnabled() {
+        return this.isWearEnabled;
+    }
+
+    getAirstrikesEnabled() {
+        return this.areAirstrikesEnabled;
+    }
+
     /**
      * Resets the game state to its initial conditions for a new game.
      */
     reset() {
         //console.log("Game: Resetting game state...");
+
+        // 0. Reset Classic Mode Flags FIRST (to ensure subsequent manager resets use correct state)
+        this.isWearEnabled = true;
+        this.areAirstrikesEnabled = true;
+        // console.log("Game.reset: Wear and Airstrikes re-enabled by default.");
 
         // 1. Reset Wave Manager
         if (this.waveManager) {

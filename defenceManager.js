@@ -92,6 +92,7 @@ export default class DefenceManager extends EventTarget {
         this.defenceDefinitions = {}; // To store loaded defence data by ID
         this.isLoaded = false;
         this.dataPath = './assets/defences.json'; // Assume default path or get from game config if needed
+        this.wearGloballyEnabled = true; // Cache for global wear status
     }
 
     /**
@@ -451,11 +452,25 @@ export default class DefenceManager extends EventTarget {
     }
 
     async calculateWearParameters() {
-        // REMOVED: console.log("DEBUG: Starting calculateWearParameters...");
-
         if (!this.isLoaded) {
-            console.error("DefenceManager: Cannot calculate wear parameters, definitions not loaded.");
+            console.warn("DefenceManager: Definitions not loaded. Cannot calculate wear parameters.");
+            return;
         }
+
+        // --- Use cached global wear enabled flag ---
+        if (!this.wearGloballyEnabled) {
+            // console.log("DefenceManager: Global wear is DISABLED (cached). Setting all defender wear to 0.");
+            for (const defenceId in this.defenceDefinitions) {
+                const def = this.defenceDefinitions[defenceId];
+                if (def && def.stats) {
+                    def.stats.wearEnabled = false;
+                    def.stats.wearDecrement = 0;
+                }
+            }
+            this.dispatchEvent(new Event('wearParametersUpdated'));
+            return; 
+        }
+        // --- END ---
 
         let coverageLookup;
         try {
@@ -471,7 +486,9 @@ export default class DefenceManager extends EventTarget {
         }
 
         // Get global parameters
-        const w = this.game.getWearParameter(); // Assumes game instance has this method
+        // Now, 'w' should use the actual game parameter because wearGloballyEnabled is true if we reach here.
+        const w = this.game.getWearParameter(); 
+
         const L = this.game.getTotalPathLength(); // Assumes game instance has this method
         const enemyDefinitions = this.game.enemyManager?.getEnemyDefinitions(); // Use optional chaining
         let costs;
@@ -585,6 +602,8 @@ export default class DefenceManager extends EventTarget {
             // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> f_bar (P_in_range * D_fire_bar): ${f_bar}`);
 
             // Calculate k, Ri, maxHp and wearDecrement and set flags
+            // If global wear is enabled (this.wearGloballyEnabled is true), 
+            // then local wearIsEnabled depends on w (from game.getWearParameter()) and f_bar.
             const wearIsEnabled = (w > 0 && f_bar > 0);
             def.stats.wearEnabled = wearIsEnabled;
             
@@ -606,8 +625,9 @@ export default class DefenceManager extends EventTarget {
             
             let k_theoretical = Infinity;
             if (wearIsEnabled) {
-                const ki = (r * f_bar) / w; // Total hits k
-                if (ki > 1e-9) { // Avoid division by near-zero k
+                // 'w' here is the actual wear parameter from the game, because this.wearGloballyEnabled was true.
+                const ki = (r * f_bar) / w; 
+                if (ki > 1e-9) { 
                     def.stats.wearDecrement = Ri / ki; 
                     def.stats.wearDecrement = Math.max(0, def.stats.wearDecrement); // Ensure non-negative
                      // REMOVED: if (defenceId === 'axolotl_gunner') console.log(` -> Wear ENABLED. Calculated ki=${ki.toFixed(2)}, Ri=${Ri.toFixed(2)}, maxHp=${def.stats.maxHp.toFixed(2)}, wearDecrement=${def.stats.wearDecrement.toFixed(4)}`);
@@ -626,6 +646,7 @@ export default class DefenceManager extends EventTarget {
         }
 
         // REMOVED: console.log("DEBUG: Finished calculateWearParameters.");
+        this.dispatchEvent(new Event('wearParametersUpdated')); // Notify listeners
     }
 
     // --- ADDED: Method to get a single definition by ID ---
@@ -730,5 +751,30 @@ export default class DefenceManager extends EventTarget {
 
         // Reset only runtime state
         this.initRuntimeState();
+
+        // Update cached global wear status
+        if (this.game && typeof this.game.getWearEnabled === 'function') {
+            this.updateGlobalWearStatus(this.game.getWearEnabled());
+        } else {
+            // Fallback or warning if game/method not available during reset
+            console.warn("DefenceManager.resetForNewGame: Could not update global wear status from game instance.");
+            this.updateGlobalWearStatus(true); // Default to true
+        }
+    }
+
+    updateGlobalWearStatus(isEnabled) {
+        const newStatus = !!isEnabled; // Ensure boolean
+        if (this.wearGloballyEnabled !== newStatus) {
+            // console.log(`DefenceManager: Global wear status updated to ${newStatus}`);
+            this.wearGloballyEnabled = newStatus;
+            // Recalculate wear parameters as this global flag directly influences them.
+            // This needs to be async if calculateWearParameters is async.
+            // For now, assuming if called, it handles its async nature internally or is fine to call like this.
+            this.calculateWearParameters();
+        } else if (this.wearGloballyEnabled === newStatus && !this.isLoaded) {
+            // If status hasn't changed but definitions were not loaded when it was last set,
+            // still worth trying to calculate if it's now loaded.
+            // This case might be redundant if calculateWearParameters already checks isLoaded.
+        }
     }
 }

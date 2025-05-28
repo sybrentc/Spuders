@@ -87,7 +87,15 @@ class Controller {
                 return;
             }
 
-                this.gameInstance.setDifficultyScalar(scalar);
+            this.gameInstance.setDifficultyScalar(scalar);
+            // Classic mode: no wear, no airstrikes
+            if (selectedDifficulty === 'classic') {
+                this.gameInstance.setWearEnabled(false);
+                this.gameInstance.setAirstrikesEnabled(false);
+            } else {
+                this.gameInstance.setWearEnabled(true);
+                this.gameInstance.setAirstrikesEnabled(true);
+            }
 
                 if (this.gameInstance.backgroundMusic) {
                     if (!this.gameInstance.isMusicPlaying) {

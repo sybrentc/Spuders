@@ -260,3 +260,5 @@ body {
 .difficulty-button[data-difficulty="normal"]:hover { background-color: #ec971f; }
 .difficulty-button[data-difficulty="hard"] { background-color: #d9534f; }
 .difficulty-button[data-difficulty="hard"]:hover { background-color: #c9302c; }
+.difficulty-button[data-difficulty="classic"] { background-color: #007bff; } /* Blue for classic */
+.difficulty-button[data-difficulty="classic"]:hover { background-color: #0056b3; }

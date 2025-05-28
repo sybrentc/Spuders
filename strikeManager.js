@@ -33,6 +33,7 @@ export default class StrikeManager {
         this.explosionAnimationConfig = null;
         this.strikeFloorSafetyMarginPercent = 0.0; // ADDED: Safety margin for strike floor
         this.strikeCooldownDurationSeconds = 10.0; // ADDED: Cooldown duration
+        this.airstrikesGloballyEnabled = true; // Cache for global airstrike status
     }
 
     /**
@@ -1077,6 +1078,12 @@ export default class StrikeManager {
 
     // --- ADDED: Test function to trigger a strike --- MODIFIED FOR SIMULATION
     async strike(timestamp) { // ADDED timestamp parameter
+        // --- Use cached global airstrike enabled flag ---
+        if (!this.airstrikesGloballyEnabled) {
+            // console.log("StrikeManager.strike(): Airstrikes globally disabled (cached). Strike aborted.");
+            return; 
+        }
+
         if (!this.isConfigLoaded()) {
             console.error("StrikeManager.strike(): Cannot strike, config not loaded.");
             return;
@@ -1336,18 +1343,21 @@ export default class StrikeManager {
 
         // --- ADDED: Automated Strike Logic ---
         if (this.isConfigLoaded() && this.bombPayload && this.strikers.length === 0) {
-            const outstandingDamage = this.getOutstandingTargetDamageR();
-            // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
-            // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
-            // AND check if cooldown is not active
-            if (outstandingDamage > (this.averageBombDamageR) && 
-                !this.strikeCooldownActive && 
-                !this.duressCooldownActive && 
-                !this.safetyCheckFailedCooldownActive
-               ) { 
+            // --- Use cached global airstrike enabled flag ---
+            if (this.airstrikesGloballyEnabled) {
+                const outstandingDamage = this.getOutstandingTargetDamageR();
+                // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
+                // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
+                // AND check if cooldown is not active
+                if (outstandingDamage > (this.averageBombDamageR) && 
+                    !this.strikeCooldownActive && 
+                    !this.duressCooldownActive && 
+                    !this.safetyCheckFailedCooldownActive
+                   ) { 
 
-                // --- END ADDED ---
-                this.strike(timestamp).catch(error => console.error("Automated strike failed:", error)); // PASS timestamp
+                    // --- END ADDED ---
+                    this.strike(timestamp).catch(error => console.error("Automated strike failed:", error)); // PASS timestamp
+                }
             }
         }
         // --- END ADDED ---
@@ -1450,6 +1460,24 @@ export default class StrikeManager {
 
         // Update dependent calculations
         this.updateDependentCalculations();
+
+        // Update cached global airstrike status
+        if (this.game && typeof this.game.getAirstrikesEnabled === 'function') {
+            this.updateGlobalAirstrikeStatus(this.game.getAirstrikesEnabled());
+        } else {
+            console.warn("StrikeManager.resetForNewGame: Could not update global airstrike status from game instance.");
+            this.updateGlobalAirstrikeStatus(true); // Default to true
+        }
+    }
+
+    updateGlobalAirstrikeStatus(isEnabled) {
+        const newStatus = !!isEnabled;
+        if (this.airstrikesGloballyEnabled !== newStatus) {
+            // console.log(`StrikeManager: Global airstrike status updated to ${newStatus}`);
+            this.airstrikesGloballyEnabled = newStatus;
+            // No immediate recalculations needed here like in DefenceManager for wear,
+            // as the strike/update methods will simply check this flag.
+        }
     }
 
     isConfigLoaded() {
