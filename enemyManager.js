@@ -248,8 +248,8 @@ export default class EnemyManager {
             base: this.base,
             hitTextures: this.allProcessedTextureArrays[0], // Pass the common hit textures
             game: this.game, // <-- Pass game instance
-            strikeManager: this.strikeManagerRef, // <-- Pass StrikeManager reference
-            criticalZoneEntryWaypointIndex: this.cachedCriticalZoneEntryWaypointIndex // <-- Pass cached index
+            strikeManager: this.game.strikeManager, // <-- MODIFIED: Directly use game.strikeManager
+            criticalZoneEntryWaypointIndex: this.cachedCriticalZoneEntryWaypointIndex
         });
 
         this.activeEnemies.push(enemy);

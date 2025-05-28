@@ -322,13 +322,13 @@
 \end{cases}
 \tag{50} \]
 
-<p>where \(R_n(0)\) is the player's earning rate at the beginning of wave \(n\). This equation provides the evolving target floor for the player's earning power as they progress through the wave by collecting bounty. We can then run a simulated airstrike, obtain the resulting damage dealt, check whether the airstrike would result in a post-damage earning rate which is at or above the target floor and, only if that criterion is satisfied, trigger the real airstrike.</p>
+<p>where \(R_n(0)\) is the player's earning rate at the beginning of wave \(n\). This equation provides the evolving target floor for the player's earning power as they progress through the wave by collecting bounty. We can then run a simulated airstrike, obtain the resulting damage dealt, check whether the airstrike would result in a post-damage earning rate which is at or above the target floor and, only if that criterion is satisfied, trigger the real airstrike. In practice, we apply a buffer of 20% to the target floor to give the player some leeway.</p>
+
+<p>Additionally, we apply certain cooldown periods. A first cooldown period is applied after an airstrike to give a player time to absorb the damage and rebuild defenses before the next strike comes. A second cooldown period is applied when enemies are within the last portion of the path, say the last 35% of the path, as this is an indication that the player is under duress and would not be able to absorb another airstrike at this moment. This cooldown can be a few seconds, e.g., 5 seconds and resets every frame that an enemy is within this last portion of the path.</p>
 
 <h2>Game difficulty scalar</h2>
     
-<p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level.</p>
-
-\[ \alpha = a\alpha_0. \]
+<p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level. This reduced \( \alpha = a\alpha_0 \) is used to calculate defender prices. However, the target damaging rate \(d_n\) is calculated using the original \(\alpha_0\) value because otherwise easier games (\(a\lt 1\)) would receive increased airstrikes, which would cancel out the cheaper defender costs.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->
 <script>

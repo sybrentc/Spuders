@@ -869,30 +869,37 @@ export default class Game {
      * @returns {number | null} The effective alpha factor.
      */
     getAlpha() { // Renamed from getAlphaZeroFactor
-        const breakEvenFactor = this._breakEvenAlphaFactor;
-        const scalar = this.difficultyScalar;
-
-        // Check the initialized flag set at the end of the initialize() method
-        if (!this.initialized && breakEvenFactor === null) { 
-             console.warn("Game.getAlpha: Called before game is fully initialized. Returning null.");
-             return null;
-        } else if (this.initialized && breakEvenFactor === null) {
-            console.error("Game.getAlpha: Game initialized, but break-even alpha factor is null. Attempting recalculation...");
-            this.recalculateBreakEvenAlphaFactor(); // Try to calculate break-even factor now - Renamed call
-            // Re-check after attempting recalculation
-            if (this._breakEvenAlphaFactor === null) {
-                 console.error("Game.getAlpha: Recalculation failed. Returning null.");
-                 return null;
+        if (this._breakEvenAlphaFactor === null || this._breakEvenAlphaFactor === undefined) {
+            console.warn("Game.getAlpha: _breakEvenAlphaFactor not calculated yet. Recalculating...");
+            this.recalculateBreakEvenAlphaFactor(); 
+            if (this._breakEvenAlphaFactor === null || this._breakEvenAlphaFactor === undefined) {
+                console.error("Game.getAlpha: _breakEvenAlphaFactor is still null after recalculation. Returning default of 1.");
+                return 1.0; // Fallback if recalculation also fails
             }
-            // If recalculation succeeded, fall through to return the calculated value
-        } else if (breakEvenFactor === null) {
-             // Should not happen if logic above is correct, but as a safeguard
-             console.error("Game.getAlpha: Break-even alpha factor is unexpectedly null. Returning null.");
-             return null;
         }
+        // Ensure difficultyScalar is a number, default to 1.0 if not
+        const scalar = (typeof this.difficultyScalar === 'number' && isFinite(this.difficultyScalar)) ? this.difficultyScalar : 1.0;
+        
+        const effectiveAlpha = this._breakEvenAlphaFactor * scalar;
+        // console.log(`Game.getAlpha: effectiveAlpha = ${this._breakEvenAlphaFactor} (base) * ${scalar} (scalar) = ${effectiveAlpha}`);
+        return effectiveAlpha;
+    }
 
-        // Return the effective alpha: scalar * breakEvenFactor
-        return scalar * breakEvenFactor;
+    /**
+     * Returns the base break-even alpha factor (alpha0), before any difficulty scalar is applied.
+     * @returns {number | null} The base alpha factor, or null if not yet calculated.
+     */
+    getBaseAlpha() {
+        if (this._breakEvenAlphaFactor === null || this._breakEvenAlphaFactor === undefined) {
+            console.warn("Game.getBaseAlpha: _breakEvenAlphaFactor not calculated yet. Recalculating...");
+            this.recalculateBreakEvenAlphaFactor();
+             if (this._breakEvenAlphaFactor === null || this._breakEvenAlphaFactor === undefined) {
+                console.error("Game.getBaseAlpha: _breakEvenAlphaFactor is still null after recalculation. Returning null.");
+                return null; // Fallback if recalculation also fails
+            }
+        }
+        // console.log(`Game.getBaseAlpha: returning ${this._breakEvenAlphaFactor}`);
+        return this._breakEvenAlphaFactor;
     }
 
     getCurrencyScale() {

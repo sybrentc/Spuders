@@ -259,14 +259,10 @@ export default class Enemy {
         }
 
         // --- ADDED: Duress Cooldown Trigger Check ---
-        if (!this.isDead && this.strikeManager && typeof this.strikeManager.startDuressCooldown === 'function') {
-            // Check if the enemy has reached or passed the critical waypoint index
-            // Ensure criticalZoneEntryWaypointIndex is valid (not -1, which is its initial/default state)
             if (this.targetWaypointIndex >= this.criticalZoneEntryWaypointIndex && this.criticalZoneEntryWaypointIndex !== -1) {
                 this.strikeManager.startDuressCooldown(timestamp); // Use the timestamp from the update method
-                // console.log(`Enemy ${this.id} triggered duress cooldown at waypoint ${this.targetWaypointIndex}. Critical index: ${this.criticalZoneEntryWaypointIndex}`);
+                //console.log(`Enemy ${this.id} triggered duress cooldown at waypoint ${this.targetWaypointIndex}. Critical index: ${this.criticalZoneEntryWaypointIndex}`);
             }
-        }
         // --- END ADDED ---
     }
     

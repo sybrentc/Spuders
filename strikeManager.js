@@ -623,10 +623,26 @@ export default class StrikeManager {
         const Tn = this.game.waveManager.getWaveDurationSeconds(waveNumber);
         const Tn_plus_1 = this.game.waveManager.getWaveDurationSeconds(waveNumber + 1);
 
-        const alpha = this.game.getAlpha();
+        // --- MODIFICATION: Use baseAlpha (alpha0) for dn calculation if available --- 
+        let alpha_for_dn;
+        if (this.game.getBaseAlpha && typeof this.game.getBaseAlpha === 'function') {
+            const baseAlpha = this.game.getBaseAlpha();
+            if (baseAlpha !== null && typeof baseAlpha === 'number' && baseAlpha > 0) {
+                alpha_for_dn = baseAlpha;
+                // console.log(`StrikeManager._calculateDn: Using baseAlpha (${baseAlpha.toFixed(4)}) for dn calculation.`);
+            } else {
+                alpha_for_dn = this.game.getAlpha(); // Fallback to effective alpha
+                // console.warn(`StrikeManager._calculateDn: getBaseAlpha() returned invalid value (${baseAlpha}). Falling back to effective_alpha (${alpha_for_dn ? alpha_for_dn.toFixed(4) : 'null'}) for dn calculation.`);
+            }
+        } else {
+            alpha_for_dn = this.game.getAlpha(); // Fallback to effective alpha
+            // console.warn("StrikeManager._calculateDn: getBaseAlpha() method not found. Falling back to effective_alpha for dn calculation.");
+        }
+        // --- END MODIFICATION ---
+
         const wearRateW = this.game.getWearParameter();
 
-        //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Inputs: f=${f}, L=${L}, s_min=${s_min}, Tn=${Tn}, Tn+1=${Tn_plus_1}, alpha=${alpha}, W=${wearRateW}`);
+        //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Inputs: f=${f}, L=${L}, s_min=${s_min}, Tn=${Tn}, Tn+1=${Tn_plus_1}, alpha=${alpha_for_dn}, W=${wearRateW}`);
 
         // 2. Validate Parameters
         if (f === undefined || f === null || f <= 0) { // f must be > 0, typically > 1 for difficulty increase
@@ -651,8 +667,9 @@ export default class StrikeManager {
             console.warn(`StrikeManager._calculateDn: Invalid duration Tn+1 (${Tn_plus_1}) for wave ${waveNumber}. Cannot calculate dn.`);
             return 0;
         }
-        if (alpha === undefined || alpha === null || alpha <= 0) {
-            console.error(`StrikeManager._calculateDn (Eq.30): Invalid alpha (${alpha}). Must be > 0.`);
+        // Use alpha_for_dn in validation
+        if (alpha_for_dn === undefined || alpha_for_dn === null || alpha_for_dn <= 0) {
+            console.error(`StrikeManager._calculateDn (Eq.30): Invalid alpha_for_dn (${alpha_for_dn}). Must be > 0.`);
             return 0;
         }
         if (wearRateW === undefined || wearRateW === null || wearRateW < 0) {
@@ -676,7 +693,8 @@ export default class StrikeManager {
         //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Calculated gamma_n: ${gamma_n}`);
 
         // 4. Calculate dn using Eq. 30
-        const term_1_alpha = 1 / alpha;
+        // Use alpha_for_dn here
+        const term_1_alpha = 1 / alpha_for_dn;
         // wearRateW is already fetched
         
         // Defensive check for division by zero if f = 0 and gamma_n = 0, though gamma_n check above helps.

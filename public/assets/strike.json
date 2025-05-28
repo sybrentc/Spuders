@@ -3,7 +3,7 @@
   "empiricalAverageBombDeltaR": 18,
   "strikeFloorSafetyMarginPercent": 0.2,
   "strikeCooldownDurationSeconds": 15.0,
-  "criticalExtendedPathZonePercent": 0.35,
+  "criticalExtendedPathZonePercent": 0.25,
   "duressCooldownSeconds": 5.0,
   "safetyCheckFailedCooldownSeconds": 2.0,
   "targetDamageUpdatePoints": 4,
