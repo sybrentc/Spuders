@@ -1,11 +1,11 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
   "empiricalAverageBombDeltaR": 18,
-  "strikeFloorSafetyMarginPercent": 0.2,
-  "strikeCooldownDurationSeconds": 15.0,
-  "criticalExtendedPathZonePercent": 0.25,
+  "strikeFloorSafetyMarginPercent": 0,
+  "strikeCooldownDurationSeconds": 5.0,
+  "criticalExtendedPathZonePercent": 0.35,
   "duressCooldownSeconds": 5.0,
-  "safetyCheckFailedCooldownSeconds": 2.0,
+  "safetyCheckFailedCooldownSeconds": 1.0,
   "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,
