@@ -54,7 +54,8 @@ export default class Game {
         this.cumulativeDistances = [];
         this.extendedPathData = []; // Add storage for path waypoints
         this.pathCoverageLookup = []; // <-- ADDED STORAGE
-        this.pathCoverageLoaded = false; // <-- ADDED FLAG
+        this.pathCoverageLoaded = false;
+        this.criticalZoneEntryWaypointIndex = -1; // <-- ADDED for Duress Cooldown
         // --- ADDED: Dynamic difficulty factor ---
         this._breakEvenAlphaFactor = null; // Renamed from _alphaZeroFactor - Stores the calculated break-even alpha factor (α₀)
         this.difficultyScalar = 1.0; // Added: Stores the difficulty scalar 'a' (default to 1.0 = break-even)
@@ -383,6 +384,46 @@ export default class Game {
                 this.strikeManager.onGameInitialized();
             } else {
                 console.error("Game Initialize: StrikeManager or onGameInitialized method missing.");
+            }
+            // --- END ADDED ---
+
+            // --- ADDED: Calculate Critical Zone Entry Waypoint Index ---
+            if (this.strikeManager && this.enemyManager && this.totalPathLength !== null && this.cumulativeDistances.length > 0) {
+                const totalExtendedPathLength = this.getTotalPathLength(); // Should be same as this.totalPathLength
+                const criticalPercent = this.strikeManager.getCriticalExtendedPathZonePercent();
+                const criticalDistanceOnExtendedPath = totalExtendedPathLength * (1 - criticalPercent);
+                const cumulativeDistances = this.getCumulativeDistances();
+                let calculatedIndex = -1;
+
+                for (let i = 0; i < cumulativeDistances.length; i++) {
+                    if (criticalDistanceOnExtendedPath <= cumulativeDistances[i]) {
+                        calculatedIndex = i + 1; // Enemies target the next waypoint in sequence
+                        break;
+                    }
+                }
+
+                if (calculatedIndex === -1 && criticalDistanceOnExtendedPath > 0 && cumulativeDistances.length > 0 && criticalDistanceOnExtendedPath > cumulativeDistances[cumulativeDistances.length - 1]) {
+                    calculatedIndex = this.getExtendedPathData().length - 1;
+                } else if (calculatedIndex === -1) {
+                    calculatedIndex = this.getExtendedPathData().length > 0 ? this.getExtendedPathData().length - 1 : 0;
+                }
+
+                this.criticalZoneEntryWaypointIndex = calculatedIndex;
+                if (this.enemyManager.cacheCriticalWaypointIndex) { // Check if method exists
+                    this.enemyManager.cacheCriticalWaypointIndex(this.criticalZoneEntryWaypointIndex);
+                } else {
+                    console.error("Game Initialize: enemyManager.cacheCriticalWaypointIndex method missing.");
+                }
+                //console.log(`Game: Critical Zone Entry Waypoint Index set to: ${this.criticalZoneEntryWaypointIndex} (Threshold distance: ${criticalDistanceOnExtendedPath.toFixed(2)} on extended path)`);
+            } else {
+                console.warn("Game Initialize: Could not calculate Critical Zone Entry Waypoint Index. Dependencies missing or path not fully loaded.", 
+                    {
+                        strikeManagerReady: !!this.strikeManager,
+                        enemyManagerReady: !!this.enemyManager,
+                        totalPathLengthReady: this.totalPathLength !== null,
+                        cumulativeDistancesReady: this.cumulativeDistances.length > 0
+                    }
+                );
             }
             // --- END ADDED ---
 
@@ -1170,6 +1211,12 @@ export default class Game {
         // The calling code will be responsible for handling a null config.
         console.error("Game.getHealthBarConfig: Health bar configuration not found in gameConfig.json. Health bars may not render correctly.");
         return null;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Getter for Critical Zone Waypoint Index (Optional) ---
+    getCriticalZoneEntryWaypointIndex() {
+        return this.criticalZoneEntryWaypointIndex;
     }
     // --- END ADDED ---
 }

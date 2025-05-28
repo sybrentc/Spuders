@@ -24,6 +24,7 @@ export default class EnemyManager {
         this.enemyDataPath = enemyDataPath; 
         this.base = base;                   
         this.game = game; // Store game instance
+        this.strikeManagerRef = game.strikeManager || null; // Store StrikeManager reference
 
         // Initialize static state (data that persists across game resets)
         this.initStaticState();
@@ -45,6 +46,7 @@ export default class EnemyManager {
         this.sharedHitSprite = null; // Shared hit sprite for all enemies
         this.commonSpiderConfig = null; // Common configuration for spider animations
         this.allProcessedTextureArrays = []; // Stores processed texture arrays for animations
+        this.cachedCriticalZoneEntryWaypointIndex = -1; // <-- ADDED for Duress Cooldown
     }
 
     /**
@@ -245,7 +247,9 @@ export default class EnemyManager {
             flashDuration: this.commonSpiderConfig.hit.enemyFlashDurationMs, // Pass it, Enemy.js might store it
             base: this.base,
             hitTextures: this.allProcessedTextureArrays[0], // Pass the common hit textures
-            game: this.game // <-- PASS THE GAME INSTANCE
+            game: this.game, // <-- Pass game instance
+            strikeManager: this.strikeManagerRef, // <-- Pass StrikeManager reference
+            criticalZoneEntryWaypointIndex: this.cachedCriticalZoneEntryWaypointIndex // <-- Pass cached index
         });
 
         this.activeEnemies.push(enemy);
@@ -570,4 +574,15 @@ export default class EnemyManager {
         // Recalculate scaled values since they depend on game state
         this.calculateAndStoreScaledValues();
     }
+
+    // --- ADDED: Method to cache critical waypoint index from Game.js ---
+    cacheCriticalWaypointIndex(index) {
+        if (typeof index === 'number') {
+            this.cachedCriticalZoneEntryWaypointIndex = index;
+            // console.log(`EnemyManager: Cached Critical Zone Entry Waypoint Index: ${index}`);
+        } else {
+            console.warn(`EnemyManager: Invalid index (${index}) received for cacheCriticalWaypointIndex.`);
+        }
+    }
+    // --- END ADDED ---
 }

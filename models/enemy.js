@@ -15,7 +15,9 @@ export default class Enemy {
         base,
         pixiTextures, // Add pixiTextures to destructured parameters
         hitTextures, // Add hitTextures for the flash effect
-        game // <-- ADD game TO DESTRUCTURED PARAMETERS
+        game, // <-- ADD game TO DESTRUCTURED PARAMETERS
+        strikeManager, // <-- ADDED for Duress Cooldown
+        criticalZoneEntryWaypointIndex // <-- ADDED for Duress Cooldown
     }) {
         // Identification
         this.id = id;
@@ -99,6 +101,11 @@ export default class Enemy {
         this.speedModifier = 1.0;
         this.frameTimeAccumulator = 0; // Accumulator for animation timing
 
+        // --- ADDED for Duress Cooldown ---
+        this.strikeManager = strikeManager;
+        this.criticalZoneEntryWaypointIndex = criticalZoneEntryWaypointIndex;
+        // --- END ADDED ---
+
         // PixiJS specific properties
         this.pixiContainer = new PIXI.Container();
         this.pixiSprite = null; 
@@ -147,6 +154,12 @@ export default class Enemy {
             // --- End HealthBarDisplay Initialization ---
         }
         // --- End PixiJS AnimatedSprite Setup ---
+
+        // Update zIndex for y-sorting
+        if (this.pixiContainer && this.pixiSprite) {
+            const effectiveY = this.pixiContainer.y + this.pixiSprite.height * (1 - this.pixiSprite.anchor.y);
+            this.pixiContainer.zIndex = effectiveY;
+        }
     }
     
     update(timestamp, deltaTime, base) {
@@ -244,6 +257,17 @@ export default class Enemy {
             const effectiveY = this.pixiContainer.y + this.pixiSprite.height * (1 - this.pixiSprite.anchor.y);
             this.pixiContainer.zIndex = effectiveY;
         }
+
+        // --- ADDED: Duress Cooldown Trigger Check ---
+        if (!this.isDead && this.strikeManager && typeof this.strikeManager.startDuressCooldown === 'function') {
+            // Check if the enemy has reached or passed the critical waypoint index
+            // Ensure criticalZoneEntryWaypointIndex is valid (not -1, which is its initial/default state)
+            if (this.targetWaypointIndex >= this.criticalZoneEntryWaypointIndex && this.criticalZoneEntryWaypointIndex !== -1) {
+                this.strikeManager.startDuressCooldown(timestamp); // Use the timestamp from the update method
+                // console.log(`Enemy ${this.id} triggered duress cooldown at waypoint ${this.targetWaypointIndex}. Critical index: ${this.criticalZoneEntryWaypointIndex}`);
+            }
+        }
+        // --- END ADDED ---
     }
     
     applyUpdate(updatedDef) {

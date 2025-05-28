@@ -125,6 +125,12 @@ export default class StrikeManager {
         // ADDED: Cooldown state
         this.strikeCooldownActive = false;
         this.strikeCooldownEndTime = 0;
+        // ADDED: Duress Cooldown state
+        this.duressCooldownActive = false;
+        this.duressCooldownEndTime = 0;
+        // ADDED: Safety Check Failed Cooldown state
+        this.safetyCheckFailedCooldownActive = false;
+        this.safetyCheckFailedCooldownEndTime = 0;
     }
 
     _getCurrentWaveAverageBountyRate() {
@@ -282,6 +288,12 @@ export default class StrikeManager {
 
             // Seed initial values
             this.averageBombDamageR = this.seedAverageBombDeltaR;
+
+            this.criticalExtendedPathZonePercent = config.criticalExtendedPathZonePercent;
+            this.duressCooldownSeconds = config.duressCooldownSeconds;
+            this.duressCooldownMs = this.duressCooldownSeconds * 1000;
+            this.safetyCheckFailedCooldownSeconds = config.safetyCheckFailedCooldownSeconds;
+            this.safetyCheckFailedCooldownMs = this.safetyCheckFailedCooldownSeconds * 1000;
 
         } catch (error) {
             console.error("StrikeManager: Failed to load configuration:", error);
@@ -614,7 +626,7 @@ export default class StrikeManager {
         const alpha = this.game.getAlpha();
         const wearRateW = this.game.getWearParameter();
 
-        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Inputs: f=${f}, L=${L}, s_min=${s_min}, Tn=${Tn}, Tn+1=${Tn_plus_1}, alpha=${alpha}, W=${wearRateW}`);
+        //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Inputs: f=${f}, L=${L}, s_min=${s_min}, Tn=${Tn}, Tn+1=${Tn_plus_1}, alpha=${alpha}, W=${wearRateW}`);
 
         // 2. Validate Parameters
         if (f === undefined || f === null || f <= 0) { // f must be > 0, typically > 1 for difficulty increase
@@ -661,7 +673,7 @@ export default class StrikeManager {
             console.warn(`StrikeManager._calculateDn (Eq.30): Invalid gamma_n (${gamma_n}) calculated for wave ${waveNumber}.`);
             return 0;
         }
-        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Calculated gamma_n: ${gamma_n}`);
+        //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Calculated gamma_n: ${gamma_n}`);
 
         // 4. Calculate dn using Eq. 30
         const term_1_alpha = 1 / alpha;
@@ -683,7 +695,7 @@ export default class StrikeManager {
         const term_timing_factor = (1 / Tn) * timing_factor_content;
 
         const dn = term_1_alpha - wearRateW + term_timing_factor;
-        console.log(`[StrikeManager._calculateDn W:${waveNumber}] Terms: 1/alpha=${term_1_alpha}, wearRateW=${wearRateW}, timingFactorContent=${timing_factor_content}, termTimingFactor=${term_timing_factor}, Final dn=${dn}`);
+        //console.log(`[StrikeManager._calculateDn W:${waveNumber}] Terms: 1/alpha=${term_1_alpha}, wearRateW=${wearRateW}, timingFactorContent=${timing_factor_content}, termTimingFactor=${term_timing_factor}, Final dn=${dn}`);
 
         return dn;
     }
@@ -1131,7 +1143,11 @@ export default class StrikeManager {
         const adjustedTargetFloorR = targetFloorR * safetyFactor;
 
         if (simulatedPostStrikeR < adjustedTargetFloorR) { 
-            console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below adjusted target floor R (${adjustedTargetFloorR.toFixed(2)}; base: ${targetFloorR.toFixed(2)}, margin: ${this.strikeFloorSafetyMarginPercent*100}%).`);
+            //console.log(`StrikeManager.strike(): Strike ABORTED. Simulated post-strike R (${simulatedPostStrikeR.toFixed(2)}) would be below adjusted target floor R (${adjustedTargetFloorR.toFixed(2)}; base: ${targetFloorR.toFixed(2)}, margin: ${this.strikeFloorSafetyMarginPercent*100}%).`);
+            // --- ADDED: Activate Safety Check Failed Cooldown ---
+            this.safetyCheckFailedCooldownActive = true;
+            this.safetyCheckFailedCooldownEndTime = timestamp + this.safetyCheckFailedCooldownMs;
+            // --- END ADDED ---
             return; 
         }
         // END DEBUG
@@ -1262,6 +1278,20 @@ export default class StrikeManager {
         }
         // --- END ADDED ---
 
+        // --- ADDED: Duress Cooldown Reset ---
+        if (this.duressCooldownActive && timestamp >= this.duressCooldownEndTime) {
+            this.duressCooldownActive = false;
+            console.log(`StrikeManager: Duress cooldown ENDED at ${timestamp.toFixed(0)}`);
+        }
+        // --- END ADDED ---
+
+        // --- ADDED: Safety Check Failed Cooldown Reset ---
+        if (this.safetyCheckFailedCooldownActive && timestamp >= this.safetyCheckFailedCooldownEndTime) {
+            this.safetyCheckFailedCooldownActive = false;
+            // console.log("StrikeManager: Safety check failure cooldown ended.");
+        }
+        // --- END ADDED ---
+
         // --- ADDED: Heatmap Update Logic ---
         if (this.heatmapSprite && this.game.app?.renderer) { // Ensure Pixi objects are ready
             if (this.renderHeatmapDebug) {
@@ -1292,7 +1322,13 @@ export default class StrikeManager {
             // MODIFIED: Only strike if outstanding damage is greater than the average bomb damage (cost)
             // Treats null or 0 averageBombDamageR as 0 for the comparison, allowing initial strikes.
             // AND check if cooldown is not active
-            if (outstandingDamage > (this.averageBombDamageR || 0) && !this.strikeCooldownActive) { 
+            if (outstandingDamage > (this.averageBombDamageR) && 
+                !this.strikeCooldownActive && 
+                !this.duressCooldownActive && 
+                !this.safetyCheckFailedCooldownActive
+               ) { 
+
+                // --- END ADDED ---
                 this.strike(timestamp).catch(error => console.error("Automated strike failed:", error)); // PASS timestamp
             }
         }
@@ -1601,6 +1637,26 @@ export default class StrikeManager {
             // If R_start_n was 0, C1 might be 0 (if b_n=0), P=0. Result 0.
             // If b_n=0, C1=0. C2=Inf. expTerm=0 (for B>0). Result=0. This matches R_n(B) decaying to 0.
             return result;
+        }
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Getter for criticalExtendedPathZonePercent from loaded config ---
+    getCriticalExtendedPathZonePercent() {
+        // Now directly returns the property stored on 'this'
+        return this.criticalExtendedPathZonePercent;
+    }
+    // --- END ADDED ---
+
+    // --- ADDED: Method to start duress cooldown ---
+    startDuressCooldown(timestamp) {
+        const wasPreviouslyActive = this.duressCooldownActive;
+
+        this.duressCooldownActive = true;
+        this.duressCooldownEndTime = timestamp + this.duressCooldownMs;
+
+        if (!wasPreviouslyActive) {
+            console.log(`StrikeManager: Duress cooldown ACTIVATED. Ends at ${this.duressCooldownEndTime.toFixed(0)} (current: ${timestamp.toFixed(0)})`);
         }
     }
     // --- END ADDED ---
