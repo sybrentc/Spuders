@@ -21,7 +21,8 @@
   "homepage": "https://github.com/sybrentc/spuders#readme",
   "description": "",
   "dependencies": {
-    "pixi.js": "^8.9.2"
+    "pixi.js": "^8.9.2",
+    "plotly.js-dist-min": "^2.32.0"
   },
   "devDependencies": {
     "vite": "^6.3.5"
