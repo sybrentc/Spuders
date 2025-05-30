@@ -245,7 +245,7 @@ export default class StrikeManager {
         return { x: impactX, y: impactY };
     }
 
-    async loadConfig(mapWidth, mapHeight, path = 'public/assets/strike.json') {
+    async loadConfig(mapWidth, mapHeight, path = 'assets/strike.json') {
         try {
             const response = await fetch(path);
             if (!response.ok) {

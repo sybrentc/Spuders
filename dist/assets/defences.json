@@ -114,6 +114,7 @@
     "name": "subzero",
     "stats": {
       "cost": 500,
+      "scaledHP": 1,
       "attackRate": 1000,
       "attackStrength": 0,
       "attackRange": 170

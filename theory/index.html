@@ -101,7 +101,7 @@
 
 <p>The graph shows a few different regimes. The first regime starts at a range equal to the size of the exclusion zone, i.e., the distance from the path within which no defenders may be placed. Any defender with a range of that size or less could not achieve overlap with the path. To first-order approximation, the overlap grows linearly with range in the first regime. This regime is indicated on the map below by red dots. In this regime, defenders need to be placed in 'hot spots', corresponding to parts of the path with high radii of curvature. Note that our path has a complex winding part and a straight part, we can refer to these as the knot and the string. The second regime occurs when the range gets large enough that we no longer need to concern ourselves with the complex winding part of the path, since the entire knot falls within range. This marks the start of the second regime, indicated by blue dots on the map below. Here, the optimal defender positions are not in hot spots but seem to follow a centre of mass approach, capturing the knot in all cases while expanding range to capture more additional string as well. The second regime transitions into the third regime around the range corresponding to the theoretical minimum radius of a freely placed circle which covers our path entirely. The third regime corresponds to a full coverage of the entire path. The following map shows the calculated optimal defender positions for range values up to 500 pixels. Larger ranges have wider error bars on their optimal positions and are therefore less informative.</p>
 <div id="mapContainer" class="plot-container" style="position: relative; width: 600px; height: 600px; border: 1px solid #ccc;">
-    <img id="mapImage" src="../public/assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
+    <img id="mapImage" src="../assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
     <canvas id="optimumPositionsCanvas" width="600" height="600" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
 </div>
 <p class="figure-caption">Figure 2: Optimal defender placement positions. Red dots are below a threshold range; blue dots above it. The blue circle indicates the smallest defender range in the second regime, centred on its optimum position. Note that the blue circle covers the complex turns of the path almost entirely.</p>
@@ -134,9 +134,11 @@
 <p>We can approximate \(T_0\) as \(L / s_{min}\). Regarding the wave duration \(T_n\), this is the time interval from the moment the first enemy of wave \(n\) spawns until the very last enemy of that wave completes the path of length \(L\). The duration depends on the coordinated spawning of eqts. 4-6, which calculates a start time \(t_{s,i}\) for each enemy group \(i\) (containing \(K_i\) enemies of speed \(s_i\)) such that at least one group starts at \(t=0\). This results in</p>
 \[ T_n = \max_{i} \left( t_{s,i} + (K_i - 1) \Delta t + \frac{L}{s_i} \right). \tag{22} \]
 
+
 <p>We can calculate the starting funds \(B_0\) required to commence at break-even conditions by setting \(g_1 = 1\) in eqt. 21. In practice, the starting funds will be set somewhat above this minimum to account for the fact that defenders have discrete prices and the player cannot perfectly convert all of their funds into defensive power at every wave.</p>
 
 \[ B_0 = \frac{T_0 \beta W_1}{T_1 (f-1)} \tag{23} \]
+
 
 <h2>Runaway win condition</h2>
 
@@ -151,6 +153,7 @@
 
 \[ \lim_{n\to\infty} g_n = \lim_{n\to\infty} \frac{T_n}{T_0} \tag{24} \]
 
+
 \[
 \begin{aligned}
 \lim_{n\to\infty} T_n &= \lim_{n\to\infty} \left( \max_{i} K_i(n) \Delta t \right) \\
@@ -162,10 +165,12 @@
 
 \[ n^* = 1 + \ln \left( T_0\frac{N}{\Delta t}\frac{ w_{min}}{W_1} \right)\bigg/\ln f \tag{26} \]
 
+
 <p>Eqts. 25 and 26 indicate that we can both delay and weaken the runaway win condition by changing the game parameters. To compare the relative impact of each parameter, we can examine the ratio of the magnitudes of the partial derivatives of \(n^*\). This gives</p>
 
 \[ \left| \frac{\partial n^*}{\partial f} \right| : \left| \frac{\partial n^*}{\partial \Delta t} \right| : \left| \frac{\partial n^*}{\partial W_1} \right| : \left| \frac{\partial n^*}{\partial N} \right| : \left| \frac{\partial n^*}{\partial w_{min}} \right| \]
 \[ = \frac{\ln(T_0/A)}{\ln f}\frac{1}{f} : \frac{1}{\Delta t} : \frac{1}{W_1} : \frac{1}{N} : \frac{1}{w_{min}}. \tag{27}\]
+
 
 <p>The influence of \(f\) dominates for values near 1, as its \(1/ln(f)\) weight tends to infinity. Reducing the difficulty increase factor \(f\) therefore has the biggest impact on increasing \(n^*\) and delaying the onset of the runaway win condition. This effect is shown in Fig. 4.</p>
 
@@ -190,12 +195,15 @@
 
 \[ \frac{dR_n}{dt} = \frac{b_n}{\alpha}-(w+d_n)R_n. \tag{28} \]
 
+
 <p>The average rate at which \(R\) must change during wave \(n\) (duration \(T_n\)) to bridge the gap between \(R_n\) and \(R_{n+1}\), can be expressed as follows by recognising that break-even conditions require the earning rate to balance the bounty rate</p>
 \[ \frac{dR_n}{dt} = \frac{b_{n+1}-b_n}{T_n}. \tag{29} \]
+
 
 <p>We can now equate the RHS of eqts. 28 and 29 and solve for \(d\). In the game, we want to have a constant \(\alpha\) (difficulty factor involved in pricing the defenders) and constant \(w\), such that the base fractional wear on earning rate is constant over time. Recognising that the bounty rate scales with \(f\) and introducing a duration growth factor \(\gamma_n = T_{n+1}/T_n\), we arrive at the required fractional damage rate \(d_n\) for wave \(n\):</p>
 
 \[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
+
 
 <p>To obtain a break-even value for \(\alpha\) in the presence of depreciation, we acknowledge that over the course of wave \(n\) of duration \(T_n\) a player must pay both to increase their defenses to face the next wave as well as pay for upkeep of their defenses to compensate for the depreciation from wear and damages. The former cost is given by \(\alpha(f-1)R_n\) and the latter by \(\alpha T_n(wR_n + d_nR_n)\). This cost needs to be paid for from the total wave bounty \(B_n\). Equation these and recognising that at break-even \(R_nT_n = B_n\), we obtain</p>
 
@@ -326,8 +334,7 @@
 
 <p>Additionally, we apply certain cooldown periods. A first cooldown period is applied after an airstrike to give a player time to absorb the damage and rebuild defenses before the next strike comes. A second cooldown period is applied when enemies are within the last portion of the path, say the last 35% of the path, as this is an indication that the player is under duress and would not be able to absorb another airstrike at this moment. This cooldown can be a few seconds, e.g., 5 seconds and resets every frame that an enemy is within this last portion of the path.</p>
 
-<h2>Game difficulty scalar</h2>
-    
+<h2>Game difficulty scalar</h2>    
 <p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level. This reduced \( \alpha = a\alpha_0 \) is used to calculate defender prices. However, the target damaging rate \(d_n\) is calculated using the original \(\alpha_0\) value because otherwise easier games (\(a\lt 1\)) would receive increased airstrikes, which would cancel out the cheaper defender costs.</p>
 
 <!-- Script to fetch data and render plot with Plotly.js -->

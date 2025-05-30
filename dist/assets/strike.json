@@ -1,6 +1,11 @@
 {
   "targetMaxWipeoutRadiusPercent": 0.75,
-  "bombCost": 15000,
+  "empiricalAverageBombDeltaR": 18,
+  "strikeFloorSafetyMarginPercent": 0,
+  "strikeCooldownDurationSeconds": 5.0,
+  "criticalExtendedPathZonePercent": 0.35,
+  "duressCooldownSeconds": 5.0,
+  "safetyCheckFailedCooldownSeconds": 1.0,
   "targetDamageUpdatePoints": 4,
   "zBufferResolution": {
     "width": 256,
@@ -12,14 +17,14 @@
   },
   "impactStdDevPercentWidth": 0.03,
   "strikerShadow": {
-    "texturePath": "public/assets/images/bomber-blur.png",
-    "animationSpeed": 4000,
+    "texturePath": "assets/images/bomber-blur.png",
+    "animationSpeed": 5000,
     "scale": 0.15,
     "alpha": 0.35,
     "shadowToBombDelayMs": 300
   },
   "explosionAnimation": {
-    "folderPath": "public/assets/images/PixelSimulations/Explosion1/",
+    "folderPath": "assets/images/PixelSimulations/Explosion1/",
     "filePrefix": "",
     "fileSuffix": ".png",
     "frameCount": 36,
