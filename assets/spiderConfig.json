@@ -10,5 +10,6 @@
     "totalFrames": 16,
     "anchorX": 0.5,
     "anchorY": 0.6
-  }
+  },
+  "hitDiskFractionOfTotalSpriteSize": 0.5
 }
