@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower defence theory</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Latin+Modern+Roman&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" crossorigin="anonymous">
+    <!-- The loading of KaTeX is deferred to speed up page rendering -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+    <!-- To automatically render math in text elements, include the auto-render extension: -->
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+    <!-- Include Plotly.js -->
+    <script src='https://cdn.plot.ly/plotly-latest.min.js'></script>
+    <style>
+        body { font-family: 'Latin Modern Roman', serif; font-size: 1.1em; line-height: 1.6; padding: 2em; max-width: 800px; margin: auto; }
+        .katex { font-size: inherit; } /* Make KaTeX inherit body font size */
+        .katex-display { display: block; margin: 1em 0; text-align: center; }
+        h1 { text-align: center; }
+        .figure-caption { text-align: center; font-size: 0.9em; margin-top: 0.1em; margin-bottom: 1.5em; } /* Centralized caption style */
+        .plot-container { max-width: 600px; margin: 2em auto 0.5em auto; } /* Plot container with reduced bottom margin */
+    </style>
+</head>
+<body>
+
+<h1>Tower-defence theory</h1>
+
+<p style="text-align: center; font-size: 0.9em; margin-top: 0.5em; margin-bottom: 1.5em;">
+    Dr. S. ten Cate<sup>*</sup>, Dr. H. Guo, M. B. ten Cate, S. ten Cate<br>
+    <sup>*</sup>Corresponding author: <a href="mailto:s.tencate@outlook.com" style="color: inherit; text-decoration: none;">s.tencate@outlook.com</a>
+</p>
+
+<h2>Wave composition</h2>
+
+<p>We generate waves of enemies according to an increasing difficulty score. The difficulty score \(W_n\) of a given wave \(n\) is given by the geometric series:</p>
+
+\[ W_n = W_1 f^{n-1} \tag{1} \]
+
+<p>This gives the total difficulty for a given wave such that we get waves of exponentially increasing difficulty. To now turn this into a selection of enemies for the wave, we assign each enemy type \(i\) a difficulty score \(w_i\). We assert that an enemy is more difficult to defeat the greater its speed \(s_i\) and health \(h_i\). Since the difficulty has an arbitrary scale, we simply assign the per-enemy difficulty score for type \(i\) as \(w_i = h_i s_i\). The total difficulty score of the wave is the sum of the difficulty scores of all the enemy types in the wave.</p>
+
+\[ \sum_{i=1}^{N} (h_i s_i) = W_1 f^{n-1} \tag{2} \]
+
+<p>We then select the enemy types for the wave such that the sum of the difficulty scores of the selected enemy types equals the total difficulty score of the wave.</p>
+
+<p>The selection of enemies for a given wave is done as follows. First, we divide the total wave difficulty by the total number of enemy types to obtain a partial difficulty. The idea is to evenly distribute the total wave difficulty across the enemy types, such that we have more weaker enemies and fewer stronger enemies. Then we determine the number of enemies of each needed to make up that partial difficulty. Let \(W_n\) be the total wave difficulty, \(N\) be the number of enemy types considered, and \(w_i\) be the difficulty of enemy type \(i\). The initial count \(K_i\) for each type \(i\) is:</p>
+\[ K_i = \left\lceil \frac{W_n / N}{w_i} \right\rceil \tag{3} \]
+<p>If the number \(K_i\) exceeds a threshold number, \(K_{max}\), then we exclude that enemy type from the wave, while ensuring that we keep at least a given number of enemy types with the highest difficulty. This ensures that harder waves are not overwhelmed by weak enemies, but equally that harder waves are guaranteed to have at least a minimum number of the most difficulty enemy types. After excluding enemies, we recalculate partial difficulty and enemy numbers based on the remaining types. This prepopulates the wave. We then check whether we are over or above the target difficulty and add or remove enemies until we are within tolerance.</p>
+
+<h2>Wave release</h2>
+
+<p>We then time the release of enemies such that we achieve maximum density at the average death coordinate of the previous wave, \(d\). This is a proxy of the location along the path where the player has its strongest defences. To give the next wave a better chance of breaking through, we calculate release times for enemies of each type \(i\) so that the center of mass of each group arrives at \(d\) simultaneously. Let \(K_i\) be the number of enemies of type \(i\) in the wave and \(\Delta t\) be the average time between spawning enemies within a group. The time offset \(t_{o, i}\) for enemies of type \(i\) is the time it takes for the centre of mass of that train of enemies to be 'spawned'.</p>
+\[ t_{o, i} = \frac{(K_i - 1) \Delta t}{2} \tag{4} \]
+<p>The total time for the center of mass of type \(i\) to arrive at the target distance \(d\), if spawning started at \(t=0\), is the sum of its travel time \((d/s_i)\) and its offset time \(t_{o, i}\):</p>
+\[ t_{COM, i} = \frac{d}{s_i} + t_{o, i} \tag{5} \]
+<p>To ensure all groups' centers of mass arrive simultaneously, the start time \(t_{s, i}\) for spawning the first enemy of type \(i\) must be offset relative to the group that takes the longest to arrive. Thus, the start time is the maximum arrival time minus the arrival time for the specific type \(i\), at which time a train of enemies of type \(i\) is spawned with interval \(\Delta t\).</p>
+\[ t_{s, i} = \max_{j} (t_{COM, j}) - t_{COM, i} \tag{6} \]
+
+<h2>Defender valuation</h2>
+
+<p>We price defenders based on their expected earning rate. This gives algorithmically determined defender prices, which reflect their usefulness against enemies. Defenders will earn bounty by killing enemies. So, we set the defender's cost, \(C\), proportional to its expected earning rate, \(R\), using a tunable pre-factor, \(\alpha\).</p>
+
+\[ C = \alpha R \tag{7} \]
+
+<p>Now, to calculate the expected earning power of a given defender, we start simply with the case of a single defender of a given type versus a single enemy of a given type. Once we have that, then we can use an expectation value across all enemy types to get the expected earning power of that defender.</p>
+
+<p>So, say we have a single defender versus a single enemy. We can then set up a probability chain similar to the Drake equation to find the earning rate \(R\) for this specific pairing. We start with the ideal earning rate, \(R^*\), which assumes the defender has the enemy in range until it kills the enemy and obtains the bounty. We then multiply this ideal rate by the probability that the enemy is in range, \(P(\text{in range})\), and by the probability that the kill completes while the enemy is still in range, \(P(\text{kill completes})\).</p>
+
+\[ R = R^* P(\text{in range}) P(\text{kill completes}) \tag{8} \]
+
+<p>The ideal earning rate, \(R^*\), is simply the enemy bounty, \(B\), divided by the time it takes the defender to kill the enemy, \(T_k\). While the bounty \(B\) can be set manually, it can also be algorithmically determined based on enemy properties, for example, making it proportional (via a constant \(\beta\)) to the enemy's speed \(s\) and health \(h\). The time to kill, \(T_k\), depends on the enemy health \(h\), the defender's damage per hit \(D\), and the defender's attack rate \(r\). Specifically, we need the number of hits required, which is the health divided by damage, rounded up to the nearest integer (ceiling function), divided by the attack rate. This ideal earning rate assumes an enemy is in range of the defender and that it stays in range until the kill completes.</p>
+
+\[ R^* = \frac{B}{T_k} \tag{9} \]
+\[ B = \beta s h \tag{10} \]
+\[ T_k = \left\lceil \frac{h}{D} \right\rceil / r \tag{11} \]
+
+<p>Next, we need to calculate \(P(\text{kill completes})\). This probability accounts for the fact that an enemy moves through the range, so will only stay in range for a limited time, \(T_r\). If the time in range is shorter than the time to kill \(T_k\), then the defender cannot complete the kill. However, the defender can reduce the enemy health by a percentage. We can choose to consider that health reduction a probability to complete the kill, since we can choose to view a 100% chance of a 50% health reduction as mathematically equivalent to a 50% chance of a 100% health reduction. The time in range can be expressed in terms of the total path length \(L\).</p>
+
+\[ P(\text{kill completes}) = \min\left( \frac{T_r}{T_k}, 1 \right) \tag{12} \]
+\[ T_r = P(\text{in range}) \frac{L}{s} \tag{13} \]
+
+<p>Now, as mentioned in the above, this gives the earning rate of a single defender type against a single enemy type.</p>
+
+\[ C = \alpha B P(\text{in range}) \frac{r}{\left\lceil \frac{h}{D} \right\rceil} \min\left( \frac{P(\text{in range}) L r}{s \left\lceil \frac{h}{D} \right\rceil}, 1 \right) \tag{14} \]
+
+<p>We can then take the expectation value for the cost of this defender type by multiplying the cost \(C_j\) (calculated using Eq. 12 for each enemy type \(j\) with its specific health \(h_j\) and speed \(s_j\)) by the probability \(P(j)\) of spawning that enemy type, and summing over all \(N\) enemy types. Assuming equal probability \(P(j)=1/N\) for all types, and using the equation for the per-enemy bounty \(B\), this yields the expected cost \(\mathbb{E}[C]\):</p>
+
+\[ \mathbb{E}[C] = \frac{\alpha \beta P(\text{in range}) r}{N} \sum_{j=1}^{N} \left[ \frac{s_j h_j}{\lceil h_j/D \rceil} \min\left( \frac{P(\text{in range}) L r}{s_j \lceil h_j/D \rceil}, 1 \right) \right] \tag{15} \]
+
+<p>The result provides a way of automatically setting the defender cost based on the path shape, the defender properties (range, damage per hit, attack rate), and the enemy properties (health, speed). The tower-defence economy can be tuned via the alpha pre-factor, which is a proxy of gameplay difficulty. Set alpha to zero and the game becomes trivially easy to win as all defenders are practically free to purchase. Set alpha very high and the game becomes impossible to win, as enemy bounties cannot support the sustained investment in defences required to keep up with enemy waves of increasing difficulty. The beta pre-factor offers a way to scale the unit of currency but has no impact on game mechanics.</p>
+
+<h2>Path coverage</h2>
+
+<p>To calculate P(in range), we simply ask what the probability is that an enemy, placed at random along its path of attack, is in range of the defender. Since the enemy traverses the path at uniform speed, this simplifies to asking what fraction of the path is in range of the defender. Of course, we don't know where the defender is going to be placed, but the player will place it somewhere along the path. We first sample a number of positions on the path, for each position obtaining the path length in range of the defender. The path length in range is obtained by substituting the parametrised line equation for that segment into the circle equation for that defender position and solving it using the quadratic formula. The on-path location which maximises in-range path length is then used as a starting point for a gradient descent to explore whether a more optimal position may be found off-path. This is carried out in a pre-calculation step and stored as a look-up table. For our given path shape, the result looks as follows</p>
+
+<div class="plot-container">
+    <div id="pathCoveragePlot"></div>
+</div>
+<p class="figure-caption">Figure 1: Path coverage fraction vs. defender range.</p>
+
+<p>The graph shows a few different regimes. The first regime starts at a range equal to the size of the exclusion zone, i.e., the distance from the path within which no defenders may be placed. Any defender with a range of that size or less could not achieve overlap with the path. To first-order approximation, the overlap grows linearly with range in the first regime. This regime is indicated on the map below by red dots. In this regime, defenders need to be placed in 'hot spots', corresponding to parts of the path with high radii of curvature. Note that our path has a complex winding part and a straight part, we can refer to these as the knot and the string. The second regime occurs when the range gets large enough that we no longer need to concern ourselves with the complex winding part of the path, since the entire knot falls within range. This marks the start of the second regime, indicated by blue dots on the map below. Here, the optimal defender positions are not in hot spots but seem to follow a centre of mass approach, capturing the knot in all cases while expanding range to capture more additional string as well. The second regime transitions into the third regime around the range corresponding to the theoretical minimum radius of a freely placed circle which covers our path entirely. The third regime corresponds to a full coverage of the entire path. The following map shows the calculated optimal defender positions for range values up to 500 pixels. Larger ranges have wider error bars on their optimal positions and are therefore less informative.</p>
+<div id="mapContainer" class="plot-container" style="position: relative; width: 600px; height: 600px; border: 1px solid #ccc;">
+    <img id="mapImage" src="../assets/images/map.png" alt="Game Map" style="display: block; width: 100%; height: 100%; object-fit: contain;">
+    <canvas id="optimumPositionsCanvas" width="600" height="600" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+</div>
+<p class="figure-caption">Figure 2: Optimal defender placement positions. Red dots are below a threshold range; blue dots above it. The blue circle indicates the smallest defender range in the second regime, centred on its optimum position. Note that the blue circle covers the complex turns of the path almost entirely.</p>
+<!-- End Map Visualization Section -->
+
+<h2>Break-even condition</h2>
+
+<p>The tower defence game at its core involves an ever-escalating balance between stronger waves and stronger defences. The game is balanced, i.e., at break-even condition, when the total defender earning rate equals the rate at which the wave provides bounty, If the latter dominates, the enemies cannot be cleared before they reach the base and we spiral toward defeat. If the former dominates, then the game enters a runaway win condition. To quantify game balance, we introduce the ratio \(g_n\) of earning rate to bounty rate for wave \(n\)</p>
+
+\[ g_n = \frac{R_n}{b_n}. \tag{16} \]
+
+<p>The earning rate \(R_n\) is that which the player could achieve if all available funds were invested by the start of wave \(n\), and is obtained using the cost equation (7). The funds in question are the initial funds, \(B_0\), plus the sum of bounties collected from all preceding waves. The bounty rate \(b_n\) in turn is defined as the total bounty \(B_n\) offered by wave \(n\) divided by the effective duration \(T_n\) over which it is available for harvesting, i.e., \(b_n = B_n / T_n\). This yields</p>
+
+\[ g_n = \frac{T_n}{\alpha B_n} \left(B_0 + \sum_{j=1}^{n-1} B_j\right). \tag{17} \]
+
+<p>From its definition (eqt. 7), the pre-factor \(\alpha\) sets gameplay difficulty by linking defender cost to earning rate (the latter a proxy of killing rate). We can calculate the theoretical break-even point \(\alpha_0\) at which the resources generated from completing wave \(n\) exactly pay for the required additional defence investment needed to survive the next wave, \(n+1\). Let \(T_0\) represent the time window available for clearing enemies as they traverse the path and before they reach the base. For the purpose of this derivation, we define this characteristic time window as being constant from wave to wave. If an earning rate of \(R_n\) was sufficient to just clear the enemies within the time window, then, since each wave grows in difficulty by a factor \(f\), in order to clear the next wave requires an earning rate scaled by \(f\) as well, i.e., \( R_{n+1} = f R_n \), and to buy this additional earning rate costs</p>
+\[ \Delta C = \alpha (f - 1) R_n \tag{18} \]
+<p>Since we are operating at break-even condition, we have cleared wave \(n\) in exactly time \(T_0\), meaning that the total bounty of the wave is set equal to \(R_n T_0\). This makes the break-even value for \(\alpha_0\)</p>
+
+\[ \alpha_0 = \frac{T_0}{f - 1} \tag{19} \]
+    
+<p>Substituting this into eqt. 17, we get</p>
+
+\[ g_n = \frac{T_n(f-1)}{T_0B_n} \left(B_0 + \sum_{j=1}^{n-1} B_j\right). \tag{20} \]
+
+<p>Since the sum of the bounty terms \(B_n\) is a finite sum of a geometric series (cf. eqt. 1), this simplifies to the following expression for the ratio \(g_n\) in terms of the initial funds \(B_0\), the wave starting difficulty \(W_1\), the difficulty increase factor \(f\), the actual wave duration \(T_n\), the prefactor \(\beta\), and the break-even time window \(T_0\)</p>
+
+\[ g_n = \frac{T_n}{T_0} \left[ 1 + \frac{(f-1) \left(\frac{B_0}{\beta W_1}\right) - 1}{f^{n-1}} \right]. \tag{21} \]
+
+<p>We can approximate \(T_0\) as \(L / s_{min}\). Regarding the wave duration \(T_n\), this is the time interval from the moment the first enemy of wave \(n\) spawns until the very last enemy of that wave completes the path of length \(L\). The duration depends on the coordinated spawning of eqts. 4-6, which calculates a start time \(t_{s,i}\) for each enemy group \(i\) (containing \(K_i\) enemies of speed \(s_i\)) such that at least one group starts at \(t=0\). This results in</p>
+\[ T_n = \max_{i} \left( t_{s,i} + (K_i - 1) \Delta t + \frac{L}{s_i} \right). \tag{22} \]
+
+
+<p>We can calculate the starting funds \(B_0\) required to commence at break-even conditions by setting \(g_1 = 1\) in eqt. 21. In practice, the starting funds will be set somewhat above this minimum to account for the fact that defenders have discrete prices and the player cannot perfectly convert all of their funds into defensive power at every wave.</p>
+
+\[ B_0 = \frac{T_0 \beta W_1}{T_1 (f-1)} \tag{23} \]
+
+
+<h2>Runaway win condition</h2>
+
+<p>The following figure shows the theoretical ratio \(g_n\) as defined by the above equations compared to a numerical simulation of the game mechanics, with \(f=1.5\). Note that in this section, the theoretical lines are calculated using the enemy whitelisting algorithm as discussed in the section on wave composition. Deviations at low wave numbers are due to the game dealing with integer numbers of enemies, whereas the theoretical ratio is a continuum expression.</p>
+
+<div class="plot-container">
+    <div id="endgameRatioPlot"></div>
+</div>
+<p class="figure-caption">Figure 3: Ratio of earning rate to bounty rate versus wave number for \(f=1.5\).</p>
+
+<p>Fig. 3 demonstrates that break-even conditions cannot be maintained indefinitely. Specifically, we find that \(g_n\) grows exponentially when we evalute eqt. 21in the large-n limit. This demonstrates that, for \(f>1\) and the game mechanics giving rise to eqt. 21, we will inevitably enter a runaway win condition with an asymptotic ratio behaviour of</p>
+
+\[ \lim_{n\to\infty} g_n = \lim_{n\to\infty} \frac{T_n}{T_0} \tag{24} \]
+
+
+\[
+\begin{aligned}
+\lim_{n\to\infty} T_n &= \lim_{n\to\infty} \left( \max_{i} K_i(n) \Delta t \right) \\
+&\sim \frac{\Delta t}{N}\frac{W_1}{w_{min}} f^{n-1}.\tag{25}
+\end{aligned}
+\]
+
+<p>The wave number \(n^*\) at which the runaway win condition onset occurs can be obtained by setting the asymptote of eqt. 25 equal to 1 and solving for \(n\), which gives</p>
+
+\[ n^* = 1 + \ln \left( T_0\frac{N}{\Delta t}\frac{ w_{min}}{W_1} \right)\bigg/\ln f \tag{26} \]
+
+
+<p>Eqts. 25 and 26 indicate that we can both delay and weaken the runaway win condition by changing the game parameters. To compare the relative impact of each parameter, we can examine the ratio of the magnitudes of the partial derivatives of \(n^*\). This gives</p>
+
+\[ \left| \frac{\partial n^*}{\partial f} \right| : \left| \frac{\partial n^*}{\partial \Delta t} \right| : \left| \frac{\partial n^*}{\partial W_1} \right| : \left| \frac{\partial n^*}{\partial N} \right| : \left| \frac{\partial n^*}{\partial w_{min}} \right| \]
+\[ = \frac{\ln(T_0/A)}{\ln f}\frac{1}{f} : \frac{1}{\Delta t} : \frac{1}{W_1} : \frac{1}{N} : \frac{1}{w_{min}}. \tag{27}\]
+
+
+<p>The influence of \(f\) dominates for values near 1, as its \(1/ln(f)\) weight tends to infinity. Reducing the difficulty increase factor \(f\) therefore has the biggest impact on increasing \(n^*\) and delaying the onset of the runaway win condition. This effect is shown in Fig. 4.</p>
+
+<div class="plot-container">
+  <div id="fComparisonPlot"></div>
+</div>
+<p class="figure-caption">Figure 4: Theoretical balance ratio (g<sub>n</sub>) vs. wave number for different difficulty increase factors (f), assuming break-even starting funds.</p>
+
+<p>Unfortunately, reducing \(f\) significantly reduces the excitement and fun on the game, with wave to wave changes feeling slow. Our other options for delaying the runaway win condition are decreasing the enemy spacing \(\Delta t\), decreasing the number of enemies in the first wave for which \(W_1/w_{min}\), and/or increasing the number of enemy types \(N\). However, eqt. 27 guarantees that none of these parameters can give us the impact on \(n^*\) that we could achieve by reducing \(f\) and that, moreover, we rapidly run into diminishing returns. Even if these parameters would have a significant impact, two out of three could not be changed without negatively impacting the game experience.</p>
+
+<h2>Balancing the earning rate</h2>
+
+<p>There are fundamentally only two ways to keep the ratio \(g_n\) from exploding. We can boost growth of the denominator, i.e., the bounty rate \(b_n\), and/or deboost growth of the numerator, i.e., earning rate \(R_n\).</p>
+  
+<p>The growth of the bounty rate \(b_n\) can be boosted by increasing enemy density on screen, in an effort to keep \(T_n\) near \(T_0\). While enemy density can be increased within the confines of a single path of travel, this can only be done for so long without enemies starting to significantly overlap in space, leading to confusing gameplay. Sustainably increasing enemy density must therefore be achieved by relaxing the constraint of a single path of travel. The most robust option for this is to allow enemies to approach the base from any direction as long as their path of travel has a certain minimum length. One option would be enemies that travel over land but are not bound to the path. This is somewhat complicated because the map has obstacles to travel and further may not be desirable from a gameplay perspective since it removes the strategic placement aspect. Another option is to have enemies that travel by air and can be shot down by anti-air defences. Effectively, this would amount to running two tower-defence games simultaneously: one on the ground and one in the air. This therefore seems a somewhat artificial solution.</p>
+
+<p>The growth of the earning rate \(R_n\) can be deboosted by inflating \(\alpha\), which serves to make defenders more expensive, and/or by reducing the overall effectiveness of existing defences. While inflating \(\alpha\) is relatively straightforward, it reduces the fun of the game. Either the bounty per kill remains the same and the defender prices tend to infinity, or the prices remain fixed and the bounty per kill tends to zero. Neither of these is satisfactory from a gameplay perspective. Depreciating the overall effectiveness of existing defences, on the other hand, is a more interesting option. This could be achieved by defenders using up their health as they fire, their health bar indicating the amount of wear they have accumulated and causing them to be destroyed once their health reaches zero. Additionally or alternatively, the enemies could attack defences until they are destroyed. Either way, this would place an obligation on the player to invest funds in maintaining their defences, just to maintain their current level of earning power.</p>
+
+<h2>Defender depreciation</h2>
+
+<p>We start by expressing the rate of change for \(R_n\) in terms of the fractional depreciation rates for wear \(w\) and additional damage \(d_n\) as follows. Note that wear is caused by defenders attacking enemies and therefore scales in the aggregate in dependence on the bounty rate. At break-even, the earning rate equals the bounty rate such that we can express depreciation due to wear as a product of fractional wear and earning rate.</p>
+
+\[ \frac{dR_n}{dt} = \frac{b_n}{\alpha}-(w+d_n)R_n. \tag{28} \]
+
+
+<p>The average rate at which \(R\) must change during wave \(n\) (duration \(T_n\)) to bridge the gap between \(R_n\) and \(R_{n+1}\), can be expressed as follows by recognising that break-even conditions require the earning rate to balance the bounty rate</p>
+\[ \frac{dR_n}{dt} = \frac{b_{n+1}-b_n}{T_n}. \tag{29} \]
+
+
+<p>We can now equate the RHS of eqts. 28 and 29 and solve for \(d\). In the game, we want to have a constant \(\alpha\) (difficulty factor involved in pricing the defenders) and constant \(w\), such that the base fractional wear on earning rate is constant over time. Recognising that the bounty rate scales with \(f\) and introducing a duration growth factor \(\gamma_n = T_{n+1}/T_n\), we arrive at the required fractional damage rate \(d_n\) for wave \(n\):</p>
+
+\[ d_n = \frac{1}{\alpha} - w + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \tag{30} \]
+
+
+<p>To obtain a break-even value for \(\alpha\) in the presence of depreciation, we acknowledge that over the course of wave \(n\) of duration \(T_n\) a player must pay both to increase their defenses to face the next wave as well as pay for upkeep of their defenses to compensate for the depreciation from wear and damages. The former cost is given by \(\alpha(f-1)R_n\) and the latter by \(\alpha T_n(wR_n + d_nR_n)\). This cost needs to be paid for from the total wave bounty \(B_n\). Equation these and recognising that at break-even \(R_nT_n = B_n\), we obtain</p>
+
+\[ \alpha_n = \frac{1}{\frac{f - 1}{T_n} + w + d_n}. \tag{31} \]
+
+<p>We can see what \(d_n\) would look like if we select a value for \(\alpha\) such that the game starts out with no damage being dealt in the initial waves, i.e., \(d_n=0\), which yields</p>
+
+\[ \alpha_0 = \frac{1}{\frac{f - 1}{T_0} + w}, \text{ and} \]
+
+\[ d_n = \frac{f - 1}{T_0} + \frac{1}{T_n} \left( 1 - \frac{f}{\gamma_n} \right). \]
+
+<div class="plot-container">
+  <div id="dnEvolutionPlot"></div>
+</div>
+<p class="figure-caption">Figure 5: Evolution of required fractional damage rate (d<sub>n</sub>) vs. wave number (n), assuming d<sub>0</sub>=0.</p>
+
+<p>We can obtain the expected average behaviour for \(R_n\) by first obtaining a solution to the ODE of eqt. 28, describing the intra-wave evolution of the earning rate \(R_n\) in the presence of depreciation. This yields a general solution for \(w+d_n > 0\) and a specific linear solution for the edge case \(w+d_n = 0\):</p>
+
+\[ R_n(t) = 
+\begin{cases} 
+  \frac{b_n}{\alpha_0(w+d_n)} + \left( R_{\text{start}, n} - \frac{b_n}{\alpha_0(w+d_n)} \right) e^{-(w+d_n)t} & \text{if } w+d_n > 0 \\ 
+  R_{\text{start}, n} + \left( \frac{b_n}{\alpha_0} \right) t & \text{if } w+d_n = 0 
+\end{cases} 
+\tag{33} \]
+
+<p>Using the defender depreciation model, we can now compare the balance ratio \(g_n\) to the zero-depreciation case. The results are shown in Fig. 6 and illustrate that defender depreciation indeed has eliminated the runaway win condition. Specifically, it is the dynamically calculated destruction rate which prevents the runaway win condition. It does this independently of the influence of wear, as can be seen by the independence of eqt. 32 on \(w.\) Moreover, wear alone is insufficient to prevent a runawawy win condition in this example.</p>
+
+<div class="plot-container">
+  <div id="depreciationComparisonPlot"></div>
+</div>
+<p class="figure-caption">Figure 6: Comparison of balance ratio (g<sub>n</sub>) vs. wave number (n) with and without the effects of depreciation. Note that in both cases, we are evaluating the ratio at the start of each wave.</p>
+
+<h2>Defender wear</h2>
+
+<p>Eqt. 28 shows that the rate of change in \(R_n\) is a linear superposition of the contributions due to bounty, wear, and destruction. This allows us to isolate the differential contribution due to wear as</p>
+
+\[ \frac{dR_n}{dt}\bigg|_\text{wear} = - wR_n. \tag{34} \]
+
+<p>If we let this equation describe a steady-state population consisting entirely of a single type of defender, wherein we have a random distribution of accumulated wear across the population (i.e., different defenders have different amounts of remaining life), then renewal theory enables us to express the average wear rate \(w\) as the inverse of the expected lifetime \(\mathbb{E}[\tau]\) of this defender type</p>
+
+\[ w = \frac{1}{\mathbb{E}[\tau]}. \tag{35} \]
+
+<p>The expected lifetime of a defender can be expressed in terms of the total number of attacks \(k_0\) the defender has in its life before it is entirely worn out, its rate of attack \(r\) in hits per second when it is engaging an enemy, and its duty cycle \(\bar{f}\), which is the average fraction of gametime the defender is firing. This yields</p>
+
+\[ \mathbb{E}[\tau] = \frac{k_0}{r \bar{f}}. \tag{36} \]
+
+<p>Equating eqts. 35 and 36, we obtain an expression for \(k_0\), which we can use to provide each defender of the given type with a durability bar (health bar) which depletes by \(1/k_0\) with every attack it carries out</p>
+\[ k_0 = \frac{r \bar{f}}{w}. \tag{37} \]
+
+<p>Consider a single defender-enemy interaction. We first take as our reference the time the enemy is within range \(T_r\) and calculate what fraction of that time the defender spends firing at the enemy. This can be 1 if the enemy leaves the range before being killed, or can be \(T_k/T_r\lt1\) if the enemy is killed before leaving the range (cf. eqts. 11 and 13). To obtain the duty cycle in terms of game time, we then multiply that fraction by the fraction of total time on path which the enemy spends in range, i.e., \(P(\text{in range})\). We then take the expectation value over all \(N\) enemy types to obtain</p>
+
+\[ \bar{f} = P(\text{in range}) \frac{1}{N} \sum_{j=1}^{N} \min(1, \frac{T_{k,j}}{T_{r,j}}). \tag{38} \]
+
+<h2>Defender destruction</h2>
+
+<p>To find a mechanism for implementing the active destruction of defenders by enemy forces, we isolate the differential contribution due to destruction from eqt. 28 as follows</p>
+
+\[ \frac{dR_n}{dt}\bigg|_\text{destruction} = - d_nR_n. \tag{40} \]
+
+<p>To implement this required destruction rate using discrete events, such as airstrikes, we need to determine the cumulative target reduction in earning power that should have occurred at any given moment during wave \(n\). It is important to note at this point that eqt. 40 is derived in the macroscopic, time-averaged model, which assumes a time-independent, average bounty rate throughout the wave \(b_n=B_n/T_n\). While the macroscopic approach is perfectly fine for obtaining the wave-average values such as \(d_n\), it does not apply to the microscopic game mechanics. This is illustrated as follows.</p>
+
+<p>Suppose we continued to work in the steady-state, macroscopic model, and obtained the time-dependent solution to eqt. 40, i.e., \(R_n(t') = R_n(0)e^{-d_n t'}\), where \(R_n(0)\) is the earning rate at the start of wave \(n\). The target destruction accumulated at a time \(t\) into a wave \(n\) could then be found by integrating that destruction rate over the time the wave has been active, which would yield \( \Delta R_n(t) = R_n(0) (1 - e^{-d_n t}).\) However, this macroscopic approach would result in a steadily increasing cumulative loss throughout the duration of the wave. The amount of target destruction for a given wave would surprisingly depend on how quickly a player clears the wave. Crucially, it would work exactly opposite to expectation, being more lenient on 'stronger' players who clear the wave early and more punishing on 'weaker' players who clear the wave late.</p>
+
+<p>The correct approach therefore is to obtain an expression for the cumulative target destruction which is valid for the microscopic, discrete game-world. We recognise that, during gameplay, the bounty rate is not constant but that bounty is earned in lumps as enemies are killed. We therefore carry out the above derivation with respect to bounty (discretisable) rather than time (continuous). To do so, we make the average bounty-rate assumption explicit by writing \(dB/dt=B_n/T_n\), with \(B\) the bounty earned in wave \(n\) so far, \(B_n\) the total bounty available in the wave, and \(T_n\) the maximum time the wave can last. Substituting this into eqt. 40 yields</p>
+
+\[\frac{dR_n}{dB}=-\frac{d_nT_n}{B_n}R_n.\tag{41}\]
+
+<p>We separate variables and integrate both sides to obtain the earning rate \(R_n(B)\) as a function of the bounty \(B\) collected so far in the wave</p>
+
+\[ R_n(B) = R_n(0) e^{-d_n T_n (B/B_n)}. \tag{42}\]
+
+<p>At runtime, we accumulate a running total target damage during and across waves. We also maintain a running total of damage inflicted so far. When the difference between the two running totals exceeds a threshold, we can then trigger an attack on the defences to minimise the difference. This approach allows flexibility in the timing and strength of the attacks, while ensuring we stay on target in the long run.</p>
+
+<p>The accumulation is carried out numerically by adding a contribution to the running total target damage each time a discrete threshold amount of bounty \(B^*\) is earned. This process begins at the start of wave \(n\) by setting an initial checkpoint earning rate, \(R_{\text{chk}}\), to \(R_n(0)\) (the value of Eq. 42 at \(B=0\)). When a bounty amount \(B^*\) is accumulated, the earning rate expected after this batch is calculated as \(R'_{\text{chk}} = R_{\text{chk}} \cdot e^{-K_n B^*}\), where \(K_n = d_n T_n / B_n\) is the wave-specific decay constant (derived from the exponent in Eq. 42). The contribution added to the running total target damage is then \(\delta R = R_{\text{chk}} - R'_{\text{chk}}\). For the next batch within the same wave, \(R_{\text{chk}}\) is updated to \(R'_{\text{chk}}\), and the process repeats. Any bounty collected at the end of the wave that is less than a full \(B^*\) is processed using this same iterative method, ensuring all earned bounty for wave \(n\) contributes to the target destruction consistent with Eq. 42.</p>
+
+<h2>Scaled enemy and defender health</h2>
+
+<p>To have greater flexibility and realism in the way the defenders are damaged, we look beyond a simple binary destruction model. Specifically, we are interested in expressing a given amount of damage \(\Delta R\) in terms of a decrease in total defender health. To this end, we first recall that the cost of a full-health defender is given by \(C=\alpha R\) (cf. eqt. 7). We then assert that the cost of that same defender of partial health is decreased by a factor \(k/k_0\), where \(k\) is the number of its total \(k_0\) attacks a defender has left before it is entirely worn out. This yields</p>
+
+\[\Delta R=\frac{1}{\alpha}\Delta C^* = \frac{R}{k_0}\Delta k. \tag{43}\]
+
+<p>The above result for a single defender can be generalised to a population by simple summation to yield</p>
+
+\[ \Delta R = \sum_{i=1}^{N} \frac{R_i}{k_{0,i}}\Delta k_i. \tag{44} \]
+
+<p>We can simplify calculations by scaling defender and enemy health such that an attack would damage both in the same way. To work out whether an attack has generated the defender health reduction corresponding to the target reduction in earning rate \(\Delta R\), we redefine eqt. 44 in terms of a rescaled defender health \(h^d_i\) such that</p>
+
+\[\Delta R \equiv \sum_{i=1}^{N} \Delta h^d_i. \tag{45}\]
+
+<p>Comparing eqts. 44 and 45 yields an expression for \(h^d_i\)</p>
+
+\[h^d_i = \frac{R_i}{k_{0,i}}k_i, \tag{46}\]
+
+<p>We note that the rescaled defender health has units of earning rate, with \(h^d_i=R_i\) at full health. We can use this observation to define a rescaled health for enemies in units of earning rate. Since each enemy has an associated bounty in units of currency and we know that \(C=\alpha R\) converts currency units to earning rate units, we can define a rescaled enemy health \(h^e_i\), which ensures an equivalent damage response to a given explosion, as follows, where \(h_i\) is the current health of enemy \(i\)</p>
+
+\[h^e_i=\frac{\beta s_i}{\alpha}h_i. \tag{47} \]
+
+<h2>Airstrikes</h2>
+
+<p>Suppose we have an explosion with an \(A/r^2\) damage profile. We can then consider a defender of health \(h^d_i\) and ask what the maximum distance \(r^w_i\) from them is that we could set off this explosion such that it would wipe out their health entirely. We call this their wipe-out radius</p>
+
+\[ r^w_i = \sqrt{\frac{A}{h^d_i}}. \tag{48} \]
+
+<p>We want to work with bombs of fixed strength \(A\), using multiple bombs if needed to achieve the target damage. The alternative would be to use bombs of varying strength, but this would feel more random and less fun. Combining eqts. 48 and 46, we can pick a bomb strength such that the maximum wipe-out radius \(r^w_{max}\), as determined by our weakest defender with one hit of durability remaining \(k_i=1\), is a certain percentage of the map width, say 25%.</p>
+
+<p>We work on the basis that it is the best interests of the enemy to remove as much earning rate from the pool per explosion as possible, since that translates into the greatest instantaneous boost to their chances of success. To pick the optimal location for the epicentre of the explosion therefore, we add all defender wipe-out circles to a z-buffer, each weighted by its associated defender earning rate, and randomly select a pixel of maximum z-value to be the target location.</p>
+
+<p>Airstrikes can be funded when the target cumulative damage exceeds the cumulative damage inflicted so far by the average damage of a single bomb. This can be thought of as having accumulated enough funds to purchase a single bomb, according to the fundamental economic relationship between currency and earning rate, combined with the direct relation between earning rate and damage (cf. the scaled-health section above). We seed this average bomb damage value with an empirical value determined through playtesting and maintain a rolling average in game for the average bomb damage value to update based on recent airstrikes. We set the threshold bounty \(B^*\) (cf. section on defender destruction above) algorithmically to a fraction of the average cost of a single bomb, via \(C=\alpha R\). This ensures that updates to the target damage are just frequent enough to offer the needed resolution for accurately scheduling bomb strikes, but not more frequent than necessary so as to save computational overhead.</p>
+
+<p>Even though an airstrike can be funded, as could therefore be said to be 'due', the timing of triggering an airstrike requires some care. We know from simulation shown in Fig. 6 that applying the damage rate \(d_n\) continuously can be absorbed by a player without entering a losing spiral, and in fact produces an asymptotic approach to exact knife-edge, break-even conditions. In game however, airstrikes are dealing this damage in discrete units and this presents an unfair impact on the player if not handled carefully.</p>
+    
+<p>To explain why this is so, we need to consider the effect of depreciation on the player's ability to maintain a break-even condition. Depreciation forces a player to keep investing both to grow their defenses to meet the demands of oncoming waves, but also to counteract the continuous defender turnover due to wear and damage. If the player for whatever reason fails to stay above break-even, then their defences weaken sufficiently for enemies to push through. This in turn forces a player into reactive play where they are forced to act under duress, just to protect the base. The result is a sub-optimal investment in, and placement of, defenders. The break-even condition, however, is such that a player can survive only with an optimally managed defense. Hence, a single moment on the losing side of break-even can precipitate the above losing spiral resulting in defeat. If the game is tuned such that a break-even condition exists in the presence of continuous depreciation, then the saving up of depreciation and application in one discrete event will put the player into such a losing spiral.</p>
+
+<p>This problem can be addressed by ensuring that an airstrike does not put a player below break-even. To this end, we take the fundmental balance equation 28, which is time-dependent, and produce a bounty-dependent version using \(dt=dB/b_n\). This yields</p>
+
+\[ \frac{dR_n}{dB} = \frac{1}{\alpha} - \frac{w+d_n}{b_n}R_n \tag{49} \]
+
+<p>The solution to this differential equation, giving the target earning rate \(R_n(B)\) as a function of bounty \(B\) collected in wave \(n\), is</p>
+
+\[ R_n(B) =
+\begin{cases}
+  \frac{b_n}{\alpha(w+d_n)} + \left( R_n(0) - \frac{b_n}{\alpha(w+d_n)} \right) e^{-\frac{w+d_n}{b_n}B} & \text{if } w+d_n \neq 0 \\
+  R_n(0) + \frac{1}{\alpha}B & \text{if } w+d_n = 0
+\end{cases}
+\tag{50} \]
+
+<p>where \(R_n(0)\) is the player's earning rate at the beginning of wave \(n\). This equation provides the evolving target floor for the player's earning power as they progress through the wave by collecting bounty. We can then run a simulated airstrike, obtain the resulting damage dealt, check whether the airstrike would result in a post-damage earning rate which is at or above the target floor and, only if that criterion is satisfied, trigger the real airstrike. In practice, we apply a buffer of 20% to the target floor to give the player some leeway.</p>
+
+<p>Additionally, we apply certain cooldown periods. A first cooldown period is applied after an airstrike to give a player time to absorb the damage and rebuild defenses before the next strike comes. A second cooldown period is applied when enemies are within the last portion of the path, say the last 35% of the path, as this is an indication that the player is under duress and would not be able to absorb another airstrike at this moment. This cooldown can be a few seconds, e.g., 5 seconds and resets every frame that an enemy is within this last portion of the path.</p>
+
+<h2>Game difficulty scalar</h2>    
+<p>We may additionally implement a difficulty scalar \(a\leq1\) to the break-even value \(\alpha_0\) to allow a player to select their preferred difficulty level. This reduced \( \alpha = a\alpha_0 \) is used to calculate defender prices. However, the target damaging rate \(d_n\) is calculated using the original \(\alpha_0\) value because otherwise easier games (\(a\lt 1\)) would receive increased airstrikes, which would cancel out the cheaper defender costs.</p>
+
+<!-- Script to fetch data and render plot with Plotly.js -->
+<script>
+  const plotDiv = document.getElementById('pathCoveragePlot');
+
+  // Function to fetch and parse path coverage CSV
+  function fetchPathCoverageData() {
+      return fetch('../public/assets/paths/path-coverage.csv')
+          .then(response => {
+              if (!response.ok) {
+                  throw new Error(`HTTP error fetching coverage data! status: ${response.status}`);
+              }
+              return response.text();
+          })
+          .then(csvText => {
+              const lines = csvText.trim().split('\n');
+              const xData = [];
+              const yData = [];
+              for (let i = 1; i < lines.length; i++) { // Skip header
+                  const columns = lines[i].split(',');
+                  if (columns.length === 2) {
+                      const range = parseInt(columns[0]);
+                      const coverage = parseFloat(columns[1]);
+                      if (!isNaN(range) && !isNaN(coverage)) {
+                          xData.push(range);
+                          yData.push(coverage);
+                      }
+                  }
+              }
+              return { xData, yData };
+          });
+  }
+
+  // Function to fetch level data JSON
+  function fetchLevelData() {
+      return fetch('../public/assets/level1.json') // Fetch level1.json
+          .then(response => {
+              if (!response.ok) {
+                  throw new Error(`HTTP error fetching level data! status: ${response.status}`);
+              }
+              return response.json();
+          });
+  }
+
+  // Use Promise.all to wait for both fetches
+  Promise.all([fetchPathCoverageData(), fetchLevelData()])
+    .then(([coverageData, levelData]) => {
+      // Both fetches succeeded, data is available here
+      const { xData, yData } = coverageData;
+      const exclusionRadius = levelData?.pathExclusionRadius;
+
+      if (typeof exclusionRadius !== 'number') {
+          throw new Error('pathExclusionRadius not found or not a number in level1.json');
+      }
+
+      // Define endpoints for the reference line directly
+      const linearX = [exclusionRadius, mapRangeThreshold];
+      const linearY = [0, 0.72];
+
+      const trace1 = {
+          x: xData,
+          y: yData,
+          mode: 'lines',
+          type: 'scatter',
+          name: 'Coverage Fraction',
+          line: { color: 'rgb(75, 192, 192)' },
+          cliponaxis: false
+      };
+
+      const trace2 = {
+          x: linearX, // Use the 2-point array
+          y: linearY, // Use the 2-point array
+          mode: 'lines',
+          type: 'scatter',
+          name: 'Linear reference',
+          line: { color: 'black', width: 1.5 },
+          cliponaxis: false
+      };
+
+      const layout = {
+          font: { family: "'Latin Modern Roman', serif", size: 14 },
+          xaxis: {
+              title: 'Defender range (pixels)',
+              range: [0, 1000],
+              dtick: 200,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true,
+              linecolor: 'black',
+              linewidth: 1,
+              mirror: true
+          },
+          yaxis: {
+              title: 'Fraction of path in range',
+              range: [0, 1.05],
+              dtick: 0.2,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true,
+              linecolor: 'black',
+              linewidth: 1,
+              mirror: true
+          },
+          margin: { l: 50, r: 20, t: 30, b: 50, pad: 0 },
+          showlegend: true,
+          legend: {
+              font: { family: "'Latin Modern Roman', serif" },
+              x: 0.05,
+              y: 0.95,
+              xanchor: 'left',
+              yanchor: 'top'
+          },
+          layer: 'below traces',
+          shapes: [
+            {
+              type: 'line',
+              x0: 733,
+              y0: 0,
+              x1: 733,
+              y1: 1.05,
+              yref: 'y',
+              line: {
+                color: 'black', // Changed from grey to black
+                width: 2,
+                dash: 'dash'
+              }
+            },
+            {
+              type: 'line',
+              x0: exclusionRadius, // Use fetched value
+              y0: 0,
+              x1: exclusionRadius, // Use fetched value
+              y1: 1,
+              yref: 'paper',
+              line: {
+                color: 'black', // Changed from red to black
+                width: 2,
+                dash: 'dash'
+              }
+            },
+            {
+              // New line for the specified range threshold
+              type: 'line',
+              x0: mapRangeThreshold, // Use variable
+              y0: 0,
+              x1: mapRangeThreshold, // Use variable
+              y1: 1,
+              yref: 'paper',
+              line: {
+                color: 'black',
+                width: 2,
+                dash: 'dash'
+              }
+            }
+          ]
+      };
+
+      Plotly.newPlot(plotDiv, [trace1, trace2], layout);
+    })
+    .catch(error => {
+      // Handle errors from either fetch or processing
+      console.error('Error fetching data or rendering plot:', error);
+      if (plotDiv) {
+          let errorMsgElement = plotDiv.querySelector('.chart-error-msg');
+          if (!errorMsgElement) {
+              errorMsgElement = document.createElement('p');
+              errorMsgElement.style.color = 'red';
+              errorMsgElement.classList.add('chart-error-msg');
+              plotDiv.appendChild(errorMsgElement);
+          }
+          errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+      }
+    });
+
+  // --- Script for Map Visualization ---
+  const mapImage = document.getElementById('mapImage');
+  const mapCanvas = document.getElementById('optimumPositionsCanvas');
+  const mapCtx = mapCanvas.getContext('2d');
+  const optimalPosDataPath = '../public/assets/paths/path-optimums.csv';
+  const mapRangeThreshold = 468; // Define threshold variable here
+
+  // Ensure image is loaded before drawing (important for dimensions if not hardcoded)
+  mapImage.onload = () => {
+      console.log("Map image loaded. Fetching optimum positions...");
+      fetchOptimalPositions(mapRangeThreshold); // Pass variable
+  };
+  // Handle cases where image might already be loaded (e.g., from cache)
+  if (mapImage.complete && mapImage.naturalHeight !== 0) {
+       console.log("Map image already complete. Fetching optimum positions...");
+       fetchOptimalPositions(mapRangeThreshold); // Pass variable
+  }
+  mapImage.onerror = () => {
+      console.error("Failed to load map image:", mapImage.src);
+      const mapContainer = document.getElementById('mapContainer');
+      if(mapContainer){
+          mapContainer.innerHTML = '<p style="color:red;">Error loading map image. Check path and console.</p>';
+      }
+  }
+
+  // Use async function to handle fetching dependencies sequentially
+  // Accept threshold as an argument
+  async function fetchOptimalPositions(threshold) { 
+      try {
+          // --- Fetch level data first ---
+          const levelResponse = await fetch('../public/assets/level1.json');
+          if (!levelResponse.ok) {
+              throw new Error(`HTTP error fetching level data! status: ${levelResponse.status}`);
+          }
+          const levelData = await levelResponse.json();
+          const exclusionRadius = levelData?.pathExclusionRadius;
+
+          if (typeof exclusionRadius !== 'number') {
+              throw new Error('pathExclusionRadius not found or not a number in level1.json');
+          }
+          // ---------------------------
+
+          // --- Now fetch optimum positions ---
+          const optimumsResponse = await fetch(optimalPosDataPath);
+          if (!optimumsResponse.ok) {
+              throw new Error(`HTTP error fetching optimum positions! status: ${optimumsResponse.status} - Check path: ${optimalPosDataPath}`);
+          }
+          const csvText = await optimumsResponse.text();
+          // -----------------------------
+
+          const positions = [];
+          const lines = csvText.trim().split('\n');
+          // Skip header
+          for (let i = 1; i < lines.length; i++) {
+              const columns = lines[i].split(',');
+              if (columns.length === 3) {
+                  const range = parseInt(columns[0]); // Parse range
+                  const x = parseFloat(columns[1]);
+                  const y = parseFloat(columns[2]);
+                  if (!isNaN(range) && !isNaN(x) && !isNaN(y)) {
+                      positions.push({ range, x, y }); // Store range, x, y
+                  }
+              }
+          }
+          // Filter using only the lower bound (exclusionRadius)
+          const filteredPositions = positions.filter(pos => pos.range > exclusionRadius);
+
+          // Sort by range to find the first one >= threshold
+          filteredPositions.sort((a, b) => a.range - b.range);
+          const targetPosition = filteredPositions.find(pos => pos.range >= threshold);
+
+          // Pass the target position (or undefined if not found) to the drawing function
+          drawOptimalPositions(filteredPositions, threshold, targetPosition); 
+
+      } catch (error) {
+          // --- Unified error handling ---
+          console.error('Error fetching data or processing positions:', error);
+          mapCtx.fillStyle = 'red';
+          mapCtx.font = '12px sans-serif';
+          mapCtx.fillText('Error loading optimal positions. See console.', 10, 20);
+          // --------------------------
+      }
+  }
+
+  function drawOptimalPositions(positions, rangeThreshold, targetPosition) {
+      // Define original (data) and display dimensions
+      const originalWidth = 1024;
+      const originalHeight = 1024;
+      const displayWidth = 600;
+      const displayHeight = 600;
+
+      // Set canvas size explicitly
+      mapCanvas.width = displayWidth;
+      mapCanvas.height = displayHeight;
+      
+      mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height); // Clear previous drawings
+      const dotRadius = 2; // Size of the position dots
+
+      // Calculate scaling factors
+      const scaleX = displayWidth / originalWidth;
+      const scaleY = displayHeight / originalHeight;
+
+      // --- Draw all the position dots first ---
+      positions.forEach(pos => {
+          if (pos.range < rangeThreshold) {
+              mapCtx.fillStyle = 'red';
+          } else {
+              mapCtx.fillStyle = 'blue';
+          }
+          const scaledX = pos.x * scaleX;
+          const scaledY = pos.y * scaleY;
+          mapCtx.beginPath();
+          mapCtx.arc(scaledX, scaledY, dotRadius, 0, 2 * Math.PI);
+          mapCtx.fill(); 
+      });
+      // --- End drawing dots ---
+       
+      // --- Draw the target circle outline --- 
+      if (targetPosition) {
+          console.log("Drawing target circle for range:", targetPosition.range);
+          const scaledCenterX = targetPosition.x * scaleX;
+          const scaledCenterY = targetPosition.y * scaleY;
+          // Scale the radius using the same factor as x-coordinates (assuming uniform scaling)
+          const scaledRadius = targetPosition.range * scaleX; 
+
+          mapCtx.beginPath();
+          mapCtx.arc(scaledCenterX, scaledCenterY, scaledRadius, 0, 2 * Math.PI);
+          mapCtx.strokeStyle = 'blue'; // Blue outline
+          mapCtx.lineWidth = 1; // Thin outline
+          mapCtx.stroke(); // Draw the outline, don't fill
+      }
+      // --- End drawing circle --- 
+      
+      console.log(`Finished drawing optimal positions. Threshold: ${rangeThreshold}px`);
+  }
+  // --------------------------------
+
+  // --- Script for Endgame Ratio Plot ---
+  const endgamePlotDiv = document.getElementById('endgameRatioPlot');
+  const analysisDataPath = '../public/assets/waves/analysis-results.json';
+  const analysisParamsPath = '../public/assets/waves/analysis-params.json'; // Path to the saved parameters
+
+  // Function to fetch a JSON file
+  function fetchJson(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+
+  // Fetch analysis results and the saved parameters
+  Promise.all([
+     fetchJson(analysisDataPath), // Existing analysis results
+     fetchJson(analysisParamsPath)  // Saved parameters from analysis.js
+  ])
+  .then(([analysisResults, analysisParams]) => {
+    // Use parameters directly from the saved file
+    const { B0, beta, W1, f, L, dt_seconds, waveGenConfig, enemyStats, T0 } = analysisParams;
+
+    // Validate loaded parameters
+    if (B0 === undefined || beta === undefined || W1 === undefined || f === undefined || L === undefined || dt_seconds === undefined || !waveGenConfig || !Array.isArray(enemyStats) || enemyStats.length === 0 || T0 === undefined) {
+        throw new Error('Missing required parameters in analysis-params.json');
+    }
+    const N = enemyStats.length; // Get N from the loaded enemyStats
+    console.log("Using parameters from analysis-params.json:", analysisParams);
+
+    // --- Calculate T1 and Theoretical B0 for g1=1 ---
+    // Pass waveGenConfig from the loaded parameters to calculateTheoreticalTn
+    const T1 = calculateTheoreticalTn(1, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+    let B0_theoretical;
+    if (T1 > 0 && f > 1 && beta > 0 && W1 > 0) { 
+        B0_theoretical = (T0 * beta * W1) / (T1 * (f - 1));
+        console.log(`Calculated theoretical B0 for g1=1: ${B0_theoretical.toFixed(2)}`);
+    } else {
+        console.warn(`Cannot calculate theoretical B0: T0=${T0}, T1=${T1}, f=${f}, beta=${beta}, W1=${W1}. Using original B0.`);
+        B0_theoretical = B0; // Fallback if calculation failed
+    }
+    // ------------------------------------
+
+    // --- Use B0 from the file for the main theoretical line ---
+    // B0 is now directly from analysisParams
+    const B0_to_use_main = B0;
+    console.log("Using B0 from file for solid line:", B0_to_use_main);
+    // ------------------------------------
+
+    // --- Function to calculate theoretical Tn ---
+    // Incorporates enemy exclusion logic based on maxPrepopulationPerType and minEnemyTypes
+    function calculateTheoreticalTn(n, W1, f, currentEnemyStats, L, dt_seconds, currentWaveGenConfig) {
+        const Wn = W1 * Math.pow(f, n - 1);
+        const N_local = currentEnemyStats.length;
+        const K_max = currentWaveGenConfig.maxPrepopulationPerType ?? Infinity;
+        let min_strongest_types = currentWaveGenConfig.minEnemyTypes ?? 1;
+        min_strongest_types = Math.max(1, Math.min(min_strongest_types, N_local));
+
+        if (N_local === 0) return 0; // No enemies, duration is 0
+
+        // 1. Initial Ki calculation & Sort enemies by difficulty (ascending)
+        // Use the enemyStats passed into the function
+        const enemiesWithInitialK = currentEnemyStats.map((stats, index) => ({
+            ...stats,
+            originalIndex: index, // Keep track if needed
+            K_initial: stats.w > 0 ? (Wn / N_local) / stats.w : Infinity // Avoid division by zero
+        })).sort((a, b) => a.w - b.w);
+
+        // 2. Identify whitelist (exclude weak enemies with K_initial > K_max)
+        let whitelist = [...enemiesWithInitialK]; // Start with all
+        const numToRemove = Math.max(0, N_local - min_strongest_types);
+        let excludedCount = 0;
+
+        // Iterate only through those eligible for removal
+        for (let i = 0; i < numToRemove; i++) {
+            if (enemiesWithInitialK[i].K_initial > K_max) {
+                // Mark for exclusion (safer than modifying array while iterating)
+                enemiesWithInitialK[i].exclude = true;
+                excludedCount++;
+            }
+        }
+        whitelist = enemiesWithInitialK.filter(e => !e.exclude);
+
+        const N_wl_local = whitelist.length;
+        if (N_wl_local === 0) return 0; // All enemies excluded?
+
+        // 3. Recalculate K for whitelisted enemies based on redistributed difficulty
+        const finalEnemyCalcs = whitelist.map(stats => {
+             const K_final = stats.w > 0 ? (Wn / N_wl_local) / stats.w : 0;
+             const Ki_eff = Math.max(0, K_final); // Effective number for timing
+             const travel_time = L / stats.speed;
+             // Spawn offset: time for COM of Ki_eff enemies to be spawned
+             const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+             // COM arrival time at d = L/2 (approximation)
+             const t_com = (L / 2) / stats.speed + t_offset;
+             return { Ki_eff, speed: stats.speed, t_com, travel_time };
+        });
+
+        // 4. Calculate Tn using final enemy calculations
+        let t_com_max = 0;
+        finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+        let Tn = 0;
+        for (const calc of finalEnemyCalcs) {
+            const t_start = t_com_max - calc.t_com;
+            // Time last enemy finishes path = start_spawn + spawn_duration + travel_time
+            const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+            const t_finish_last = t_start + spawn_duration + calc.travel_time;
+            Tn = Math.max(Tn, t_finish_last);
+        }
+
+        return Tn;
+    }
+    // --- End Function ---
+
+    // Calculate theoretical g_n values for BOTH B0 scenarios
+    const waves = analysisResults.map(d => d.wave);
+    const ratios_simulated = analysisResults.map(d => d.ratio);
+    const gn_theoretical_main = []; // For solid line (B0 from file)
+    const gn_theoretical_g1_equals_1 = []; // For dashed line (calculated B0)
+
+    for (const n of waves) {
+        // Use the loaded waveGenConfig and enemyStats here
+        const Tn = calculateTheoreticalTn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+        if (T0 <= 0 || Tn <= 0 || beta <= 0 || W1 <= 0) {
+             console.warn(`Skipping g_n calculation for wave ${n} due to non-positive T0=${T0}, Tn=${Tn}, beta=${beta}, or W1=${W1}`);
+             gn_theoretical_main.push(NaN);
+             gn_theoretical_g1_equals_1.push(NaN);
+             continue;
+        }
+        const denominator = Math.pow(f, n - 1);
+        if (denominator === 0) {
+             console.warn(`Skipping g_n calculation for wave ${n} due to zero denominator`);
+             gn_theoretical_main.push(NaN);
+             gn_theoretical_g1_equals_1.push(NaN);
+             continue;
+        }
+
+        // Calculate g_n using B0 from file (for solid line)
+        const term1_main = (f - 1) * (B0_to_use_main / (beta * W1));
+        const numerator_main = term1_main - 1;
+        const gn_main = (Tn / T0) * (1 + numerator_main / denominator);
+        gn_theoretical_main.push(gn_main);
+
+        // Calculate g_n using theoretical B0 (for dashed line)
+        const term1_g1_equals_1 = (f - 1) * (B0_theoretical / (beta * W1));
+        const numerator_g1_equals_1 = term1_g1_equals_1 - 1;
+        const gn_g1_equals_1 = (Tn / T0) * (1 + numerator_g1_equals_1 / denominator);
+        gn_theoretical_g1_equals_1.push(gn_g1_equals_1);
+    }
+
+    // Calculate Asymptotic g_n = A * f^(n-1) with A adjusted
+    const A_asymptotic = 0.002 * (288.68 / 255.67);
+    const gn_asymptotic = waves.map(n => A_asymptotic * Math.pow(f, n - 1));
+
+    // Create Plotly traces
+    const trace_simulated = {
+      x: waves,
+      y: ratios_simulated,
+      mode: 'markers',
+      type: 'scatter',
+      name: 'Simulated g<sub>n</sub>',
+      line: { color: 'rgb(219, 64, 82)' },
+      marker: { size: 8 },
+      cliponaxis: false
+    };
+
+    const trace_theoretical = {
+      x: waves,
+      y: gn_theoretical_main, // Use B0 from file
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Theoretical g<sub>n</sub> (Actual B<sub>0</sub>)', // Adjusted name slightly
+      line: { color: 'black', width: 2, dash: 'solid' },
+      cliponaxis: false
+    };
+
+    const trace_theoretical_g1_equals_1 = {
+      x: waves,
+      y: gn_theoretical_g1_equals_1, // Use calculated B0
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Theoretical g<sub>n</sub> (g<sub>1</sub>=1 B<sub>0</sub>)', // Adjusted name slightly
+      line: { color: 'black', width: 2, dash: 'dash' },
+      cliponaxis: false
+    };
+
+    const trace_asymptotic = {
+        x: waves,
+        y: gn_asymptotic,
+        mode: 'lines',
+        type: 'scatter',
+        name: `Asymptotic g<sub>n</sub>`,
+        line: { color: 'black', width: 1.5, dash: 'dot' }, // Dotted line
+        cliponaxis: false
+    };
+
+    // Find overall max y-value for setting range (excluding NaN/Infinity)
+    const allYValues = [
+        ...ratios_simulated,
+        ...gn_theoretical_main,
+        ...gn_theoretical_g1_equals_1,
+        ...gn_asymptotic
+    ].filter(y => y !== null && Number.isFinite(y) && y > 0);
+    const maxYValue = allYValues.length > 0 ? Math.max(...allYValues) : 1000; // Fallback max
+
+    // Define Plotly layout
+    const layout = {
+      height: 500, // Explicitly set height
+      font: { family: "'Latin Modern Roman', serif", size: 14 },
+      xaxis: {
+        title: 'Wave number (n)',
+        range: [0, Math.max(...waves) + 1],
+        dtick: 5,
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true,
+        linecolor: 'black',
+        linewidth: 1,
+        mirror: true
+      },
+      yaxis: {
+        title: 'Balance Ratio (g<sub>n</sub>)',
+        type: 'log',
+        range: [Math.log10(0.5), Math.log10(maxYValue * 1.1)], // Set range [log10(min), log10(max)]
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true,
+        linecolor: 'black',
+        linewidth: 1,
+        mirror: true
+      },
+      margin: { l: 70, r: 20, t: 30, b: 50, pad: 0 },
+      showlegend: true, // Show legend
+      legend: { 
+          font: { family: "'Latin Modern Roman', serif" }, 
+          x: 0.05, 
+          y: 0.95, 
+          xanchor: 'left', 
+          yanchor: 'top' 
+      },
+      layer: 'below traces'
+    };
+
+    // Render the plot with all four traces
+    Plotly.newPlot(endgamePlotDiv, [trace_simulated, trace_theoretical, trace_theoretical_g1_equals_1, trace_asymptotic], layout);
+  })
+  .catch(error => {
+    console.error('Error fetching data or rendering endgame plot:', error);
+    if (endgamePlotDiv) {
+      let errorMsgElement = endgamePlotDiv.querySelector('.chart-error-msg');
+      if (!errorMsgElement) {
+        errorMsgElement = document.createElement('p');
+        errorMsgElement.style.color = 'red';
+        errorMsgElement.classList.add('chart-error-msg');
+        endgamePlotDiv.appendChild(errorMsgElement);
+      }
+      errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+    }
+  });
+  // --- End Endgame Ratio Plot ---
+
+</script>
+
+<!-- Script to trigger KaTeX rendering -->
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    renderMathInElement(document.body, {
+      delimiters: [
+          {left: '$$', right: '$$', display: true},
+          {left: '\\[', right: '\\]', display: true},
+          {left: '$', right: '$', display: false},
+          {left: '\\(', right: '\\)', display: false}
+      ],
+      throwOnError : false
+    });
+  });
+</script>
+
+
+<script>
+  const fPlotDiv = document.getElementById('fComparisonPlot');
+  const fValuesToAdd = [1.05, 1.1, 1.2]; // f values to compare against original, removed 1.4 and 1.3
+  const maxWaveN_f = 75; // Max wave number to plot
+
+  // Path to the frozen parameters file
+  const analysisParamsPath_f = '../public/assets/waves/analysis-params.json';
+
+  // Function to fetch JSON
+  function fetchJson_f(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+
+  // --- Ported calculateTheoreticalTn function (adapts logic from analysis.js) ---
+  // Calculates wave duration in seconds
+  function calculateTheoreticalTn_f(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig) {
+      const Wn = W1 * Math.pow(f, n - 1);
+      const N = enemyStats.length;
+      const K_max = waveGenConfig.maxPrepopulationPerType ?? Infinity;
+      let min_strongest_types = waveGenConfig.minEnemyTypes ?? 1;
+      min_strongest_types = Math.max(1, Math.min(min_strongest_types, N));
+
+      if (N === 0) return 0;
+
+      // 1. Initial Ki calculation & Sort enemies by difficulty (ascending: w = cost)
+      const enemiesWithInitialK = enemyStats.map((stats) => ({
+          ...stats,
+          K_initial: stats.w > 0 ? (Wn / N) / stats.w : Infinity
+      })).sort((a, b) => a.w - b.w);
+
+      // 2. Identify whitelist (exclude weak enemies with K_initial > K_max)
+      const typesToExclude = new Set();
+      const totalTypes = enemiesWithInitialK.length;
+      const maxIndexToConsiderExclusion = totalTypes > min_strongest_types ? totalTypes - min_strongest_types : 0;
+
+      for (let i = 0; i < maxIndexToConsiderExclusion; i++) {
+          const enemyType = enemiesWithInitialK[i];
+          const potentialCount = enemyType.K_initial || 0;
+          // Exclude if count exceeds K_max (and K_max is finite)
+          if (isFinite(K_max) && potentialCount > K_max) {
+              typesToExclude.add(enemyType.id);
+          }
+      }
+
+      let enemyWhitelist = enemiesWithInitialK.filter(enemyType => !typesToExclude.has(enemyType.id));
+
+      // Fallback: If exclusion removed too many, keep the strongest ones
+      if (enemyWhitelist.length < min_strongest_types && totalTypes >= min_strongest_types) {
+           console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist too small (${enemyWhitelist.length}), falling back to ${min_strongest_types} strongest types.`);
+           enemyWhitelist = enemiesWithInitialK.slice(-min_strongest_types);
+      }
+
+      const N_wl = enemyWhitelist.length;
+      if (N_wl === 0) {
+          console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist is empty even after fallback.`);
+          return 0; // Cannot proceed if no enemies selected
+      }
+
+      // 3. Recalculate K for whitelisted enemies based on redistributed difficulty
+      const finalEnemyCalcs = enemyWhitelist.map(stats => {
+           // Use ceiling for K calculation as per Eq. 3
+           const K_final = stats.w > 0 ? Math.ceil((Wn / N_wl) / stats.w) : 0;
+           const Ki_eff = Math.max(0, K_final); // Effective number for timing
+           const travel_time_d = (L / 2) / stats.speed; // Travel time to midpoint (d=L/2)
+           const travel_time_L = L / stats.speed;       // Travel time for full path L
+           // Spawn offset: time for COM of Ki_eff enemies to be 'spawned' (Eq. 4)
+           const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+           // COM arrival time at d = L/2 (Eq. 5, adapted for d=L/2)
+           const t_com = travel_time_d + t_offset;
+           return { Ki_eff, speed: stats.speed, t_com, travel_time_L };
+      });
+
+      // 4. Calculate spawn start times (Eq. 6) and overall duration Tn (Eq. 22)
+      let t_com_max = 0;
+      finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+      let Tn = 0;
+      for (const calc of finalEnemyCalcs) {
+          const t_start = t_com_max - calc.t_com; // Spawn start time for this group
+          // Time last enemy finishes path = start_spawn + spawn_duration + travel_time_L
+          const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+          const t_finish_last = t_start + spawn_duration + calc.travel_time_L;
+          Tn = Math.max(Tn, t_finish_last);
+      }
+
+      return Tn; // Return duration in seconds
+  }
+  // --- End Ported Function ---
+
+  // Fetch only the saved parameters file
+  fetchJson_f(analysisParamsPath_f)
+  .then(analysisParams => {
+      // --- Extract parameters directly from the loaded file ---
+      const { B0, beta, W1, f: original_f, L, dt_seconds, waveGenConfig, enemyStats, T0 } = analysisParams;
+      console.log("Using parameters from analysis-params.json for Fig 4:", analysisParams);
+
+      // Validate loaded parameters
+      if (B0 === undefined || beta === undefined || W1 === undefined || original_f === undefined || L === undefined || dt_seconds === undefined || !waveGenConfig || !Array.isArray(enemyStats) || enemyStats.length === 0 || T0 === undefined) {
+          throw new Error('Missing required parameters in analysis-params.json for Figure 4');
+      }
+      // enemyStats already contains id, speed, hp, w and is filtered in the params file
+
+      // Combine original f with the test values, sort and remove duplicates
+      const fValues = [...new Set([original_f, ...fValuesToAdd])].sort((a, b) => b - a); // Sort DESCENDING
+
+      const plotData = [];
+      const waveNumbers = Array.from({length: maxWaveN_f}, (_, i) => i + 1);
+
+      // --- Loop through f values and calculate g_n --- 
+      console.log("Calculating theoretical g_n for f values:", fValues);
+      for (const f of fValues) {
+          console.log(`Calculating for f = ${f.toFixed(1)}...`);
+
+          // --- Determine max wave number for this f value ---
+          let currentMaxN = maxWaveN_f; // Default max wave (75)
+          if (f === 1.1) {
+              currentMaxN = 150;
+          } else if (f === 1.05) {
+              currentMaxN = 500;
+          }
+          const waveNumbers = Array.from({length: currentMaxN}, (_, i) => i + 1);
+          // ----------------------------------------------------
+
+          // --- Calculate theoretical B0 for this specific f such that g1=1 ---
+          const T1_f = calculateTheoreticalTn_f(1, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+          let B0_theoretical_f = NaN; // Default to NaN
+          if (T0 > 0 && T1_f > 0 && beta > 0 && W1 > 0 && f > 1) {
+              B0_theoretical_f = (T0 * beta * W1) / (T1_f * (f - 1));
+              console.log(` -> Theoretical B0 for f=${f.toFixed(1)} (g1=1): ${B0_theoretical_f.toFixed(2)} (using T1=${T1_f.toFixed(2)}s)`);
+          } else {
+              console.warn(` -> Cannot calculate theoretical B0 for f=${f.toFixed(1)}: T0=${T0.toFixed(2)}, T1=${T1_f.toFixed(2)}, beta=${beta}, W1=${W1}, f=${f}`);
+          }
+          // ------------------------------------------------------------------
+
+          const gn_values = [];
+          for (const n of waveNumbers) {
+              // Calculate Tn using the detailed function (result in seconds)
+              const Tn = calculateTheoreticalTn_f(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+
+              // Calculate g_n using Eq. 21, with the B0 calculated for this specific f to make g1=1
+              let gn = NaN;
+              // Check if theoretical B0 was valid before using it
+              if (T0 > 0 && Tn > 0 && beta > 0 && W1 > 0 && f > 1 && !isNaN(B0_theoretical_f)) {
+                  const denominator_term = Math.pow(f, n - 1);
+                  if (denominator_term > 0) {
+                      // Use B0_theoretical_f here!
+                      const term1 = (f - 1) * (B0_theoretical_f / (beta * W1));
+                      const numerator = term1 - 1;
+                      gn = (Tn / T0) * (1 + numerator / denominator_term);
+                  }
+              }
+              gn_values.push(gn);
+          }
+
+          // Add trace for this f
+          plotData.push({
+              x: waveNumbers,
+              y: gn_values,
+              mode: 'lines',
+              type: 'scatter',
+              name: `f = ${f.toFixed(2)}`, // Format legend entry
+              line: { width: 2 } // Removed specific color assignment
+          });
+          console.log(` -> First few g_n for f=${f.toFixed(1)}:`, gn_values.slice(0, 5).map(v => v.toFixed(2)));
+      }
+
+      // --- Create Plotly layout --- 
+      // Find overall max y-value for setting range (excluding NaN/Infinity)
+      const allYValues_f = plotData.flatMap(trace => trace.y).filter(y => y !== null && Number.isFinite(y) && y > 0);
+      const maxYValue_f = allYValues_f.length > 0 ? Math.max(...allYValues_f) : 1000; // Fallback max
+      const minYValue_f = allYValues_f.length > 0 ? Math.min(...allYValues_f) : 0.1; // Fallback min
+
+      const layout_f = {
+          height: 500, // Explicitly set height
+          font: { family: "'Latin Modern Roman', serif", size: 14 },
+          xaxis: {
+            title: 'Wave Number (n)',
+            type: 'log',
+            range: [Math.log10(1), Math.log10(500)], // Log range [1, 500]
+            titlefont: { family: "'Latin Modern Roman', serif" },
+            tickfont: { family: "'Latin Modern Roman', serif" },
+            showline: true, linecolor: 'black', linewidth: 1, mirror: true
+          },
+          yaxis: {
+            title: 'Balance Ratio (g<sub>n</sub>)',
+            type: 'log',
+            range: [Math.log10(0.5), Math.log10(300)],
+            titlefont: { family: "'Latin Modern Roman', serif" },
+            tickfont: { family: "'Latin Modern Roman', serif" },
+            showline: true, linecolor: 'black', linewidth: 1, mirror: true
+          },
+          margin: { l: 80, r: 30, t: 30, b: 50, pad: 0 }, // Increased left margin for A axis title
+          showlegend: true,
+          legend: { font: { family: "'Latin Modern Roman', serif" }, x: 0.05, y: 0.95, xanchor: 'left', yanchor: 'top' }, // Add legend top-left
+          layer: 'below traces' // Ensure grid lines are below traces
+      };
+
+      // --- Render plot --- 
+      Plotly.newPlot(fPlotDiv, plotData, layout_f);
+      console.log("Figure 4 plotted.");
+
+  }).catch(error => {
+      console.error('Error generating Figure 4 comparison plot:', error);
+      if (fPlotDiv) {
+        let errorMsgElement = fPlotDiv.querySelector('.chart-error-msg');
+        if (!errorMsgElement) {
+            errorMsgElement = document.createElement('p');
+            errorMsgElement.style.color = 'red';
+            errorMsgElement.classList.add('chart-error-msg');
+            fPlotDiv.appendChild(errorMsgElement);
+        }
+        errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+      }
+  });
+</script>
+
+<!-- Script to calculate and log theoretical alpha_0 and B_0 -->
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    console.log("Calculating theoretical alpha_0 and B_0 using current game parameters...");
+
+    // --- Define necessary paths ---
+    const level1Path_calc = '../public/assets/level1.json';
+    const wavesPath_calc = '../public/assets/waves/waves.json';
+    // Other paths derived from level1.json
+
+    // --- Fetch function ---
+    function fetchJson_calc(path) {
+      return fetch(path).then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+        }
+        return response.json();
+      });
+    }
+
+    // --- Reuse calculateTheoreticalTn_f logic (defined locally) ---
+    function calculateTheoreticalTn_local(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig) {
+        // ... (Copy the entire logic from calculateTheoreticalTn_f here) ...
+        const Wn = W1 * Math.pow(f, n - 1);
+        const N = enemyStats.length;
+        const K_max = waveGenConfig.maxPrepopulationPerType ?? Infinity;
+        let min_strongest_types = waveGenConfig.minEnemyTypes ?? 1;
+        min_strongest_types = Math.max(1, Math.min(min_strongest_types, N));
+
+        if (N === 0) return 0;
+
+        const enemiesWithInitialK = enemyStats.map((stats) => ({
+            ...stats,
+            K_initial: stats.w > 0 ? (Wn / N) / stats.w : Infinity
+        })).sort((a, b) => a.w - b.w);
+
+        const typesToExclude = new Set();
+        const totalTypes = enemiesWithInitialK.length;
+        const maxIndexToConsiderExclusion = totalTypes > min_strongest_types ? totalTypes - min_strongest_types : 0;
+
+        for (let i = 0; i < maxIndexToConsiderExclusion; i++) {
+            const enemyType = enemiesWithInitialK[i];
+            const potentialCount = enemyType.K_initial || 0;
+            if (isFinite(K_max) && potentialCount > K_max) {
+                typesToExclude.add(enemyType.id);
+            }
+        }
+
+        let enemyWhitelist = enemiesWithInitialK.filter(enemyType => !typesToExclude.has(enemyType.id));
+
+        if (enemyWhitelist.length < min_strongest_types && totalTypes >= min_strongest_types) {
+            enemyWhitelist = enemiesWithInitialK.slice(-min_strongest_types);
+        }
+
+        const N_wl = enemyWhitelist.length;
+        if (N_wl === 0) return 0;
+
+        const finalEnemyCalcs = enemyWhitelist.map(stats => {
+            const K_final = stats.w > 0 ? Math.ceil((Wn / N_wl) / stats.w) : 0;
+            const Ki_eff = Math.max(0, K_final);
+            const travel_time_d = (L / 2) / stats.speed;
+            const travel_time_L = L / stats.speed;
+            const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+            const t_com = travel_time_d + t_offset;
+            return { Ki_eff, speed: stats.speed, t_com, travel_time_L };
+        });
+
+        let t_com_max = 0;
+        finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+        let Tn = 0;
+        for (const calc of finalEnemyCalcs) {
+            const t_start = t_com_max - calc.t_com;
+            const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+            const t_finish_last = t_start + spawn_duration + calc.travel_time_L;
+            Tn = Math.max(Tn, t_finish_last);
+        }
+        return Tn; // Return duration in seconds
+    }
+
+    try {
+        // --- Fetch current game parameters ---
+        const levelData = await fetchJson_calc(level1Path_calc);
+        const waveData = await fetchJson_calc(wavesPath_calc);
+
+        const pathStatsPath_calc = `../${levelData.pathStatsPath}`;
+        const pathStats = await fetchJson_calc(pathStatsPath_calc);
+
+        const enemyDataPath_calc = `../${levelData.enemyData}`;
+        const enemiesData = await fetchJson_calc(enemyDataPath_calc);
+
+        // --- Extract required parameters ---
+        const beta = levelData.betaFactor; // Use betaFactor key
+        const W1 = waveData.startingDifficulty;
+        const f = waveData.difficultyIncreaseFactor;
+        const L = pathStats.totalPathLength;
+        const dt_seconds = (waveData.delayBetweenEnemiesMs || 500) / 1000.0;
+        const waveGenConfig = waveData.waveGeneration || {};
+
+        if (!Array.isArray(enemiesData) || enemiesData.length === 0) throw new Error('No enemy data found.');
+        const currentEnemyStats = enemiesData.map(e => ({
+            id: e.id,
+            speed: e.stats.speed,
+            hp: e.stats.hp,
+            w: (e.stats.speed || 0) * (e.stats.hp || 0)
+        })).filter(e => e.speed > 0 && e.hp > 0);
+
+        if (currentEnemyStats.length === 0) throw new Error('No enemies with valid speed and hp found.');
+
+        const s_min = Math.min(...currentEnemyStats.map(e => e.speed));
+        if (s_min <= 0) throw new Error('Slowest enemy speed must be positive.');
+
+        // --- Perform Calculations ---
+        const T0 = L / s_min; // Eq. approximation
+        const T1 = calculateTheoreticalTn_local(1, W1, f, currentEnemyStats, L, dt_seconds, waveGenConfig);
+
+        let alpha_0 = NaN;
+        if (f > 1) {
+            alpha_0 = T0 / (f - 1); // Eq. 19
+        }
+
+        let B0_calc = NaN;
+        if (T1 > 0 && f > 1 && beta > 0 && W1 > 0) {
+            B0_calc = (T0 * beta * W1) / (T1 * (f - 1)); // Eq. 23
+        }
+
+        // --- Log Results ---
+        console.log(`--- Theoretical Break-even Parameters (Current Game Files) ---`);
+        console.log(`  Parameters Used: f=${f.toFixed(3)}, W1=${W1}, beta=${beta}`); // Log as beta
+        console.log(`  Calculated T0 (L/s_min): ${T0.toFixed(2)} s`);
+        console.log(`  Calculated T1: ${T1.toFixed(2)} s`);
+        console.log(`  Theoretical alpha_0 (Eq. 19): ${alpha_0.toFixed(2)}`);
+        console.log(`  Theoretical B0 for g1=1 (Eq. 23): ${B0_calc.toFixed(2)}`);
+        console.log(`--- End Calculation ---`);
+
+    } catch (error) {
+      console.error("Error calculating theoretical parameters:", error);
+    }
+  });
+</script>
+
+<!-- Script for dn vs n plot -->
+<script>
+  const dnPlotDiv = document.getElementById('dnEvolutionPlot');
+  const analysisParamsPath_dn = '../public/assets/waves/analysis-params.json';
+  const maxWaveN_dn = 25; // Max wave number to plot
+
+  // --- Function to fetch JSON ---
+  function fetchJson_dn(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error fetching ${path}! status: ${response.status}`);
+      }
+      return response.json();
+    });
+  }
+
+  // --- Ported calculateTheoreticalTn function (from Fig 4 plot) ---
+  // Calculates wave duration in seconds
+  function calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig) {
+      const Wn = W1 * Math.pow(f, n - 1);
+      const N = enemyStats.length;
+      const K_max = waveGenConfig.maxPrepopulationPerType ?? Infinity;
+      let min_strongest_types = waveGenConfig.minEnemyTypes ?? 1;
+      min_strongest_types = Math.max(1, Math.min(min_strongest_types, N));
+
+      if (N === 0) return 0;
+
+      // 1. Initial Ki calculation & Sort enemies by difficulty (ascending: w = cost)
+      const enemiesWithInitialK = enemyStats.map((stats) => ({
+          ...stats,
+          K_initial: stats.w > 0 ? (Wn / N) / stats.w : Infinity
+      })).sort((a, b) => a.w - b.w);
+
+      // 2. Identify whitelist (exclude weak enemies with K_initial > K_max)
+      const typesToExclude = new Set();
+      const totalTypes = enemiesWithInitialK.length;
+      const maxIndexToConsiderExclusion = totalTypes > min_strongest_types ? totalTypes - min_strongest_types : 0;
+
+      for (let i = 0; i < maxIndexToConsiderExclusion; i++) {
+          const enemyType = enemiesWithInitialK[i];
+          const potentialCount = enemyType.K_initial || 0;
+          // Exclude if count exceeds K_max (and K_max is finite)
+          if (isFinite(K_max) && potentialCount > K_max) {
+              typesToExclude.add(enemyType.id);
+          }
+      }
+
+      let enemyWhitelist = enemiesWithInitialK.filter(enemyType => !typesToExclude.has(enemyType.id));
+
+      // Fallback: If exclusion removed too many, keep the strongest ones
+      if (enemyWhitelist.length < min_strongest_types && totalTypes >= min_strongest_types) {
+           // console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist too small (${enemyWhitelist.length}), falling back to ${min_strongest_types} strongest types.`);
+           enemyWhitelist = enemiesWithInitialK.slice(-min_strongest_types);
+      }
+
+      const N_wl = enemyWhitelist.length;
+      if (N_wl === 0) {
+          // console.warn(`Wave ${n}, f=${f.toFixed(1)}: Whitelist is empty even after fallback.`);
+          return 0; // Cannot proceed if no enemies selected
+      }
+
+      // 3. Recalculate K for whitelisted enemies based on redistributed difficulty
+      const finalEnemyCalcs = enemyWhitelist.map(stats => {
+           // Use ceiling for K calculation as per Eq. 3
+           const K_final = stats.w > 0 ? Math.ceil((Wn / N_wl) / stats.w) : 0;
+           const Ki_eff = Math.max(0, K_final); // Effective number for timing
+           const travel_time_d = (L / 2) / stats.speed; // Travel time to midpoint (d=L/2)
+           const travel_time_L = L / stats.speed;       // Travel time for full path L
+           // Spawn offset: time for COM of Ki_eff enemies to be 'spawned' (Eq. 4)
+           const t_offset = Ki_eff > 1 ? (Ki_eff - 1) * dt_seconds / 2 : 0;
+           // COM arrival time at d = L/2 (Eq. 5, adapted for d=L/2)
+           const t_com = travel_time_d + t_offset;
+           return { Ki_eff, speed: stats.speed, t_com, travel_time_L };
+      });
+
+      // 4. Calculate spawn start times (Eq. 6) and overall duration Tn (Eq. 22)
+      let t_com_max = 0;
+      finalEnemyCalcs.forEach(calc => { t_com_max = Math.max(t_com_max, calc.t_com); });
+
+      let Tn = 0;
+      for (const calc of finalEnemyCalcs) {
+          const t_start = t_com_max - calc.t_com; // Spawn start time for this group
+          // Time last enemy finishes path = start_spawn + spawn_duration + travel_time_L
+          const spawn_duration = calc.Ki_eff > 1 ? (calc.Ki_eff - 1) * dt_seconds : 0;
+          const t_finish_last = t_start + spawn_duration + calc.travel_time_L;
+          Tn = Math.max(Tn, t_finish_last);
+      }
+
+      return Tn; // Return duration in seconds
+  }
+  // --- End Ported Function ---
+
+  // Fetch parameters and calculate dn
+  fetchJson_dn(analysisParamsPath_dn)
+  .then(analysisParams => {
+      const { f, T0, W1, L, dt_seconds, enemyStats, waveGenConfig } = analysisParams;
+      console.log("Using parameters from analysis-params.json for dn plot:", analysisParams);
+
+      // Validate parameters
+      if (f === undefined || T0 === undefined || W1 === undefined || L === undefined || dt_seconds === undefined || !Array.isArray(enemyStats) || enemyStats.length === 0 || !waveGenConfig) {
+          throw new Error('Missing required parameters in analysis-params.json for dn plot');
+      }
+      if (T0 <= 0) {
+          throw new Error('T0 must be positive for dn calculation.');
+      }
+
+      const waveNumbers = Array.from({length: maxWaveN_dn}, (_, i) => i + 1);
+      const T_values = {}; // Store calculated Tn values
+      const dn_values = [];
+
+      // Pre-calculate Tn for n=1 to maxN+1
+      console.log("Calculating Tn values...");
+      for (let n = 1; n <= maxWaveN_dn + 1; n++) {
+          T_values[n] = calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+      }
+      console.log("Finished calculating Tn values.");
+
+      // Calculate dn for n=1 to maxN
+      console.log("Calculating dn values...");
+      const logistic_values = [];
+      const n0 = 13.5; // Specified midpoint
+      const k = 0.55; // Chosen steepness parameter
+      const L_logistic = (f - 1) / T0; // Upper asymptote
+      console.log(`Logistic params: L=${L_logistic}, n0=${n0}, k=${k}`);
+
+      for (const n of waveNumbers) {
+          const Tn = T_values[n];
+          const Tn_plus_1 = T_values[n + 1];
+          let dn = NaN; // Default to NaN
+
+          if (Tn > 0 && Tn_plus_1 !== undefined) {
+              const gamma_n = Tn_plus_1 / Tn;
+              if (gamma_n > 0) { // Avoid division by zero if f=0 or gamma_n=0
+                  const term1 = L_logistic; // Use calculated L
+                  const term2_factor = 1 / Tn;
+                  const term2_bracket = 1 - (f / gamma_n);
+                  dn = term1 + term2_factor * term2_bracket;
+              } else {
+                   console.warn(`Cannot calculate dn for n=${n}: gamma_n (${gamma_n.toFixed(3)}) is not positive.`);
+              }
+          } else {
+              console.warn(`Cannot calculate dn for n=${n}: Tn (${Tn?.toFixed(3)}) is not positive or Tn+1 is undefined.`);
+          }
+          dn_values.push(dn);
+
+          // Calculate logistic function value for this n
+          const logistic_val = L_logistic / (1 + Math.exp(-k * (n - n0)));
+          logistic_values.push(logistic_val);
+      }
+      console.log("Finished calculating dn and logistic values.");
+
+      // Create Plotly trace for dn
+      const trace_dn = {
+          x: waveNumbers,
+          y: dn_values,
+          mode: 'markers',
+          type: 'scatter',
+          name: 'd<sub>n</sub>',
+          marker: { size: 8, color: 'rgb(255, 127, 14)' }, // Orange markers, increased size to 8
+          cliponaxis: false
+      };
+
+      // Create Plotly trace for logistic function
+      const trace_logistic = {
+          x: waveNumbers,
+          y: logistic_values,
+          mode: 'lines',
+          type: 'scatter',
+          name: `Logistic (n₀=${n0}, k=${k})`,
+          line: { color: 'black', width: 1.5 }
+      };
+
+      // Create Plotly layout
+      const layout_dn = {
+          height: 500,
+          font: { family: "'Latin Modern Roman', serif", size: 14 },
+          xaxis: {
+              title: 'Wave number (n)',
+              range: [0, maxWaveN_dn + 1],
+              dtick: 5,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true, linecolor: 'black', linewidth: 1, mirror: true
+          },
+          yaxis: {
+              title: 'Fractional damage rate (d<sub>n</sub>)',
+              autorange: true,
+              titlefont: { family: "'Latin Modern Roman', serif" },
+              tickfont: { family: "'Latin Modern Roman', serif" },
+              showline: true, linecolor: 'black', linewidth: 1, mirror: true,
+              zeroline: true, zerolinecolor: 'grey', zerolinewidth: 1
+          },
+          margin: { l: 80, r: 20, t: 30, b: 50, pad: 0 },
+          showlegend: true,
+          legend: { 
+              font: { family: "'Latin Modern Roman', serif" }, 
+              x: 0.05, y: 0.95, 
+              xanchor: 'left', yanchor: 'top' 
+          },
+          layer: 'below traces'
+      };
+
+      // Render the plot with both traces
+      Plotly.newPlot(dnPlotDiv, [trace_dn, trace_logistic], layout_dn);
+      console.log("dn vs n plot rendered with logistic overlay.");
+
+  })
+  .catch(error => {
+      console.error('Error fetching data or rendering dn plot:', error);
+      if (dnPlotDiv) {
+        let errorMsgElement = dnPlotDiv.querySelector('.chart-error-msg');
+        if (!errorMsgElement) {
+            errorMsgElement = document.createElement('p');
+            errorMsgElement.style.color = 'red';
+            errorMsgElement.classList.add('chart-error-msg');
+            dnPlotDiv.appendChild(errorMsgElement);
+        }
+        errorMsgElement.textContent = 'Error loading chart: ' + error.message + '. Check console.';
+      }
+  });
+
+</script>
+
+
+
+<!-- Script for Depreciation Comparison Plot -->
+<script>
+  const depreciationPlotDiv = document.getElementById('depreciationComparisonPlot');
+  const originalResultsPath = '../public/assets/waves/analysis-results.json';
+  const dtREndResultsPath = '../public/assets/waves/analysis-depreciation-results.json'; // Renamed output file
+  const paramsPath = '../public/assets/waves/analysis-params.json'; // Need params for analytical line
+
+  // --- Function to fetch JSON ---
+  function fetchJson_depr(path) {
+    return fetch(path).then(response => {
+      if (!response.ok) {
+        console.warn(`HTTP error fetching ${path}! status: ${response.status}`);
+        return null; // Indicate failure
+      }
+      return response.json();
+    }).catch(error => {
+        console.error(`Fetch error for ${path}:`, error);
+        return null;
+    });
+  }
+
+  // Fetch only the two required results files
+  Promise.all([
+     fetchJson_depr(originalResultsPath),
+     fetchJson_depr(dtREndResultsPath),
+     fetchJson_depr(paramsPath) // Fetch params
+  ])
+  .then(([originalResults, dtREndResults, params]) => {
+    const plotData = [];
+    let maxWave = 0;
+    let maxYValue = 0.1;
+    let minYValue = 100; 
+    // Declare arrays for analytical lines here
+    let analyticalWavesX = [];
+    let analyticalRatioSmooth = []; // For R_start/b_n with Full Depr
+    let originalTheoretical_gn = []; // For original gn
+    // const maxWaveAnalytical = 500; // <<< REMOVED - Revert to maxWave from sim
+
+    if (!params) {
+        throw new Error("Could not load analysis parameters for analytical calculation.");
+    }
+    const { f, T0, alpha: original_alpha, B0, W1, beta, L, dt_seconds, enemyStats, waveGenConfig, wear: wear_from_params } = params; // Extract wear
+    // const wear_w = 0.0005; // REMOVED - Use wear_from_params
+    // Validate wear from params
+    if (wear_from_params === undefined || wear_from_params < 0) {
+        throw new Error("Missing or invalid 'wear' parameter in analysis-params.json");
+    }
+    const calculated_alpha_0 = 1 / ( ((f - 1) / T0) + wear_from_params ); // Use wear_from_params
+
+    // Function to add trace and update bounds (expects x, y arrays)
+    function addTrace(x_data, y_data, name, color, mode = 'markers', lineStyle = {}) {
+        if (!x_data || !y_data || x_data.length === 0 || y_data.length === 0 || x_data.length !== y_data.length) {
+            console.warn(`Skipping trace ${name}: Invalid or mismatched data. X: ${x_data?.length}, Y: ${y_data?.length}`);
+            return;
+        }
+        // Update maxWave based on the maximum x value in this trace
+        maxWave = Math.max(maxWave, ...x_data);
+        
+        const finiteRatios = y_data.filter(y => isFinite(y) && y !== null);
+        if (finiteRatios.length > 0) {
+            maxYValue = Math.max(maxYValue, ...finiteRatios);
+            const positiveFiniteRatios = finiteRatios.filter(y => y > 1e-6); 
+            if (positiveFiniteRatios.length > 0) {
+                 minYValue = Math.min(minYValue, ...positiveFiniteRatios); 
+            }
+        }
+        plotData.push({
+            x: x_data,
+            y: y_data,
+            mode: mode,
+            type: 'scatter',
+            name: name,
+            marker: { color: color, size: (mode.includes('markers') ? 8 : undefined) }, 
+            line: (mode.includes('lines') ? { color: color, width: 1.5, ...lineStyle } : undefined),
+            cliponaxis: false
+        });
+    }
+
+    // Process simulation results first to set the display range up to n=30 (or whatever sim max was)
+    let simMaxWave = 0;
+    if (originalResults) {
+        simMaxWave = Math.max(simMaxWave, ...originalResults.map(d => d.wave));
+        addTrace(originalResults.map(d => d.wave), originalResults.map(d => d.ratio), 'Simulation (no depreciation)', 'rgb(219, 64, 82)');
+    }
+    if (dtREndResults) {
+        simMaxWave = Math.max(simMaxWave, ...dtREndResults.map(d => d.wave));
+        addTrace(dtREndResults.map(d => d.wave), dtREndResults.map(d => d.ratio), 'Simulation (full depreciation)', 'rgb(0, 150, 150)', 'markers');
+    }
+    maxWave = simMaxWave; // Keep maxWave based on simulation for initial range
+
+    // --- Calculate Both Analytical Lines AFTER determining maxWave ---
+    if (maxWave > 0 && typeof calculateTheoreticalTn_dn === 'function') { // Use maxWave here
+        // --- Setup for R_start/b_n line (Solid Black) - WITH FULL DEPRECIATION --- 
+        // const wear_w = 0.0005; // REMOVED - Use wear_from_params
+        const alpha_0_depr = 1 / (((f - 1) / T0) + wear_from_params); // Use wear_from_params
+        let R_start_analytical_solid = B0 / alpha_0_depr; // R(0) for wave 1 using depr alpha0
+        analyticalRatioSmooth = []; // Reset array
+        console.log(`Calculating SOLID line WITH DEPRECIATION (w=${wear_from_params}, alpha_0=${alpha_0_depr.toFixed(4)})`); // Use wear_from_params
+        // --- End Setup ---
+
+        // --- Setup for Original gn line (Dashed Black) --- 
+        // Uses B0 from params, no alpha needed for formula, no w/dn involved
+        originalTheoretical_gn = []; // Reset array
+        console.log(`Calculating DASHED line with B0=${B0}`);
+        // --- End Setup ---
+
+        let analytical_T_values = {}; // Temporary storage for Tn
+        
+        console.log("Calculating theoretical Tn and analytical lines...");
+
+        // Pre-calculate theoretical T_n values needed up to maxWave+1
+        for (let n = 1; n <= maxWave + 1; n++) { // Use maxWave
+            analytical_T_values[n] = calculateTheoreticalTn_dn(n, W1, f, enemyStats, L, dt_seconds, waveGenConfig);
+        }
+
+        // Calculate analytical lines wave by wave up to maxWave
+        for (let n = 1; n <= maxWave; n++) { // Use maxWave
+            analyticalWavesX.push(n); // Add wave number for x-axis
+
+            const T_n = analytical_T_values[n];
+            const T_n_plus_1 = analytical_T_values[n + 1];
+            const W_n = W1 * Math.pow(f, n - 1);
+            const B_n_theory = W_n * beta; 
+            const b_n_theory = (T_n > 0) ? B_n_theory / T_n : 0; 
+
+            // --- Calculation for R_start/b_n (Solid Black Line with FULL DEPRECIATION) --- 
+            // Calculate dn for this wave (using Eq. 32)
+            let d_n = 0; // Default to zero if calculation fails
+            const dn_term1 = (f - 1) / T0; // Base term from alpha0 definition
+            if (T_n > 0 && T_n_plus_1 !== undefined) {
+                const gamma_n = T_n_plus_1 / T_n;
+                if (gamma_n > 0) { 
+                    const dn_term2_bracket = 1 - (f / gamma_n);
+                    d_n = dn_term1 + (1 / T_n) * dn_term2_bracket;
+                } else {
+                    console.warn(`Cannot calculate dn for n=${n}: gamma_n (${gamma_n.toFixed(3)}) is not positive.`);
+                    d_n = dn_term1; // Fallback? Or keep 0?
+                }
+            } else {
+                 console.warn(`Cannot calculate dn for n=${n}: Tn (${T_n?.toFixed(3)}) is not positive or Tn+1 is undefined.`);
+                 d_n = dn_term1; // Fallback
+            }
+
+            // Calculate the ratio using R_start_n BEFORE calculating R_end_n
+            let g_analytical_smooth = 0;
+            if (b_n_theory > 0) { 
+                g_analytical_smooth = R_start_analytical_solid / b_n_theory; // Use R_start_n here
+            } else if (R_start_analytical_solid === 0 && B_n_theory === 0) { 
+                g_analytical_smooth = 1; // Break-even if both are zero
+            } else if (b_n_theory <= 0 && R_start_analytical_solid > 0) { 
+                g_analytical_smooth = Infinity; // Infinite ratio if start R > 0 but bounty rate is zero
+            }
+            analyticalRatioSmooth.push(isFinite(g_analytical_smooth) ? g_analytical_smooth : (g_analytical_smooth > 0 ? 1e9 : -1e9));
+
+            // Now calculate R_end_n using the FULL ODE solution (Eq. 33)
+            let R_end_n_analytical_solid = R_start_analytical_solid; 
+            const total_loss_rate = wear_from_params + d_n; // Use wear_from_params
+            if (b_n_theory > 0 && T_n > 0) { 
+                if (Math.abs(total_loss_rate) < 1e-9) { // Handle near-zero loss rate (previous case)
+                    const A_gain = b_n_theory / alpha_0_depr; 
+                    R_end_n_analytical_solid = R_start_analytical_solid + A_gain * T_n;
+                } else { // Use Eq. 33
+                    const steady_state_R = b_n_theory / (alpha_0_depr * total_loss_rate);
+                    R_end_n_analytical_solid = steady_state_R + (R_start_analytical_solid - steady_state_R) * Math.exp(-total_loss_rate * T_n);
+                }
+            }
+            R_end_n_analytical_solid = Math.max(0, R_end_n_analytical_solid); // Ensure non-negative
+            
+            // Update R_start for next iteration
+            R_start_analytical_solid = R_end_n_analytical_solid; 
+            // --- End R_start/b_n Calculation (Full Depr) --- 
+
+            // --- Calculation for Original gn (No Depr - Dashed Black Line) --- 
+            let gn_original_theory = NaN;
+            if (T0 > 0 && T_n > 0 && beta > 0 && W1 > 0) {
+                const denominator_term = Math.pow(f, n - 1);
+                if (denominator_term > 0) {
+                    const term1 = (f - 1) * (B0 / (beta * W1));
+                    const numerator = term1 - 1;
+                    gn_original_theory = (T_n / T0) * (1 + numerator / denominator_term);
+                }
+            }
+            originalTheoretical_gn.push(isFinite(gn_original_theory) ? gn_original_theory : (gn_original_theory > 0 ? 1e9 : -1e9));
+             // --- End Original gn Calculation --- 
+        }
+        console.log("Finished calculating analytical lines.")
+    } else {
+        console.error("Could not calculate analytical lines - maxWave not determined or helper function missing.");
+    }
+    // --- End Analytical Calculations --- 
+
+    addTrace(analyticalWavesX, originalTheoretical_gn, 'Theory (no depreciation)', 'black', 'lines', { dash: 'dash' });
+    addTrace(analyticalWavesX, analyticalRatioSmooth, 'Theory (full depreciation)', 'black', 'lines'); 
+
+
+    if (plotData.length === 0) {
+        throw new Error("Could not load any results data for Fig 6.");
+    }
+    minYValue = Math.max(0.05, minYValue); 
+
+    // Define Plotly layout
+    const layout_depr = {
+      height: 500,
+      font: { family: "'Latin Modern Roman', serif", size: 14 },
+      xaxis: {
+        title: 'Wave number (n)',
+        range: [0, maxWave + 1], // Revert range to maxWave
+        dtick: 5, // Revert tick spacing
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true, linecolor: 'black', linewidth: 1, mirror: true
+      },
+      yaxis: {
+        title: 'Balance Ratio', // Simplified title further
+        type: 'log',
+        range: [Math.log10(minYValue * 0.8), Math.log10(maxYValue * 1.2)], // Replicated dynamic range from Fig 3
+        titlefont: { family: "'Latin Modern Roman', serif" },
+        tickfont: { family: "'Latin Modern Roman', serif" },
+        showline: true, linecolor: 'black', linewidth: 1, mirror: true,
+        shapes: [{
+            type: 'line',
+            x0: 0,
+            y0: 1,
+            x1: maxWave + 1, // Use maxWave here
+            y1: 1,
+            line: {
+                color: 'grey',
+                width: 1,
+                dash: 'dash'
+            }
+        }]
+      },
+      margin: { l: 80, r: 20, t: 30, b: 50, pad: 0 }, 
+      showlegend: true,
+      legend: { 
+          font: { family: "'Latin Modern Roman', serif", size: 12 }, // Adjusted font size 
+          x: 0.05, y: 0.98, 
+          xanchor: 'left', yanchor: 'top' 
+      },
+      layer: 'below traces'
+    };
+
+    // Render the plot
+    Plotly.newPlot(depreciationPlotDiv, plotData, layout_depr);
+    console.log("Added analytical comparison line to plot.");
+
+  })
+
+</script>
+
+</body>
+</html>
