@@ -343,7 +343,7 @@
 
   // Function to fetch and parse path coverage CSV
   function fetchPathCoverageData() {
-      return fetch('../public/assets/paths/path-coverage.csv')
+      return fetch('../assets/paths/path-coverage.csv')
           .then(response => {
               if (!response.ok) {
                   throw new Error(`HTTP error fetching coverage data! status: ${response.status}`);
@@ -371,7 +371,7 @@
 
   // Function to fetch level data JSON
   function fetchLevelData() {
-      return fetch('../public/assets/level1.json') // Fetch level1.json
+      return fetch('../assets/level1.json') // Fetch level1.json
           .then(response => {
               if (!response.ok) {
                   throw new Error(`HTTP error fetching level data! status: ${response.status}`);
@@ -514,7 +514,7 @@
   const mapImage = document.getElementById('mapImage');
   const mapCanvas = document.getElementById('optimumPositionsCanvas');
   const mapCtx = mapCanvas.getContext('2d');
-  const optimalPosDataPath = '../public/assets/paths/path-optimums.csv';
+  const optimalPosDataPath = '../assets/paths/path-optimums.csv';
   const mapRangeThreshold = 468; // Define threshold variable here
 
   // Ensure image is loaded before drawing (important for dimensions if not hardcoded)
@@ -540,7 +540,7 @@
   async function fetchOptimalPositions(threshold) { 
       try {
           // --- Fetch level data first ---
-          const levelResponse = await fetch('../public/assets/level1.json');
+          const levelResponse = await fetch('../assets/level1.json');
           if (!levelResponse.ok) {
               throw new Error(`HTTP error fetching level data! status: ${levelResponse.status}`);
           }
@@ -649,8 +649,8 @@
 
   // --- Script for Endgame Ratio Plot ---
   const endgamePlotDiv = document.getElementById('endgameRatioPlot');
-  const analysisDataPath = '../public/assets/waves/analysis-results.json';
-  const analysisParamsPath = '../public/assets/waves/analysis-params.json'; // Path to the saved parameters
+  const analysisDataPath = '../assets/waves/analysis-results.json';
+  const analysisParamsPath = '../assets/waves/analysis-params.json'; // Path to the saved parameters
 
   // Function to fetch a JSON file
   function fetchJson(path) {
@@ -934,7 +934,7 @@
   const maxWaveN_f = 75; // Max wave number to plot
 
   // Path to the frozen parameters file
-  const analysisParamsPath_f = '../public/assets/waves/analysis-params.json';
+  const analysisParamsPath_f = '../assets/waves/analysis-params.json';
 
   // Function to fetch JSON
   function fetchJson_f(path) {
@@ -1155,8 +1155,8 @@
     console.log("Calculating theoretical alpha_0 and B_0 using current game parameters...");
 
     // --- Define necessary paths ---
-    const level1Path_calc = '../public/assets/level1.json';
-    const wavesPath_calc = '../public/assets/waves/waves.json';
+    const level1Path_calc = '../assets/level1.json';
+    const wavesPath_calc = '../assets/waves/waves.json';
     // Other paths derived from level1.json
 
     // --- Fetch function ---
@@ -1293,7 +1293,7 @@
 <!-- Script for dn vs n plot -->
 <script>
   const dnPlotDiv = document.getElementById('dnEvolutionPlot');
-  const analysisParamsPath_dn = '../public/assets/waves/analysis-params.json';
+  const analysisParamsPath_dn = '../assets/waves/analysis-params.json';
   const maxWaveN_dn = 25; // Max wave number to plot
 
   // --- Function to fetch JSON ---
@@ -1518,9 +1518,9 @@
 <!-- Script for Depreciation Comparison Plot -->
 <script>
   const depreciationPlotDiv = document.getElementById('depreciationComparisonPlot');
-  const originalResultsPath = '../public/assets/waves/analysis-results.json';
-  const dtREndResultsPath = '../public/assets/waves/analysis-depreciation-results.json'; // Renamed output file
-  const paramsPath = '../public/assets/waves/analysis-params.json'; // Need params for analytical line
+  const originalResultsPath = '../assets/waves/analysis-results.json';
+  const dtREndResultsPath = '../assets/waves/analysis-depreciation-results.json'; // Renamed output file
+  const paramsPath = '../assets/waves/analysis-params.json'; // Need params for analytical line
 
   // --- Function to fetch JSON ---
   function fetchJson_depr(path) {
