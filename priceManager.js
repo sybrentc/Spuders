@@ -116,6 +116,9 @@ class PriceManager extends EventTarget {
         const effective_alpha = this.game.getAlpha();
         const costs = {};
 
+        // --- Get 'a' (difficultyScalar) for specific Subzero calculation ---
+        const a_factor = this.game.difficultyScalar; 
+
         // --- Handle case where alpha factor couldn't be calculated ---
         if (effective_alpha === null || effective_alpha <= 0) {
             console.error(`PriceManager: Invalid effective_alpha (${effective_alpha}) from Game. Setting all costs to Infinity.`);
@@ -156,7 +159,13 @@ class PriceManager extends EventTarget {
             // --- Handle Non-Damaging (Zero Strength or Rate) / Static Cost Towers --- 
             if (strength === undefined || strength <= 0 || rate === undefined || rate <= 0) {
                 if (hasStaticCost) {
-                     costs[defenceId] = def.stats.cost; // Read cost directly from definition
+                        if (typeof a_factor === 'number') {
+                            // If def.stats.cost was tuned assuming a=1, then its new cost is def.stats.cost * current_a
+                            costs[defenceId] = def.stats.cost * a_factor;
+                        } else {
+                            console.warn(`PriceManager: difficultyScalar (a_factor) is not a valid number (${a_factor}) for subzero cost calculation. Using static cost.`);
+                            costs[defenceId] = def.stats.cost; // Fallback to original static cost
+                        }
                  } else {
                      // This case should be caught by validation above, but as a fallback:
                      console.warn(`PriceManager: Non-damaging tower ${defenceId} missing static 'cost'. Setting cost to Infinity.`);
