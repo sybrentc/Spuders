@@ -1,0 +1,38 @@
+name: Deploy Vite site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allow write access to GITHUB_TOKEN to push to gh-pages
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20 # Or your project's Node.js version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4 # Updated to v4 for latest features
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          # By default, this action pushes to the 'gh-pages' branch.
+          # If you wanted to push to a different branch, you could specify:
+          # publish_branch: gh-pages
+          # If your repository is a private repository and you want to deploy to a public site,
+          # you might need to use a Personal Access Token (PAT) instead of GITHUB_TOKEN
+          # and configure it as a secret. For public repos, GITHUB_TOKEN usually suffices. 
